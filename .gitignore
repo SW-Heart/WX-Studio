@@ -1,0 +1,32 @@
+# --- 系统文件 ---
+.DS_Store
+Thumbs.db
+
+# --- Node.js ---
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.pytest_cache/
+
+# --- ⚠️ 核心安全忽略项 (绝对不能上传) ---
+.env
+.env.local
+.env.*.local
+
+# --- 数据库文件 (包含用户哈希) ---
+# 如果您希望数据只保留在服务器，不提交到代码库，请忽略它
+wx_data.json
+wx_data.json.bak
+
+# --- IDE 配置 ---
+.vscode/
+.idea/
+*.swp

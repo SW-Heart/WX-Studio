@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 添加一些基础样式确保背景不白屏 */
+body {
+  background-color: #2b1b18; 
+  color: white;
+}
