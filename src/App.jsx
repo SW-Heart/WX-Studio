@@ -6,7 +6,8 @@ import {
   LogOut, X, Loader2, Check, Lock, AlertCircle, RefreshCw, Zap
 } from 'lucide-react';
 
-const API_BASE_URL = "http://localhost:8000"; 
+// [关键配置] 生产环境请留空，让 Nginx 自动转发请求
+const API_BASE_URL = ""; 
 
 // ==========================================
 // 🎨 LOGO 设置区域
@@ -22,45 +23,31 @@ const WXLogo = () => (
 const TRANSLATIONS = {
   en: {
     nav: { product: "Product Shot", retouch: "AI Retouch", portrait: "Portrait", soon: "Coming Soon" },
-    auth: { 
-      login: "Log In", logout: "Log Out", username: "Username", password: "Password", submit: "Sign In", welcome: "Welcome",
-      productName: "WX Studio", subtitle: "Professional AI Photography", placeholderUser: "Enter username"
-    },
+    auth: { login: "Log In", logout: "Log Out", username: "Username", password: "Password", submit: "Sign In", welcome: "Welcome", productName: "WX Studio", subtitle: "Professional AI Photography", placeholderUser: "Enter username" },
     upload: { title: "Upload Source", desc: "Reference image is required", uploaded: "Image Ready", uploading: "Uploading...", change: "Change Image" },
     prompt: { label: "Creative Prompt", placeholder: "Describe materials, lighting, and mood...", enhance: "AI Enhance", enhancing: "Optimizing..." },
     style: "Aesthetics", 
-    styles: {
-      Luxurious: "Luxurious", Minimal: "Minimal", Nature: "Nature", 
-      Cyberpunk: "Cyberpunk", Studio: "Studio", Soft: "Soft", 
-      Vintage: "Vintage", Cinematic: "Cinematic", Neon: "Neon"
-    },
+    styles: { Luxurious: "Luxurious", Minimal: "Minimal", Nature: "Nature", Cyberpunk: "Cyberpunk", Studio: "Studio", Soft: "Soft", Vintage: "Vintage", Cinematic: "Cinematic", Neon: "Neon" },
     resolution: "Output Size", ratio: "Aspect Ratio",
     generate: { idle: "Generate", loading: "Creating...", disabled: "Fill in Parameters", loginRequired: "Login to Create", quotaEmpty: "Quota Exceeded" },
     status: { ready: "WX Studio Ready", powered: "Powered by TT-API" },
     gallery: { title: "History", empty: "No creations yet" },
     quota: "Credits",
-    toast: { copySuccess: "Copied!", copyFail: "Failed", downloadFail: "Failed" }
+    toast: { copySuccess: "Copied!", copyFail: "Failed", downloadFail: "Failed", httpsRequired: "Copy requires HTTPS" }
   },
   zh: {
     nav: { product: "商品摄影", retouch: "智能修图", portrait: "个人写真", soon: "敬请期待" },
-    auth: { 
-      login: "登录 / 注册", logout: "退出登录", username: "账号", password: "密码", submit: "立即登录", welcome: "欢迎回来",
-      productName: "WX Studio", subtitle: "专业 AI 商品摄影工坊", placeholderUser: "请输入账号"
-    },
+    auth: { login: "登录 / 注册", logout: "退出登录", username: "账号", password: "密码", submit: "立即登录", welcome: "欢迎回来", productName: "WX Studio", subtitle: "专业 AI 商品摄影工坊", placeholderUser: "请输入账号" },
     upload: { title: "上传底图", desc: "请上传商品原图 (必填)", uploaded: "底图已就绪", uploading: "加密上传中...", change: "更换底图" },
     prompt: { label: "创意描述", placeholder: "描述材质、光影氛围、背景细节...", enhance: "AI 润色", enhancing: "优化中..." },
     style: "美学风格", 
-    styles: {
-      Luxurious: "奢华质感", Minimal: "极简白底", Nature: "自然森系", 
-      Cyberpunk: "赛博朋克", Studio: "专业影棚", Soft: "柔和光影", 
-      Vintage: "复古胶片", Cinematic: "电影大片", Neon: "霓虹光效"
-    },
+    styles: { Luxurious: "奢华质感", Minimal: "极简白底", Nature: "自然森系", Cyberpunk: "赛博朋克", Studio: "专业影棚", Soft: "柔和光影", Vintage: "复古胶片", Cinematic: "电影大片", Neon: "霓虹光效" },
     resolution: "输出画质", ratio: "画幅比例",
     generate: { idle: "立即生成", loading: "正在生成中...", disabled: "请填写必要参数", loginRequired: "请登录后使用", quotaEmpty: "配额已用尽" },
     status: { ready: "WX Studio 就绪", powered: "由 TT-API 驱动" },
     gallery: { title: "创作记录", empty: "暂无历史记录" },
     quota: "剩余点数",
-    toast: { copySuccess: "已复制到剪贴板", copyFail: "复制失败", downloadFail: "下载失败" }
+    toast: { copySuccess: "已复制到剪贴板", copyFail: "复制失败", downloadFail: "下载失败", httpsRequired: "复制功能需要 HTTPS 安全协议" }
   }
 };
 
@@ -107,12 +94,6 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
       onClose();
     } catch (err) {
       setError(err.message);
-      // 本地开发回退逻辑
-      if (process.env.NODE_ENV === 'development' && err.message.includes('Failed to fetch')) {
-         console.warn("Backend unavailable. Using Mock Login for UI testing.");
-         onLogin("mock_token", username, 999);
-         onClose();
-      }
     } finally {
       setLoading(false);
     }
@@ -153,7 +134,6 @@ const AIPhotoStudio = () => {
   const [lang, setLang] = useState('zh');
   const t = TRANSLATIONS[lang];
   
-  // 用户状态
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [username, setUsername] = useState(() => localStorage.getItem('username') || 'Guest');
   const [quota, setQuota] = useState(0);
@@ -162,7 +142,6 @@ const AIPhotoStudio = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showFullscreen, setShowFullscreen] = useState(false); 
 
-  // Action Loading States
   const [isDownloading, setIsDownloading] = useState(false);
   const [isCopying, setIsCopying] = useState(false);
 
@@ -186,7 +165,6 @@ const AIPhotoStudio = () => {
   const ratioOptions = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
   const styleIds = ['Luxurious', 'Minimal', 'Nature', 'Cyberpunk', 'Studio', 'Soft', 'Vintage', 'Cinematic', 'Neon'];
 
-  // --- 初始化 ---
   useEffect(() => {
     if (token) {
       fetchHistory();
@@ -233,14 +211,12 @@ const AIPhotoStudio = () => {
     setShowUserMenu(false);
   };
 
-  // --- 核心功能函数 ---
-
+  // --- 下载 (直接获取 Blob) ---
   const handleDownload = async () => {
     if (!resultImage) return;
     setIsDownloading(true);
     try {
-      const proxyUrl = `${API_BASE_URL}/api/proxy?url=${encodeURIComponent(resultImage)}`;
-      const response = await fetch(proxyUrl);
+      const response = await fetch(resultImage);
       if (!response.ok) throw new Error('Network response was not ok');
       const blob = await response.blob();
       
@@ -260,24 +236,25 @@ const AIPhotoStudio = () => {
     }
   };
 
+  // --- 复制 ---
   const handleCopy = async () => {
     if (!resultImage) return;
+    
+    // 检查是否为安全上下文 (HTTPS 或 localhost)
+    if (!navigator.clipboard || (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1')) {
+      alert(t.toast.httpsRequired);
+      return;
+    }
+
     setIsCopying(true);
     try {
-      const proxyUrl = `${API_BASE_URL}/api/proxy?url=${encodeURIComponent(resultImage)}`;
-      const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error('Network response was not ok');
+      const response = await fetch(resultImage);
       const blob = await response.blob();
-      
-      await navigator.clipboard.write([
-        new ClipboardItem({
-          [blob.type]: blob
-        })
-      ]);
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
       alert(t.toast.copySuccess);
     } catch (err) {
       console.error('Copy failed:', err);
-      alert(t.toast.copyFail);
+      alert(t.toast.copyFail + ": " + err.message);
     } finally {
       setIsCopying(false);
     }
@@ -322,7 +299,7 @@ const AIPhotoStudio = () => {
     if (!isValid) return;
 
     setIsGenerating(true);
-    setResultImage(null);
+    setResultImage(null); // 清空旧图
     setProgress(5);
     
     const progressTimer = setInterval(() => setProgress(p => p < 90 ? p + Math.random() * 3 : p), 500);
@@ -389,9 +366,8 @@ const AIPhotoStudio = () => {
           <WXLogo />
           <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
             WX <span className="font-light opacity-50">Studio</span>
-            {/* ✨ Beta Tag - 内测版标识 ✨ */}
             <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#FF8A3D]/20 text-[#FF8A3D] border border-[#FF8A3D]/20 font-mono tracking-wide">
-              BETA v0.9
+              BETA v1.0
             </span>
           </h1>
         </div>
@@ -404,7 +380,7 @@ const AIPhotoStudio = () => {
 
         <div className="flex items-center gap-4">
           <button onClick={() => setLang(l => l === 'zh' ? 'en' : 'zh')} className="p-2 hover:bg-white/10 rounded-full transition-colors flex items-center gap-2 text-xs font-medium text-white/60 hover:text-white">
-            <Globe size={16} /><span>{lang === 'zh' ? 'EN' : '中'}</span>
+            <Globe size={16} /><span>{lang === 'zh' ? 'English' : '中文'}</span>
           </button>
           <div className="w-[1px] h-6 bg-white/10"></div>
           
@@ -483,7 +459,7 @@ const AIPhotoStudio = () => {
               </div>
 
               <div className="space-y-5">
-                <ParamSection label={t.style} options={['Luxurious', 'Minimal', 'Nature', 'Cyberpunk', 'Studio', 'Soft', 'Vintage', 'Cinematic', 'Neon']} translations={t.styles} active={config.style} onChange={v => setConfig({...config, style: v})} />
+                <ParamSection label={t.style} options={styleIds} translations={t.styles} active={config.style} onChange={v => setConfig({...config, style: v})} />
                 <ParamSection label={t.ratio} options={ratioOptions} active={config.ratio} onChange={v => setConfig({...config, ratio: v})} grid />
                 <ParamSection label={t.resolution} options={['1K', '2K', '4K']} active={config.resolution} onChange={v => setConfig({...config, resolution: v})} />
               </div>
@@ -493,7 +469,7 @@ const AIPhotoStudio = () => {
           <div className="p-6 border-t border-white/5 bg-[#0a0a0a]">
             <button 
               onClick={handleGenerate}
-              disabled={isGenerating || (isLoggedIn && !isValid) || isUploading}
+              disabled={isGenerating || (isLoggedIn && !isValid)}
               className={`w-full h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg
                 ${isGenerating || (isLoggedIn && !isValid)
                   ? 'bg-[#1a1a1a] text-white/30 cursor-not-allowed border border-white/5'
@@ -533,7 +509,6 @@ const AIPhotoStudio = () => {
               )}
             </div>
             
-            {/* 修复后的悬浮操作栏 */}
             {resultImage && !isGenerating && (
               <div className="absolute bottom-8 flex items-center gap-3 p-2 rounded-full bg-[#1e1e1e]/80 border border-white/10 shadow-2xl backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
                 <ActionBtn icon={isDownloading ? <Loader2 className="animate-spin" size={18}/> : <Download size={18}/>} onClick={handleDownload} tooltip="Download" />
