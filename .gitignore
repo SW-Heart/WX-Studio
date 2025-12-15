@@ -1,6 +1,11 @@
+# =============================================
+# 🔒 .gitignore - AI Photo Studio
+# =============================================
+
 # --- 系统文件 ---
 .DS_Store
 Thumbs.db
+*.log
 
 # --- Node.js ---
 node_modules/
@@ -8,25 +13,75 @@ dist/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.npm
 
 # --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
 venv/
+.venv/
+env/
 .pytest_cache/
+*.egg-info/
+.eggs/
 
-# --- ⚠️ 核心安全忽略项 (绝对不能上传) ---
+# =============================================
+# ⚠️ 核心安全忽略项 (绝对不能上传)
+# =============================================
+
+# --- 环境变量 (包含 API 密钥、数据库密码等) ---
 .env
+.env.*
 .env.local
 .env.*.local
+!.env.example
 
-# --- 数据库文件 (包含用户哈希) ---
-# 如果您希望数据只保留在服务器，不提交到代码库，请忽略它
+# --- 数据库/数据文件 (包含用户信息、隐私数据) ---
 wx_data.json
 wx_data.json.bak
+backend/wx_data.json
+backend/wx_data.json.bak
+feedback.json
+backend/feedback.json
+*.db
+*.sqlite
+*.sqlite3
 
-# --- IDE 配置 ---
+# --- 调试/管理脚本 (可能包含敏感操作) ---
+manage_users.py
+backend/debug_quota.py
+
+# =============================================
+# 📁 IDE 和编辑器配置
+# =============================================
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# =============================================
+# 📦 构建产物和缓存
+# =============================================
+build/
+.cache/
+.parcel-cache/
+.next/
+.nuxt/
+.output/
+.turbo/
+coverage/
+
+# =============================================
+# 🔐 证书和密钥文件
+# =============================================
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx

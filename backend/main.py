@@ -4,11 +4,13 @@ import requests
 import json
 import uuid
 import shutil
-from pathlib import Path
+import oss2
+import time
+import threading
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from dotenv import load_dotenv
@@ -16,23 +18,48 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
+# 导入短信服务
+from sms_service import send_verification_code, generate_code
+
 # --- 1. 初始化配置 ---
 load_dotenv()
-
-# [请修改] 您的服务器公网 IP 或域名
-SERVER_DOMAIN = "http://8.149.136.249"
 
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 
 TT_API_KEY = os.getenv("TT_API_KEY")
-# [注意] 确保这里的 URL 是纯净的，没有 Markdown 符号
-TT_ENDPOINT = "https://api.ttapi.io/gemini/image/generate"
+TT_ENDPOINT = "https://api.ttapi.org/gemini/image/generate"
 DB_FILE = "wx_data.json"
 
-# 图片本地存储路径
-UPLOAD_DIR = "/www/wx-studio/dist/uploads"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+# --- 验证码存储 (手机号 -> {code, timestamp, attempts}) ---
+verification_codes: Dict[str, dict] = {}
+CODE_EXPIRE_SECONDS = 300  # 5分钟过期
+SEND_INTERVAL_SECONDS = 60  # 60秒发送间隔
+
+# --- 请求模型 ---
+class SendCodeRequest(BaseModel):
+    phone: str
+
+class VerifyCodeRequest(BaseModel):
+    phone: str
+    code: str
+
+# --- OSS 配置 ---
+OSS_ACCESS_KEY_ID = os.getenv("ALIYUN_ACCESS_KEY_ID")
+OSS_ACCESS_KEY_SECRET = os.getenv("ALIYUN_ACCESS_KEY_SECRET")
+OSS_ENDPOINT = os.getenv("ALIYUN_OSS_ENDPOINT")
+OSS_BUCKET_NAME = os.getenv("ALIYUN_OSS_BUCKET")
+OSS_DOMAIN = os.getenv("ALIYUN_OSS_DOMAIN") 
+
+bucket = None
+if OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET and OSS_ENDPOINT and OSS_BUCKET_NAME:
+    try:
+        auth = oss2.Auth(OSS_ACCESS_KEY_ID, OSS_ACCESS_KEY_SECRET)
+        bucket = oss2.Bucket(auth, OSS_ENDPOINT, OSS_BUCKET_NAME)
+    except Exception as e:
+        print(f"OSS Init Error: {e}")
+else:
+    print("❌ 警告: OSS 配置缺失")
 
 app = FastAPI(title="WX Studio API")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
@@ -48,165 +75,683 @@ app.add_middleware(
 
 # --- 2. 数据层 ---
 def load_db():
+    """加载数据库，如果主文件损坏则尝试从备份恢复"""
     if not os.path.exists(DB_FILE):
         default_hash = pwd_context.hash("wxstudio2025")
-        initial_data = {
-            "users": {
-                "admin": {"hash": default_hash, "quota": 9999, "role": "admin"}
-            },
-            "history": {}
-        }
+        initial_data = {"users": {"admin": {"hash": default_hash, "quota": 9999, "role": "admin"}}, "history": {}}
         save_db(initial_data)
+        print("✅ 初始化新数据库")
         return initial_data
+    
+    # 尝试从主文件加载
     try:
         with open(DB_FILE, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {"users": {}, "history": {}}
+            data = json.load(f)
+            # 验证数据结构完整性
+            if "users" in data and "history" in data:
+                return data
+            raise ValueError("数据结构不完整")
+    except Exception as e:
+        print(f"⚠️ 主数据库加载失败: {e}")
+    
+    # 主文件损坏，尝试从备份恢复
+    backup_file = f"{DB_FILE}.bak"
+    if os.path.exists(backup_file):
+        try:
+            with open(backup_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if "users" in data and "history" in data:
+                    # 恢复备份到主文件
+                    shutil.copy(backup_file, DB_FILE)
+                    print(f"✅ 已从备份文件恢复数据库")
+                    return data
+        except Exception as e:
+            print(f"❌ 备份文件也损坏: {e}")
+    
+    # 两个文件都损坏，这是严重错误，不应返回空数据导致配额重置
+    # 抛出异常让服务启动失败，而不是静默丢失用户数据
+    raise RuntimeError("❌ 数据库及备份均损坏，请手动检查 wx_data.json 和 wx_data.json.bak")
 
 def save_db(data):
-    if os.path.exists(DB_FILE):
-        shutil.copy(DB_FILE, f"{DB_FILE}.bak")
-    with open(DB_FILE, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    if os.path.exists(DB_FILE): shutil.copy(DB_FILE, f"{DB_FILE}.bak")
+    with open(DB_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
 
-# --- 3. 鉴权逻辑 ---
-def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
-
-def create_access_token(data: dict):
+def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
+def create_access_token(data):
     to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
+    to_encode.update({"exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(status_code=401, detail="无效凭证")
-        return username
-    except JWTError:
-        raise HTTPException(status_code=401, detail="凭证已过期")
+    try: return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM]).get("sub")
+    except: raise HTTPException(401, "Invalid token")
 
-# --- 4. 业务 API ---
+# --- 3. 工具函数 ---
+
+def upload_bytes_to_oss(file_bytes, file_ext=".jpg"):
+    if not bucket: raise Exception("OSS not configured")
+    filename = f"uploads/{uuid.uuid4()}{file_ext}"
+    bucket.put_object(filename, file_bytes)
+    if OSS_DOMAIN: return f"{OSS_DOMAIN}/{filename}"
+    else: return f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{filename}"
+
+# --- 配额原子操作（防止并发超用）---
+db_lock = threading.Lock()
+
+def deduct_quota_atomic(username: str) -> int:
+    """
+    原子性预扣分：检查配额并立即扣除1点
+    返回扣除后的剩余配额
+    如果配额不足，抛出 HTTPException
+    """
+    with db_lock:
+        db = load_db()
+        user = db["users"].get(username)
+        if not user:
+            raise HTTPException(status_code=401, detail="用户异常")
+        if user["quota"] <= 0:
+            raise HTTPException(status_code=403, detail="配额不足")
+        user["quota"] -= 1
+        save_db(db)
+        return user["quota"]
+
+def refund_quota(username: str):
+    """
+    回滚配额：任务失败时返还1点配额
+    """
+    with db_lock:
+        db = load_db()
+        user = db["users"].get(username)
+        if user:
+            user["quota"] += 1
+            save_db(db)
+            print(f"✅ 已回滚配额给用户 {username}")
+
+# --- 4. 路由 ---
 
 @app.post("/auth/token")
 async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     db = load_db()
     user = db["users"].get(form_data.username)
-    if not user or not verify_password(form_data.password, user["hash"]):
-        raise HTTPException(status_code=400, detail="账号或密码错误")
-    access_token = create_access_token(data={"sub": form_data.username})
-    return {"access_token": access_token, "token_type": "bearer", "username": form_data.username, "quota": user["quota"]}
+    if not user or not verify_password(form_data.password, user["hash"]): raise HTTPException(400, "账号或密码错误")
+    return {"access_token": create_access_token({"sub": form_data.username}), "token_type": "bearer", "username": form_data.username, "quota": user["quota"]}
+
+@app.post("/auth/send-code")
+async def send_code(request: SendCodeRequest):
+    """发送短信验证码"""
+    phone = request.phone.strip()
+    
+    # 验证手机号格式
+    if not phone or len(phone) != 11 or not phone.isdigit():
+        raise HTTPException(400, "请输入正确的11位手机号")
+    
+    # 检查发送间隔
+    if phone in verification_codes:
+        last_sent = verification_codes[phone].get("timestamp", 0)
+        if time.time() - last_sent < SEND_INTERVAL_SECONDS:
+            remaining = int(SEND_INTERVAL_SECONDS - (time.time() - last_sent))
+            raise HTTPException(429, f"请{remaining}秒后再试")
+    
+    # 生成并发送验证码
+    code = generate_code()
+    result = send_verification_code(phone, code)
+    
+    if not result["success"]:
+        raise HTTPException(500, result["message"])
+    
+    # 存储验证码
+    verification_codes[phone] = {
+        "code": code,
+        "timestamp": time.time(),
+        "attempts": 0
+    }
+    
+    return {"message": "验证码已发送", "expires_in": CODE_EXPIRE_SECONDS}
+
+@app.post("/auth/verify-code")
+async def verify_code(request: VerifyCodeRequest):
+    """验证码登录/注册"""
+    phone = request.phone.strip()
+    code = request.code.strip()
+    
+    # 检查验证码是否存在
+    if phone not in verification_codes:
+        raise HTTPException(400, "请先获取验证码")
+    
+    stored = verification_codes[phone]
+    
+    # 检查过期
+    if time.time() - stored["timestamp"] > CODE_EXPIRE_SECONDS:
+        del verification_codes[phone]
+        raise HTTPException(400, "验证码已过期，请重新获取")
+    
+    # 检查尝试次数
+    if stored["attempts"] >= 5:
+        del verification_codes[phone]
+        raise HTTPException(429, "尝试次数过多，请重新获取验证码")
+    
+    # 验证码校验
+    if stored["code"] != code:
+        verification_codes[phone]["attempts"] += 1
+        raise HTTPException(400, "验证码错误")
+    
+    # 验证成功，删除验证码
+    del verification_codes[phone]
+    
+    # 登录或注册
+    db = load_db()
+    
+    if phone not in db["users"]:
+        # 新用户注册
+        db["users"][phone] = {
+            "phone": phone,
+            "quota": 10,  # 新用户初始配额
+            "role": "user",
+            "created_at": time.time()
+        }
+        save_db(db)
+        print(f"✅ 新用户注册: {phone}")
+    
+    user = db["users"][phone]
+    token = create_access_token({"sub": phone})
+    
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "username": phone,
+        "quota": user["quota"]
+    }
 
 @app.get("/api/user/me")
-async def get_user_info(username: str = Depends(get_current_user)):
-    db = load_db()
-    user = db["users"].get(username)
-    if not user: raise HTTPException(status_code=404, detail="用户不存在")
-    return {"username": username, "quota": user["quota"]}
+async def get_user(u: str = Depends(get_current_user)):
+    return {"username": u, "quota": load_db()["users"].get(u, {}).get("quota", 0)}
 
-# [上传] 本地存储
 @app.post("/api/upload")
-async def upload_image(file: UploadFile = File(...), username: str = Depends(get_current_user)):
+async def upload_image(file: UploadFile = File(...), u: str = Depends(get_current_user)):
     try:
-        file_ext = os.path.splitext(file.filename)[1]
-        if not file_ext: file_ext = ".jpg"
-        new_filename = f"{uuid.uuid4()}{file_ext}"
-        file_path = os.path.join(UPLOAD_DIR, new_filename)
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        # 返回拼接好 IP 的完整 URL
-        full_url = f"{SERVER_DOMAIN}/uploads/{new_filename}"
-        return {"status": "success", "url": full_url}
+        file_content = await file.read()
+        ext = os.path.splitext(file.filename)[1] or ".jpg"
+        oss_url = upload_bytes_to_oss(file_content, ext)
+        return {"status": "success", "url": oss_url}
     except Exception as e:
-        print(f"Local Upload Error: {e}")
-        raise HTTPException(status_code=500, detail=f"文件保存失败: {str(e)}")
+        print(f"Upload Fail: {e}")
+        raise HTTPException(500, f"上传失败: {str(e)}")
 
 @app.get("/api/history")
-async def get_history(username: str = Depends(get_current_user)):
-    db = load_db()
-    history = db["history"].get(username, [])
-    history.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-    return history
+async def get_history(u: str = Depends(get_current_user)):
+    h = load_db()["history"].get(u, [])
+    h.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
+    return h
 
-# [下载工具函数] 下载远程图片到本地
-def download_remote_image(remote_url):
-    try:
-        print(f"Downloading remote image: {remote_url}")
-        r = requests.get(remote_url, stream=True, timeout=60)
-        if r.status_code == 200:
-            file_ext = ".png" # 假设是 PNG，也可以解析 Header
-            new_filename = f"gen_{uuid.uuid4()}{file_ext}"
-            file_path = os.path.join(UPLOAD_DIR, new_filename)
-            with open(file_path, 'wb') as f:
-                r.raw.decode_content = True
-                shutil.copyfileobj(r.raw, f)
-            print(f"Saved to: {file_path}")
-            return f"{SERVER_DOMAIN}/uploads/{new_filename}"
-        else:
-            print(f"Remote download failed: {r.status_code}")
-            return remote_url # 失败则降级返回原链接
-    except Exception as e:
-        print(f"Download exception: {e}")
-        return remote_url
+@app.delete("/api/history/{item_id}")
+async def delete_history_item(item_id: str, u: str = Depends(get_current_user)):
+    """删除历史记录"""
+    with db_lock:
+        db = load_db()
+        user_history = db["history"].get(u, [])
+        # 查找并删除指定记录
+        original_len = len(user_history)
+        db["history"][u] = [item for item in user_history if item.get("id") != item_id]
+        
+        if len(db["history"][u]) == original_len:
+            raise HTTPException(404, "记录不存在")
+        
+        save_db(db)
+    
+    return {"status": "SUCCESS", "message": "删除成功"}
 
 @app.post("/api/generate")
-async def generate_image(
+def generate_image(
     prompt: str = Form(...),
     image_size: str = Form(...),
     ratio: str = Form(...),
     style: str = Form(...),
-    image_url: str = Form(...),
+    image_urls_json: str = Form(...), 
     username: str = Depends(get_current_user)
 ):
-    db = load_db()
-    user_data = db["users"].get(username)
-    if not user_data: raise HTTPException(status_code=401, detail="用户异常")
-    if user_data["quota"] <= 0: raise HTTPException(status_code=403, detail="配额已用尽")
+    # 预扣分（原子操作，防止并发超用）
+    remaining_quota = deduct_quota_atomic(username)
+    
+    try:
+        image_list = json.loads(image_urls_json)
+    except:
+        refund_quota(username)  # 参数错误，回滚
+        raise HTTPException(400, "图片列表格式错误")
 
-    full_prompt = f"{prompt}. Style: {style} aesthetic, professional photography, high quality. Ratio: {ratio}."
     headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
-        "prompt": full_prompt, "mode": "gemini-3-pro-image-preview",
-        "refer_images": [image_url], "image_size": image_size, "google_search": True
+        "prompt": f"{prompt}, {style} style, 8k",
+        "mode": "gemini-3-pro-image-preview",
+        "refer_images": image_list, 
+        "image_size": image_size,
+        "google_search": True
     }
 
     try:
-        response = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=120)
-        if response.status_code != 200:
-            print(f"TT-API Error: {response.text}")
-            raise HTTPException(status_code=response.status_code, detail=f"AI 生成失败: {response.text}")
-            
-        api_res = response.json()
-        if api_res.get("status") != "SUCCESS":
-             raise HTTPException(status_code=500, detail=api_res.get("message", "Unknown API error"))
-
-        raw_url = api_res['data']['image_url']
+        # 300秒超时，防止大图生成中断，并禁用代理以避免连接问题
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300, proxies={"http": None, "https": None})
         
-        # [核心优化] 后端立即下载图片到本地
-        local_url = download_remote_image(raw_url)
+        if resp.status_code != 200:
+            print(f"API Error: {resp.text}")
+            refund_quota(username)  # API调用失败，回滚
+            raise HTTPException(resp.status_code, f"AI Error: {resp.text}")
 
-        user_data["quota"] -= 1
-        new_record = {
-            "id": str(uuid.uuid4()), "image": local_url, "prompt": prompt,
-            "timestamp": datetime.now().timestamp()
+        res_json = resp.json()
+        if res_json.get("status") != "SUCCESS":
+            refund_quota(username)  # AI返回失败，回滚
+            raise HTTPException(500, res_json.get("message"))
+
+        result_url = res_json['data']['image_url']
+        
+        # 转存 OSS
+        try:
+            r_gen = requests.get(result_url, timeout=60)
+            if r_gen.status_code == 200:
+                result_url = upload_bytes_to_oss(r_gen.content, ".png")
+        except Exception as e:
+            print(f"Warning: OSS Save Failed: {e}")
+
+        # 保存历史记录（配额已在开头扣除，无需再扣）
+        record = {"id": str(uuid.uuid4()), "image": result_url, "prompt": prompt, "timestamp": datetime.now().timestamp(), "type": "product"}
+        
+        with db_lock:
+            db = load_db()
+            if username not in db["history"]: db["history"][username] = []
+            db["history"][username].append(record)
+            save_db(db)
+
+        return {"status": "SUCCESS", "data": {"image_url": result_url, "history_item": record, "remaining_quota": remaining_quota}}
+
+    except HTTPException:
+        raise  # 已处理的异常直接抛出
+    except Exception as e:
+        print(f"Gen Exception: {str(e)}")
+        refund_quota(username)  # 未知错误，回滚
+        raise HTTPException(500, str(e))
+
+# --- 智能修图提示词模版 ---
+RETOUCH_TEMPLATES = {
+    "general": "High-fidelity image enhancement, professional photography standard. Correct white balance, optimize exposure, and expand dynamic range. Remove noise and compression artifacts. Sharpen details while maintaining natural textures. Apply subtle cinematic color grading. 8k resolution, ultra-realistic, master quality.",
+    "portrait": "High-end beauty retouching. Preserve realistic skin texture and pores (avoid plastic look). Enhance eye clarity and reflections. Soft, flattering lighting on the face to accentuate bone structure. Remove blemishes and stray hairs naturally. Professional studio lighting, bokeh background, sharp focus on eyes, 85mm lens style.",
+    "landscape": "National Geographic style landscape photography. High Dynamic Range (HDR), vivid but natural colors. Enhance depth of field and atmospheric perspective. Clear sky, sharp architectural or natural details. Golden hour lighting, dramatic contrast, wide-angle view, hyper-detailed, rule of thirds composition.",
+    "product": "Commercial product photography style. Ultra-sharp focus on the subject, macro details visible. Appetizing and rich colors (if food) or clean premium textures (if product). Studio lighting setup, clean and distinct background separation, 4k clarity, advertising quality."
+}
+
+STRENGTH_MAPPING = {
+    "low": "Low",
+    "medium": "Medium", 
+    "high": "High"
+}
+
+from fastapi import BackgroundTasks
+
+# 异步转存任务
+def background_save_to_oss(username, record_id, temp_url):
+    try:
+        # 下载图片
+        r_gen = requests.get(temp_url, timeout=60)
+        if r_gen.status_code != 200:
+            print(f"Background Upload Failed: Download error {r_gen.status_code}")
+            return
+
+        # 上传到 OSS
+        oss_url = upload_bytes_to_oss(r_gen.content, ".png")
+        
+        # 更新数据库
+        with db_lock:
+            db = load_db()
+            if username in db["history"]:
+                for item in db["history"][username]:
+                    if item["id"] == record_id:
+                        item["image"] = oss_url
+                        break
+            save_db(db)
+        print(f"✅ Background Upload Success: {oss_url}")
+        
+    except Exception as e:
+        print(f"Background Upload Error: {e}")
+
+@app.post("/api/retouch")
+async def retouch_image(
+    background_tasks: BackgroundTasks,
+    mode: str = Form(...),
+    strength: str = Form(...),
+    suggestion: str = Form(""),
+    image_url: str = Form(...),
+    username: str = Depends(get_current_user)
+):
+    """智能修图接口 - 异步优化版"""
+    # 验证模式
+    if mode not in RETOUCH_TEMPLATES:
+        raise HTTPException(400, f"无效的修图模式: {mode}")
+    
+    # 验证强度
+    if strength not in STRENGTH_MAPPING:
+        raise HTTPException(400, f"无效的强度设置: {strength}")
+
+    # 扣除配额 (每张图扣1点)
+    # 若 deduct_quota_atomic 定义为 def deduct_quota_atomic(username, amount=1), 则传2个参或1个均可
+    # 这里假设它接受 amount 参数
+    try:
+        remaining_quota = deduct_quota_atomic(username, 1)
+    except TypeError:
+        # Fallback if function only accepts 1 arg
+        remaining_quota = deduct_quota_atomic(username)
+    
+    # 构造提示词
+    base_prompt = RETOUCH_TEMPLATES[mode]
+    strength_prompt = f"Strength level: {STRENGTH_MAPPING[strength]}."
+    user_suggestion = f"Additional instruction: {suggestion}" if suggestion else ""
+    full_prompt = f"{base_prompt} {strength_prompt} {user_suggestion}"
+
+    image_list = [image_url]
+    
+    # 限制图片大小
+    image_size = "1K"  # 固定大小以加快速度
+
+    headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
+    payload = {
+        "prompt": full_prompt,
+        "mode": "gemini-3-pro-image-preview", # 使用预览模式加快速度
+        "refer_images": image_list, 
+        "image_size": image_size,
+        "google_search": True
+    }
+
+    try:
+        # 调用 AI API (300s超时)
+        # 禁用代理以防连接问题 !!! 重要
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300, proxies={"http": None, "https": None})
+        
+        if resp.status_code != 200:
+            print(f"API Error: {resp.text}")
+            refund_quota(username)
+            raise HTTPException(resp.status_code, f"AI Error: {resp.text}")
+
+        res_json = resp.json()
+        if res_json.get("status") != "SUCCESS":
+            refund_quota(username)
+            raise HTTPException(500, res_json.get("message"))
+
+        # 获取临时 URL
+        result_url = res_json['data']['image_url']
+        record_id = str(uuid.uuid4())
+        
+        # 记录历史 (先存临时 URL)
+        record = {
+            "id": record_id, 
+            "image": result_url, 
+            "prompt": f"[{STRENGTH_MAPPING[strength]}] {mode}", 
+            "timestamp": datetime.now().timestamp(), 
+            "type": "retouch"
         }
         
-        if username not in db["history"]: db["history"][username] = []
-        db["history"][username].append(new_record)
-        save_db(db)
+        with db_lock:
+            db = load_db()
+            if username not in db["history"]: db["history"][username] = []
+            db["history"][username].insert(0, record) # 插到最前
+            save_db(db)
 
+        # 添加后台任务：转存到 OSS 并更新 DB
+        background_tasks.add_task(background_save_to_oss, username, record_id, result_url)
+
+        # 立即返回结果，无需等待 OSS 上传
+        return {
+            "status": "SUCCESS", 
+            "data": {
+                "image_url": result_url, 
+                "history_item": record, 
+                "remaining_quota": remaining_quota
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Gen Exception: {str(e)}")
+        # refund_quota(username) # 配额已扣除，若生成失败可退还，此处保留之前的逻辑
+        # 注意：如果是 OSS 上传失败，这里不会捕获，因为那是后台任务
+        # 如果是请求 API 失败，会捕获并退还
+        refund_quota(username)
+        raise HTTPException(500, str(e))
+    
+
+
+# --- 人像写真固定提示词 ---
+PORTRAIT_PROMPT = "Replace the face in Figure 1 with the face in Figure 2, keeping all other details the same."
+
+@app.post("/api/portrait")
+def portrait_generate(
+    subject_url: str = Form(...),  # 本人照片
+    target_url: str = Form(...),   # 目标写真/服装
+    quality: str = Form("2K"),     # 图像质量
+    username: str = Depends(get_current_user)
+):
+    """人像写真接口"""
+    # 验证质量参数
+    if quality not in ["1K", "2K", "4K"]:
+        raise HTTPException(400, f"无效的图像质量: {quality}")
+    
+    # 预扣分（原子操作，防止并发超用）
+    remaining_quota = deduct_quota_atomic(username)
+    
+    headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
+    payload = {
+        "prompt": PORTRAIT_PROMPT,
+        "mode": "gemini-3-pro-image-preview",
+        "refer_images": [subject_url, target_url],
+        "image_size": quality,
+        "google_search": False
+    }
+    
+    try:
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300)
+        
+        if resp.status_code != 200:
+            print(f"Portrait API Error: {resp.text}")
+            refund_quota(username)
+            raise HTTPException(resp.status_code, f"AI Error: {resp.text}")
+        
+        res_json = resp.json()
+        if res_json.get("status") != "SUCCESS":
+            refund_quota(username)
+            raise HTTPException(500, res_json.get("message"))
+        
+        result_url = res_json['data']['image_url']
+        
+        # 转存 OSS
+        try:
+            r_gen = requests.get(result_url, timeout=60)
+            if r_gen.status_code == 200:
+                result_url = upload_bytes_to_oss(r_gen.content, ".png")
+        except Exception as e:
+            print(f"Warning: OSS Save Failed: {e}")
+        
+        # 保存历史记录
+        record = {
+            "id": str(uuid.uuid4()),
+            "image": result_url,
+            "prompt": f"[人像写真] {quality}",
+            "timestamp": datetime.now().timestamp(),
+            "type": "portrait"
+        }
+        
+        with db_lock:
+            db = load_db()
+            if username not in db["history"]:
+                db["history"][username] = []
+            db["history"][username].append(record)
+            save_db(db)
+        
         return {
             "status": "SUCCESS",
-            "data": { "image_url": local_url, "history_item": new_record, "remaining_quota": user_data["quota"] }
+            "data": {
+                "image_url": result_url,
+                "history_item": record,
+                "remaining_quota": remaining_quota
+            }
         }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Portrait Exception: {str(e)}")
+        refund_quota(username)
+        raise HTTPException(500, str(e))
 
-    except requests.exceptions.RequestException as e:
-        print(f"Network Error: {e}")
-        raise HTTPException(status_code=500, detail=f"网络请求失败: {str(e)}")
+@app.post("/api/create")
+def basic_create(
+    prompt: str = Form(...),              # 必填：文本提示词
+    image_urls_json: str = Form("[]"),    # 选填：参考图片URL列表（JSON数组）
+    image_size: str = Form("2K"),         # 图像质量：1K, 2K, 4K
+    mode: str = Form("gemini-3-pro-image-preview"),  # 模型版本
+    aspect_ratio: str = Form("1:1"),      # 图片比例
+    google_search: bool = Form(False),    # 是否启用 Google 搜索增强
+    username: str = Depends(get_current_user)
+):
+    """基础创作接口 - 支持文生图、图生图、多参考图"""
+    # 验证图像质量
+    if image_size not in ["1K", "2K", "4K"]:
+        raise HTTPException(400, f"无效的图像质量: {image_size}")
+    
+    # 验证模型
+    valid_modes = ["gemini-2.5-flash-image", "gemini-3-pro-image-preview"]
+    if mode not in valid_modes:
+        raise HTTPException(400, f"无效的模型: {mode}")
+    
+    # 验证比例
+    valid_ratios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]
+    if aspect_ratio not in valid_ratios:
+        raise HTTPException(400, f"无效的比例: {aspect_ratio}")
+    
+    # 解析图片列表
+    try:
+        image_list = json.loads(image_urls_json)
+        if not isinstance(image_list, list):
+            image_list = []
+    except:
+        image_list = []
+    
+    # 预扣分
+    remaining_quota = deduct_quota_atomic(username)
+    
+    headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
+    payload = {
+        "prompt": prompt,
+        "mode": mode,
+        "refer_images": image_list,
+        "image_size": image_size,
+        "aspect_ratio": aspect_ratio,
+        "google_search": google_search
+    }
+    
+    try:
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300)
+        
+        if resp.status_code != 200:
+            print(f"Create API Error: {resp.text}")
+            refund_quota(username)
+            raise HTTPException(resp.status_code, f"AI Error: {resp.text}")
+        
+        res_json = resp.json()
+        if res_json.get("status") != "SUCCESS":
+            refund_quota(username)
+            raise HTTPException(500, res_json.get("message"))
+        
+        result_url = res_json['data']['image_url']
+        
+        # 转存 OSS
+        try:
+            r_gen = requests.get(result_url, timeout=60)
+            if r_gen.status_code == 200:
+                result_url = upload_bytes_to_oss(r_gen.content, ".png")
+        except Exception as e:
+            print(f"Warning: OSS Save Failed: {e}")
+        
+        # 确定创作类型
+        create_type = "text2img" if len(image_list) == 0 else f"img2img({len(image_list)})"
+        
+        # 保存历史记录
+        record = {
+            "id": str(uuid.uuid4()),
+            "image": result_url,
+            "prompt": f"[{create_type}] {prompt[:50]}{'...' if len(prompt) > 50 else ''}",
+            "timestamp": datetime.now().timestamp(),
+            "type": "create"
+        }
+        
+        with db_lock:
+            db = load_db()
+            if username not in db["history"]:
+                db["history"][username] = []
+            db["history"][username].append(record)
+            save_db(db)
+        
+        return {
+            "status": "SUCCESS",
+            "data": {
+                "image_url": result_url,
+                "history_item": record,
+                "remaining_quota": remaining_quota
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Create Exception: {str(e)}")
+        refund_quota(username)
+        raise HTTPException(500, str(e))
+
+# ==========================================
+# 💬 反馈收集接口
+# ==========================================
+FEEDBACK_FILE = "feedback.json"
+
+class FeedbackRequest(BaseModel):
+    phone: str
+    content: str
+
+def load_feedback():
+    """加载反馈数据"""
+    if os.path.exists(FEEDBACK_FILE):
+        try:
+            with open(FEEDBACK_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_feedback(data):
+    """保存反馈数据"""
+    with open(FEEDBACK_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.post("/api/feedback")
+async def submit_feedback(request: FeedbackRequest):
+    """提交用户反馈"""
+    phone = request.phone.strip()
+    content = request.content.strip()
+    
+    if not phone or not content:
+        raise HTTPException(400, "手机号和反馈内容不能为空")
+    
+    feedback_list = load_feedback()
+    
+    feedback_item = {
+        "id": str(uuid.uuid4()),
+        "phone": phone,
+        "content": content,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "created_at": time.time()
+    }
+    
+    feedback_list.append(feedback_item)
+    save_feedback(feedback_list)
+    
+    print(f"📝 收到用户反馈: {phone} - {content[:50]}...")
+    
+    return {"success": True, "message": "感谢您的反馈！"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

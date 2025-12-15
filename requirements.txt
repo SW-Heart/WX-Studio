@@ -1,4 +1,5 @@
 fastapi==0.83.0
+oss2
 uvicorn==0.15.0
 python-multipart==0.0.5
 requests==2.27.1
@@ -8,3 +9,6 @@ cloudinary==1.36.0
 python-jose==3.3.0
 #passlib[bcrypt]==1.7.4
 passlib==1.7.4
+alibabacloud_dypnsapi20170525==2.0.0
+alibabacloud_tea_openapi
+alibabacloud_credentials
