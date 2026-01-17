@@ -1,6 +1,6 @@
-WX Studio - AI 商业商品摄影工作站
+OG AI - AI 商业商品摄影工作站
 
-WX Studio 是一款面向电商与个人创作者的专业级 AI 摄影生成工具。它利用先进的生成式 AI 技术，将普通的商品底图瞬间转化为影棚级、场景化的商业摄影大片。
+OG AI 是一款面向电商与个人创作者的专业级 AI 摄影生成工具。它利用先进的生成式 AI 技术，将普通的商品底图瞬间转化为影棚级、场景化的商业摄影大片。
 
 ✨ 核心功能 (Features)
 
@@ -115,5 +115,5 @@ wx-studio/
 
 🔒 版权说明 (License)
 
-WX Studio © 2025. All Rights Reserved.
+OG AI © 2025. All Rights Reserved.
 内部商业项目，严禁未经授权的代码分发。

@@ -1,15 +1,70 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <!-- [Logo] 浏览器标签页图标 -->
-    <link rel="icon" type="image/png" href="https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- [Title] 浏览器标题 -->
-    <title>OG AI - Your personal AI designer</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- 基础 SEO Meta 标签 -->
+  <meta name="description" content="OG AI - 专业的AI商品摄影和智能修图平台。一键生成高质量商品图片，AI智能修图，个人写真制作，让您的产品和形象脱颖而出。" />
+  <meta name="keywords" content="AI摄影,商品拍摄,智能修图,AI设计,电商图片,产品摄影,AI写真,人像修图,OG AI" />
+  <meta name="author" content="OG AI" />
+  <meta name="robots" content="index, follow" />
+
+  <!-- Open Graph / Facebook 社交分享 -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://your-domain.com/" />
+  <meta property="og:title" content="OG AI - Your personal AI designer" />
+  <meta property="og:description" content="专业的AI商品摄影和智能修图平台，一键生成高质量商品图片" />
+  <meta property="og:image" content="https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta property="og:site_name" content="OG AI" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="OG AI - Your personal AI designer" />
+  <meta name="twitter:description" content="专业的AI商品摄影和智能修图平台" />
+  <meta name="twitter:image" content="https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png" />
+
+  <!-- 规范化链接 - TODO: 替换为实际域名 -->
+  <link rel="canonical" href="https://your-domain.com/" />
+
+  <!-- [Logo] 浏览器标签页图标 -->
+  <link rel="icon" type="image/png" href="https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png" />
+  <link rel="apple-touch-icon" href="https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png" />
+
+  <!-- [Title] 浏览器标题 -->
+  <title>OG AI - Your personal AI designer | AI商品摄影与智能修图</title>
+
+  <!-- 结构化数据 JSON-LD -->
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "OG AI",
+      "description": "专业的AI商品摄影和智能修图平台，提供商品拍摄、智能修图、个人写真等AI设计服务",
+      "url": "https://aigcog.com/",
+      "applicationCategory": "DesignApplication",
+      "operatingSystem": "Web Browser",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "CNY"
+      },
+      "featureList": [
+        "AI商品摄影",
+        "智能修图",
+        "个人写真",
+        "一键生成高质量图片"
+      ],
+      "screenshot": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png"
+    }
+    </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+
 </html>

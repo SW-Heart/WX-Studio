@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Helmet } from 'react-helmet-async';
 import {
   Image as ImageIcon, Settings, Sparkles, UploadCloud,
   History, Download, Maximize2, Palette,
@@ -43,7 +44,7 @@ const toSecureUrl = (url) => {
 // ==========================================
 // 🎨 LOGO 组件 (图片版)
 // ==========================================
-const WXLogo = () => {
+const OGLogo = () => {
   const [error, setError] = useState(false);
   if (LOGO_URL && !error) {
     return (
@@ -70,7 +71,7 @@ const TRANSLATIONS = {
     nav: { product: "Product Shot", retouch: "AI Retouch", portrait: "Portrait", soon: "Coming Soon" },
     auth: {
       login: "Log In", logout: "Log Out", submit: "Sign In", welcome: "Welcome",
-      productName: "WX Studio",
+      productName: "OG AI",
       subtitle: "Professional AI Photography",
       phone: "Phone Number", code: "Verification Code",
       placeholderPhone: "Enter your phone number",
@@ -83,7 +84,7 @@ const TRANSLATIONS = {
     template: "Reference Templates",
     resolution: "Output Size", ratio: "Aspect Ratio",
     generate: { idle: "Generate", loading: "Creating...", disabled: "Upload Image First", loginRequired: "Login to Create", quotaEmpty: "Quota Exceeded" },
-    status: { ready: "WX Studio Ready", powered: "Powered by TT-API", generating: "Creating your masterpiece...", failed: "Generation Failed" },
+    status: { ready: "OG AI Ready", powered: "Powered by TT-API", generating: "Creating your masterpiece...", failed: "Generation Failed" },
     gallery: { title: "History", empty: "No creations yet" },
     quota: "Credits",
     toast: { copySuccess: "Copied!", copyFail: "Copy Failed", downloadFail: "Download Failed", downloadSuccess: "Downloaded!", httpsRequired: "Copy requires HTTPS" },
@@ -93,7 +94,7 @@ const TRANSLATIONS = {
     nav: { product: "商品摄影", retouch: "智能修图", portrait: "个人写真", soon: "敬请期待" },
     auth: {
       login: "登录 / 注册", logout: "退出登录", submit: "登录 / 注册", welcome: "欢迎回来",
-      productName: "WX Studio",
+      productName: "OG AI",
       subtitle: "专业 AI 商品摄影工坊",
       phone: "手机号", code: "验证码",
       placeholderPhone: "请输入手机号",
@@ -106,7 +107,7 @@ const TRANSLATIONS = {
     template: "参考模版",
     resolution: "输出画质", ratio: "画幅比例",
     generate: { idle: "立即生成", loading: "任务提交中...", disabled: "请先上传图片", loginRequired: "请登录后使用", quotaEmpty: "配额已用尽" },
-    status: { ready: "WX Studio 就绪", powered: "由 TT-API 驱动", generating: "正在精心绘制中...", failed: "生成失败" },
+    status: { ready: "OG AI 就绪", powered: "由 TT-API 驱动", generating: "正在精心绘制中...", failed: "生成失败" },
     gallery: { title: "创作记录", empty: "暂无历史记录" },
     quota: "剩余点数",
     toast: { copySuccess: "已复制到剪贴板", copyFail: "复制失败", downloadFail: "下载失败", downloadSuccess: "下载成功", httpsRequired: "复制功能需要 HTTPS 安全协议" },
@@ -460,124 +461,130 @@ const HomePage = ({ onNavigate, token, lang }) => {
   }, [token]);
 
   return (
-    <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
-      {/* 动态光晕背景 */}
-      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-        <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#FF8A3D]/8 rounded-full blur-[150px] animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#8B5CF6]/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '1s' }} />
-      </div>
+    <>
+      <Helmet>
+        <title>{lang === 'zh' ? 'OG AI - 首页 | AI商品摄影与智能修图' : 'OG AI - Home | AI Photography & Editing'}</title>
+        <meta name="description" content={lang === 'zh' ? 'OG AI - 专业的AI商品摄影和智能修图平台。一键生成高质量商品图片，AI智能修图，个人写真制作。' : 'OG AI - Professional AI photography and editing platform. Generate high-quality product images with one click.'} />
+      </Helmet>
+      <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
+        {/* 动态光晕背景 */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#FF8A3D]/8 rounded-full blur-[150px] animate-pulse" />
+          <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#8B5CF6]/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '1s' }} />
+        </div>
 
-      {/* 欢迎区域 */}
-      <div className="relative z-10 mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold mb-2">
-          {lang === 'zh' ? '开始创作' : 'Start Creating'}
-        </h1>
-        <p className="text-white/50 text-sm md:text-base">
-          {lang === 'zh' ? '选择一个功能，开启 AI 创意之旅' : 'Choose a feature to start your AI creative journey'}
-        </p>
-      </div>
+        {/* 欢迎区域 */}
+        <div className="relative z-10 mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">
+            {lang === 'zh' ? '开始创作' : 'Start Creating'}
+          </h1>
+          <p className="text-white/50 text-sm md:text-base">
+            {lang === 'zh' ? '选择一个功能，开启 AI 创意之旅' : 'Choose a feature to start your AI creative journey'}
+          </p>
+        </div>
 
-      {/* 快捷入口卡片 */}
-      <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
-        {features.map((feature) => (
-          <div
-            key={feature.id}
-            onClick={() => feature.available && onNavigate(feature.id)}
-            className={`group relative p-4 md:p-5 rounded-xl border transition-all duration-300 cursor-pointer
+        {/* 快捷入口卡片 */}
+        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
+          {features.map((feature) => (
+            <div
+              key={feature.id}
+              onClick={() => feature.available && onNavigate(feature.id)}
+              className={`group relative p-4 md:p-5 rounded-xl border transition-all duration-300 cursor-pointer
               ${feature.available
-                ? 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02]'
-                : 'bg-white/[0.02] border-white/5 cursor-not-allowed opacity-60'
-              }`}
-          >
-            {/* 图标 */}
-            <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-tr ${feature.gradient} flex items-center justify-center mb-3 
+                  ? 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02]'
+                  : 'bg-white/[0.02] border-white/5 cursor-not-allowed opacity-60'
+                }`}
+            >
+              {/* 图标 */}
+              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-tr ${feature.gradient} flex items-center justify-center mb-3 
               ${feature.available ? 'group-hover:scale-110 transition-transform duration-300' : 'grayscale'}`}>
-              {feature.icon}
+                {feature.icon}
+              </div>
+
+              {/* 标题 */}
+              <h3 className="text-base md:text-lg font-bold mb-1">{feature.title[lang]}</h3>
+
+              {/* 描述 */}
+              <p className="text-white/40 text-xs md:text-sm line-clamp-2">{feature.desc[lang]}</p>
+
+              {/* 进入箭头 */}
+              {feature.available && (
+                <ArrowRight size={16} className="absolute top-4 right-4 text-white/20 group-hover:text-[#FF8A3D] group-hover:translate-x-1 transition-all" />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* 最近创作记录 */}
+        {token && (
+          <div className="relative z-10">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg md:text-xl font-bold flex items-center gap-2">
+                <History size={20} className="text-[#FF8A3D]" />
+                {lang === 'zh' ? '最近创作' : 'Recent Creations'}
+              </h2>
+              <button
+                onClick={() => onNavigate('gallery')}
+                className="text-xs text-white/50 hover:text-[#FF8A3D] transition-colors flex items-center gap-1"
+              >
+                {lang === 'zh' ? '查看全部' : 'View All'}
+                <ArrowRight size={14} />
+              </button>
             </div>
 
-            {/* 标题 */}
-            <h3 className="text-base md:text-lg font-bold mb-1">{feature.title[lang]}</h3>
-
-            {/* 描述 */}
-            <p className="text-white/40 text-xs md:text-sm line-clamp-2">{feature.desc[lang]}</p>
-
-            {/* 进入箭头 */}
-            {feature.available && (
-              <ArrowRight size={16} className="absolute top-4 right-4 text-white/20 group-hover:text-[#FF8A3D] group-hover:translate-x-1 transition-all" />
+            {loadingHistory ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={24} className="animate-spin text-[#FF8A3D]" />
+              </div>
+            ) : recentHistory.length === 0 ? (
+              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
+                <FolderOpen size={40} className="mx-auto mb-3 text-white/20" />
+                <p className="text-white/40 text-sm">
+                  {lang === 'zh' ? '暂无创作记录，开始你的第一次创作吧！' : 'No creations yet. Start your first creation!'}
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4">
+                {recentHistory.map(item => (
+                  <div
+                    key={item.id}
+                    className="aspect-square rounded-xl overflow-hidden border border-white/10 group relative bg-[#111] hover:border-[#FF8A3D]/50 transition-all cursor-pointer"
+                    onClick={() => onNavigate('gallery')}
+                  >
+                    <img src={toSecureUrl(item.image)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="" />
+                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
+                      <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
+                      <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
+                      ${item.type === 'retouch' ? 'bg-purple-500/30 text-purple-300' :
+                          item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
+                            item.type === 'create' ? 'bg-green-500/30 text-green-300' :
+                              'bg-orange-500/30 text-orange-300'}`}>
+                        {item.type === 'retouch' ? (lang === 'zh' ? '修图' : 'Retouch') :
+                          item.type === 'portrait' ? (lang === 'zh' ? '人像' : 'Portrait') :
+                            item.type === 'create' ? (lang === 'zh' ? '创作' : 'Create') :
+                              (lang === 'zh' ? '商品' : 'Product')}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* 最近创作记录 */}
-      {token && (
-        <div className="relative z-10">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg md:text-xl font-bold flex items-center gap-2">
-              <History size={20} className="text-[#FF8A3D]" />
-              {lang === 'zh' ? '最近创作' : 'Recent Creations'}
-            </h2>
-            <button
-              onClick={() => onNavigate('gallery')}
-              className="text-xs text-white/50 hover:text-[#FF8A3D] transition-colors flex items-center gap-1"
-            >
-              {lang === 'zh' ? '查看全部' : 'View All'}
-              <ArrowRight size={14} />
-            </button>
+        {/* 未登录提示 */}
+        {!token && (
+          <div className="relative z-10 bg-gradient-to-r from-[#FF8A3D]/10 to-[#E65100]/10 border border-[#FF8A3D]/20 rounded-xl p-6 text-center">
+            <p className="text-white/70 mb-3">
+              {lang === 'zh' ? '登录后可保存创作记录并使用全部功能' : 'Login to save your creations and access all features'}
+            </p>
+            <p className="text-white/40 text-sm">
+              {lang === 'zh' ? '点击右上角登录按钮开始' : 'Click the login button in the top right to get started'}
+            </p>
           </div>
-
-          {loadingHistory ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 size={24} className="animate-spin text-[#FF8A3D]" />
-            </div>
-          ) : recentHistory.length === 0 ? (
-            <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
-              <FolderOpen size={40} className="mx-auto mb-3 text-white/20" />
-              <p className="text-white/40 text-sm">
-                {lang === 'zh' ? '暂无创作记录，开始你的第一次创作吧！' : 'No creations yet. Start your first creation!'}
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4">
-              {recentHistory.map(item => (
-                <div
-                  key={item.id}
-                  className="aspect-square rounded-xl overflow-hidden border border-white/10 group relative bg-[#111] hover:border-[#FF8A3D]/50 transition-all cursor-pointer"
-                  onClick={() => onNavigate('gallery')}
-                >
-                  <img src={toSecureUrl(item.image)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="" />
-                  <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                    <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
-                    <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                      ${item.type === 'retouch' ? 'bg-purple-500/30 text-purple-300' :
-                        item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
-                          item.type === 'create' ? 'bg-green-500/30 text-green-300' :
-                            'bg-orange-500/30 text-orange-300'}`}>
-                      {item.type === 'retouch' ? (lang === 'zh' ? '修图' : 'Retouch') :
-                        item.type === 'portrait' ? (lang === 'zh' ? '人像' : 'Portrait') :
-                          item.type === 'create' ? (lang === 'zh' ? '创作' : 'Create') :
-                            (lang === 'zh' ? '商品' : 'Product')}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 未登录提示 */}
-      {!token && (
-        <div className="relative z-10 bg-gradient-to-r from-[#FF8A3D]/10 to-[#E65100]/10 border border-[#FF8A3D]/20 rounded-xl p-6 text-center">
-          <p className="text-white/70 mb-3">
-            {lang === 'zh' ? '登录后可保存创作记录并使用全部功能' : 'Login to save your creations and access all features'}
-          </p>
-          <p className="text-white/40 text-sm">
-            {lang === 'zh' ? '点击右上角登录按钮开始' : 'Click the login button in the top right to get started'}
-          </p>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </>
   );
 };
 
@@ -1550,8 +1557,8 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { id: 'gemini-2.5-flash-image', label: 'WX 2.5 Pro' },
-                  { id: 'gemini-3-pro-image-preview', label: 'WX 3' }
+                  { id: 'gemini-2.5-flash-image', label: 'OG AI 2.5 Pro' },
+                  { id: 'gemini-3-pro-image-preview', label: 'OG AI 3' }
                 ].map(m => (
                   <button
                     key={m.id}
@@ -2038,7 +2045,7 @@ const AIRetouchStudio = ({ onBack, lang, setLang }) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `WX_Retouch_${Date.now()}.png`;
+      link.download = `OG_Retouch_${Date.now()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -2416,7 +2423,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
       <div className="w-[380px] bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-8 relative">
         <button onClick={onClose} className="absolute top-4 right-4 text-white/40 hover:text-white"><X size={18} /></button>
-        <div className="flex flex-col items-center gap-4 mb-8"><WXLogo /><div className="text-center"><h2 className="text-xl font-bold text-white tracking-tight">{t.auth.productName}</h2><p className="text-xs text-white/40 mt-1">{t.auth.subtitle}</p></div></div>
+        <div className="flex flex-col items-center gap-4 mb-8"><OGLogo /><div className="text-center"><h2 className="text-xl font-bold text-white tracking-tight">{t.auth.productName}</h2><p className="text-xs text-white/40 mt-1">{t.auth.subtitle}</p></div></div>
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           {/* 手机号输入 */}
           <div>
@@ -2767,7 +2774,7 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `WX_Studio_${Date.now()}.png`;
+      link.download = `OG_AI_${Date.now()}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);

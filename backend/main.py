@@ -18,8 +18,11 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 
-# 导入短信服务
-from sms_service import send_verification_code, generate_code
+# 导入短信服务 (支持从项目根目录和 backend 目录两种启动方式)
+try:
+    from backend.sms_service import send_verification_code, generate_code
+except ImportError:
+    from sms_service import send_verification_code, generate_code
 
 # --- 1. 初始化配置 ---
 load_dotenv()
@@ -29,7 +32,10 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 
 TT_API_KEY = os.getenv("TT_API_KEY")
 TT_ENDPOINT = "https://api.ttapi.org/gemini/image/generate"
-DB_FILE = "wx_data.json"
+
+# 使用脚本所在目录的绝对路径，确保无论从哪里启动都能找到数据文件
+BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(BACKEND_DIR, "wx_data.json")
 
 # --- 验证码存储 (手机号 -> {code, timestamp, attempts}) ---
 verification_codes: Dict[str, dict] = {}
@@ -61,7 +67,7 @@ if OSS_ACCESS_KEY_ID and OSS_ACCESS_KEY_SECRET and OSS_ENDPOINT and OSS_BUCKET_N
 else:
     print("❌ 警告: OSS 配置缺失")
 
-app = FastAPI(title="WX Studio API")
+app = FastAPI(title="OG AI API")
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
@@ -706,7 +712,7 @@ def basic_create(
 # ==========================================
 # 💬 反馈收集接口
 # ==========================================
-FEEDBACK_FILE = "feedback.json"
+FEEDBACK_FILE = os.path.join(BACKEND_DIR, "feedback.json")
 
 class FeedbackRequest(BaseModel):
     phone: str

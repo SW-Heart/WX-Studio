@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // 任务状态常量
 export const TASK_STATUS = {
@@ -39,6 +39,10 @@ export const useTasks = () => {
         }
     });
 
+    // 使用 ref 存储最新的 tasks，解决闭包问题
+    const tasksRef = useRef(tasks);
+    tasksRef.current = tasks;
+
     // 同步到 localStorage
     useEffect(() => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks));
@@ -60,7 +64,11 @@ export const useTasks = () => {
                     }
                     return t;
                 });
-                return hasChanges ? newTasks : prev;
+                if (hasChanges) {
+                    tasksRef.current = newTasks;
+                    return newTasks;
+                }
+                return prev;
             });
         };
 
@@ -70,9 +78,13 @@ export const useTasks = () => {
 
     // 清理所有僵尸任务（手动触发）
     const clearZombieTasks = useCallback(() => {
-        setTasks(prev => prev.filter(t =>
-            t.status !== TASK_STATUS.PENDING && t.status !== TASK_STATUS.RUNNING
-        ));
+        setTasks(prev => {
+            const newTasks = prev.filter(t =>
+                t.status !== TASK_STATUS.PENDING && t.status !== TASK_STATUS.RUNNING
+            );
+            tasksRef.current = newTasks;
+            return newTasks;
+        });
     }, []);
 
     // 创建新任务
@@ -89,15 +101,23 @@ export const useTasks = () => {
             error: null
         };
 
-        setTasks(prev => [task, ...prev]);
+        setTasks(prev => {
+            const newTasks = [task, ...prev];
+            tasksRef.current = newTasks; // 立即更新 ref，解决异步问题
+            return newTasks;
+        });
         return task.id;
     }, []);
 
     // 更新任务状态
     const updateTask = useCallback((taskId, updates) => {
-        setTasks(prev => prev.map(t =>
-            t.id === taskId ? { ...t, ...updates } : t
-        ));
+        setTasks(prev => {
+            const newTasks = prev.map(t =>
+                t.id === taskId ? { ...t, ...updates } : t
+            );
+            tasksRef.current = newTasks;
+            return newTasks;
+        });
     }, []);
 
     // 更新任务进度
@@ -124,26 +144,34 @@ export const useTasks = () => {
 
     // 移除任务（完成后从列表移除）
     const removeTask = useCallback((taskId) => {
-        setTasks(prev => prev.filter(t => t.id !== taskId));
+        setTasks(prev => {
+            const newTasks = prev.filter(t => t.id !== taskId);
+            tasksRef.current = newTasks;
+            return newTasks;
+        });
     }, []);
 
-    // 获取指定类型的任务
+    // 获取指定类型的任务 (使用 ref 避免闭包问题)
     const getTasksByType = useCallback((type) => {
-        return tasks.filter(t => t.type === type);
-    }, [tasks]);
+        return tasksRef.current.filter(t => t.type === type);
+    }, []);
 
-    // 获取进行中的任务
+    // 获取进行中的任务 (使用 ref 避免闭包问题)
     const getRunningTasks = useCallback(() => {
-        return tasks.filter(t =>
+        return tasksRef.current.filter(t =>
             t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING
         );
-    }, [tasks]);
+    }, []);
 
     // 清理已完成的任务
     const clearCompletedTasks = useCallback(() => {
-        setTasks(prev => prev.filter(t =>
-            t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING
-        ));
+        setTasks(prev => {
+            const newTasks = prev.filter(t =>
+                t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING
+            );
+            tasksRef.current = newTasks;
+            return newTasks;
+        });
     }, []);
 
     return {
