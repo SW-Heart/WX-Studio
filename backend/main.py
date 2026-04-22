@@ -31,7 +31,28 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 
 TT_API_KEY = os.getenv("TT_API_KEY")
-TT_ENDPOINT = "https://api.ttapi.org/gemini/image/generate"
+TT_ENDPOINT = "https://api.ttapi.io/openai/gpt/generations"
+TT_FETCH_ENDPOINT = "https://api.ttapi.io/openai/gpt/fetch"
+
+def poll_ttapi_result(job_id: str, headers: dict, timeout: int = 300) -> str:
+    start_time = time.time()
+    while True:
+        if time.time() - start_time > timeout:
+            raise Exception("Timeout waiting for image generation")
+        try:
+            resp = requests.get(f"{TT_FETCH_ENDPOINT}?jobId={job_id}", headers=headers, timeout=10, proxies={"http": None, "https": None})
+            if resp.status_code == 200:
+                res_json = resp.json()
+                status_code = res_json.get("status")
+                if status_code == "SUCCESS":
+                    return res_json.get("data", {}).get("imageUrl")
+                elif status_code == "FAILED":
+                    raise Exception(res_json.get("message", "Generation failed"))
+            # ON_QUEUE or others -> continue polling
+        except Exception as e:
+            if "Timeout waiting" in str(e) or "Generation failed" in str(e):
+                raise e
+        time.sleep(3)
 
 # 使用脚本所在目录的绝对路径，确保无论从哪里启动都能找到数据文件
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -327,15 +348,12 @@ def generate_image(
     headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
         "prompt": f"{prompt}, {style} style, 8k",
-        "mode": "gemini-3-pro-image-preview",
-        "refer_images": image_list, 
-        "image_size": image_size,
-        "google_search": True
+        "mode": "gpt-image-2",
+        "referImages": image_list
     }
 
     try:
-        # 300秒超时，防止大图生成中断，并禁用代理以避免连接问题
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300, proxies={"http": None, "https": None})
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
         
         if resp.status_code != 200:
             print(f"API Error: {resp.text}")
@@ -347,7 +365,8 @@ def generate_image(
             refund_quota(username)  # AI返回失败，回滚
             raise HTTPException(500, res_json.get("message"))
 
-        result_url = res_json['data']['image_url']
+        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
+        result_url = poll_ttapi_result(job_id, headers)
         
         # 转存 OSS
         try:
@@ -458,16 +477,12 @@ async def retouch_image(
     headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
         "prompt": full_prompt,
-        "mode": "gemini-3-pro-image-preview", # 使用预览模式加快速度
-        "refer_images": image_list, 
-        "image_size": image_size,
-        "google_search": True
+        "mode": "gpt-image-2",
+        "referImages": image_list
     }
 
     try:
-        # 调用 AI API (300s超时)
-        # 禁用代理以防连接问题 !!! 重要
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300, proxies={"http": None, "https": None})
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
         
         if resp.status_code != 200:
             print(f"API Error: {resp.text}")
@@ -480,7 +495,8 @@ async def retouch_image(
             raise HTTPException(500, res_json.get("message"))
 
         # 获取临时 URL
-        result_url = res_json['data']['image_url']
+        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
+        result_url = poll_ttapi_result(job_id, headers)
         record_id = str(uuid.uuid4())
         
         # 记录历史 (先存临时 URL)
@@ -544,14 +560,12 @@ def portrait_generate(
     headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": PORTRAIT_PROMPT,
-        "mode": "gemini-3-pro-image-preview",
-        "refer_images": [subject_url, target_url],
-        "image_size": quality,
-        "google_search": False
+        "mode": "gpt-image-2",
+        "referImages": [subject_url, target_url]
     }
     
     try:
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300)
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
         
         if resp.status_code != 200:
             print(f"Portrait API Error: {resp.text}")
@@ -563,7 +577,8 @@ def portrait_generate(
             refund_quota(username)
             raise HTTPException(500, res_json.get("message"))
         
-        result_url = res_json['data']['image_url']
+        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
+        result_url = poll_ttapi_result(job_id, headers)
         
         # 转存 OSS
         try:
@@ -610,7 +625,7 @@ def basic_create(
     prompt: str = Form(...),              # 必填：文本提示词
     image_urls_json: str = Form("[]"),    # 选填：参考图片URL列表（JSON数组）
     image_size: str = Form("2K"),         # 图像质量：1K, 2K, 4K
-    mode: str = Form("gemini-3-pro-image-preview"),  # 模型版本
+    mode: str = Form("gpt-image-2"),  # 模型版本
     aspect_ratio: str = Form("1:1"),      # 图片比例
     google_search: bool = Form(False),    # 是否启用 Google 搜索增强
     username: str = Depends(get_current_user)
@@ -621,7 +636,7 @@ def basic_create(
         raise HTTPException(400, f"无效的图像质量: {image_size}")
     
     # 验证模型
-    valid_modes = ["gemini-2.5-flash-image", "gemini-3-pro-image-preview"]
+    valid_modes = ["gemini-2.5-flash-image", "gemini-3-pro-image-preview", "gpt-image-2"]
     if mode not in valid_modes:
         raise HTTPException(400, f"无效的模型: {mode}")
     
@@ -644,15 +659,12 @@ def basic_create(
     headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt,
-        "mode": mode,
-        "refer_images": image_list,
-        "image_size": image_size,
-        "aspect_ratio": aspect_ratio,
-        "google_search": google_search
+        "mode": "gpt-image-2",
+        "referImages": image_list
     }
     
     try:
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=300)
+        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
         
         if resp.status_code != 200:
             print(f"Create API Error: {resp.text}")
@@ -664,7 +676,8 @@ def basic_create(
             refund_quota(username)
             raise HTTPException(500, res_json.get("message"))
         
-        result_url = res_json['data']['image_url']
+        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
+        result_url = poll_ttapi_result(job_id, headers)
         
         # 转存 OSS
         try:
