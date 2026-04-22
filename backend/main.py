@@ -637,7 +637,7 @@ def basic_create(
         raise HTTPException(400, f"无效的图像质量: {image_size}")
     
     # 验证模型
-    valid_modes = ["gemini-2.5-flash-image", "gemini-3-pro-image-preview", "gpt-image-2"]
+    valid_modes = ["gpt-image-2"]
     if mode not in valid_modes:
         raise HTTPException(400, f"无效的模型: {mode}")
     

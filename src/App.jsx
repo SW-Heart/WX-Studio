@@ -1187,7 +1187,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
   const [prompt, setPrompt] = useState('');
   const [referImages, setReferImages] = useState([]); // 多参考图
   const [imageSize, setImageSize] = useState('2K');
-  const [mode, setMode] = useState('gemini-3-pro-image-preview');
+  const [mode, setMode] = useState('gpt-image-2');
   const [aspectRatio, setAspectRatio] = useState('1:1');
   const [googleSearch, setGoogleSearch] = useState(false);
 
@@ -1555,10 +1555,9 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
               <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
                 <Settings size={14} /> {lang === 'zh' ? '模型版本' : 'Model'}
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 {[
-                  { id: 'gemini-2.5-flash-image', label: 'OG AI 2.5 Pro' },
-                  { id: 'gemini-3-pro-image-preview', label: 'OG AI 3' }
+                  { id: 'gpt-image-2', label: 'GPT Image 2' }
                 ].map(m => (
                   <button
                     key={m.id}
