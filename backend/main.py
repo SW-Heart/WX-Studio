@@ -47,11 +47,12 @@ def poll_ttapi_result(job_id: str, headers: dict, timeout: int = 300) -> str:
                 if status_code == "SUCCESS":
                     return res_json.get("data", {}).get("imageUrl")
                 elif status_code == "FAILED":
-                    raise Exception(res_json.get("message", "Generation failed"))
+                    raise RuntimeError(res_json.get("message", "Generation failed"))
             # ON_QUEUE or others -> continue polling
-        except Exception as e:
-            if "Timeout waiting" in str(e) or "Generation failed" in str(e):
-                raise e
+        except RuntimeError:
+            raise # 确保生成失败的异常直接抛出
+        except Exception:
+            pass # 忽略网络抖动或 JSON 解析错误，继续轮询
         time.sleep(3)
 
 # 使用脚本所在目录的绝对路径，确保无论从哪里启动都能找到数据文件
