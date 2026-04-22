@@ -1314,6 +1314,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!token) { setShowLogin(true); return; }
+
     try {
       const url = await uploadImage(file);
       setReferImages(prev => [...prev, url]);
@@ -1376,8 +1377,15 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
       clearInterval(progressInterval);
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Generation failed');
+        let errMsg = 'Generation failed';
+        try {
+          const errData = await res.json();
+          errMsg = errData.detail || errData.message || errMsg;
+        } catch (e) {
+          // If JSON parsing fails, just use the default message or response status
+          errMsg = `Server error: ${res.status}`;
+        }
+        throw new Error(errMsg);
       }
 
       const data = await res.json();

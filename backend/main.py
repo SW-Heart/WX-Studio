@@ -347,7 +347,7 @@ def generate_image(
     headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
         "prompt": f"{prompt}, {style} style, 8k",
-        "mode": "gpt-image-2",
+        "model": "gpt-image-2",
         "referImages": image_list
     }
 
@@ -476,7 +476,7 @@ async def retouch_image(
     headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
         "prompt": full_prompt,
-        "mode": "gpt-image-2",
+        "model": "gpt-image-2",
         "referImages": image_list
     }
 
@@ -554,7 +554,7 @@ def portrait_generate(
     headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": PORTRAIT_PROMPT,
-        "mode": "gpt-image-2",
+        "model": "gpt-image-2",
         "referImages": [subject_url, target_url]
     }
     
@@ -636,7 +636,7 @@ def basic_create(
     headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
     payload = {
         "prompt": prompt,
-        "mode": "gpt-image-2",
+        "model": "gpt-image-2",
         "referImages": image_list
     }
     
