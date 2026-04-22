@@ -331,8 +331,6 @@ async def delete_history_item(item_id: str, u: str = Depends(get_current_user)):
 @app.post("/api/generate")
 def generate_image(
     prompt: str = Form(...),
-    image_size: str = Form(...),
-    ratio: str = Form(...),
     style: str = Form(...),
     image_urls_json: str = Form(...), 
     username: str = Depends(get_current_user)
@@ -547,14 +545,9 @@ PORTRAIT_PROMPT = "Replace the face in Figure 1 with the face in Figure 2, keepi
 def portrait_generate(
     subject_url: str = Form(...),  # 本人照片
     target_url: str = Form(...),   # 目标写真/服装
-    quality: str = Form("2K"),     # 图像质量
     username: str = Depends(get_current_user)
 ):
     """人像写真接口"""
-    # 验证质量参数
-    if quality not in ["1K", "2K", "4K"]:
-        raise HTTPException(400, f"无效的图像质量: {quality}")
-    
     # 预扣分（原子操作，防止并发超用）
     remaining_quota = deduct_quota_atomic(username)
     
@@ -625,26 +618,9 @@ def portrait_generate(
 def basic_create(
     prompt: str = Form(...),              # 必填：文本提示词
     image_urls_json: str = Form("[]"),    # 选填：参考图片URL列表（JSON数组）
-    image_size: str = Form("2K"),         # 图像质量：1K, 2K, 4K
-    mode: str = Form("gpt-image-2"),  # 模型版本
-    aspect_ratio: str = Form("1:1"),      # 图片比例
-    google_search: bool = Form(False),    # 是否启用 Google 搜索增强
     username: str = Depends(get_current_user)
 ):
     """基础创作接口 - 支持文生图、图生图、多参考图"""
-    # 验证图像质量
-    if image_size not in ["1K", "2K", "4K"]:
-        raise HTTPException(400, f"无效的图像质量: {image_size}")
-    
-    # 验证模型
-    valid_modes = ["gpt-image-2"]
-    if mode not in valid_modes:
-        raise HTTPException(400, f"无效的模型: {mode}")
-    
-    # 验证比例
-    valid_ratios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"]
-    if aspect_ratio not in valid_ratios:
-        raise HTTPException(400, f"无效的比例: {aspect_ratio}")
     
     # 解析图片列表
     try:

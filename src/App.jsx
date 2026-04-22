@@ -626,7 +626,7 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
   // 核心状态
   const [subjectImage, setSubjectImage] = useState(null); // 本人照片
   const [targetImage, setTargetImage] = useState(null);   // 目标写真
-  const [quality, setQuality] = useState('2K');
+
   // const [isGenerating, setIsGenerating] = useState(false); // Removed
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -810,17 +810,16 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
     if (quota <= 0) { showToast(t.toast.noQuota, 'error'); return; }
 
     const taskName = lang === 'zh' ? '人像写真' : 'Portrait';
-    const taskId = taskManager.createTask('portrait', `[${taskName}] ${quality}`, {
+    const taskId = taskManager.createTask('portrait', `[${taskName}]`, {
       subjectImage,
-      targetImage,
-      quality
+      targetImage
     });
 
     // 立即添加到历史
     const newItem = {
       id: taskId,
       image: targetImage, // 预览图先显示目标风格图
-      prompt: `[${taskName}] ${quality}`,
+      prompt: `[${taskName}]`,
       timestamp: Date.now() / 1000,
       type: 'portrait',
       status: 'pending',
@@ -830,11 +829,11 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
     setActiveHistoryId(taskId);
     showToast(t.toast.genSuccess); // 提示"开始任务"
 
-    executePortraitTask(taskId, subjectImage, targetImage, quality);
+    executePortraitTask(taskId, subjectImage, targetImage);
   };
 
   // 异步执行任务
-  const executePortraitTask = async (taskId, sImg, tImg, qual) => {
+  const executePortraitTask = async (taskId, sImg, tImg) => {
     taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
     // setIsGenerating(false); // Removed
 
@@ -850,7 +849,6 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
       const formData = new FormData();
       formData.append('subject_url', sImg);
       formData.append('target_url', tImg);
-      formData.append('quality', qual);
 
       const res = await fetch(`${API_BASE_URL}/api/portrait`, {
         method: 'POST',
@@ -1001,25 +999,6 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
                 <Palette size={14} />
                 {lang === 'zh' ? '从模板选择' : 'Choose from Templates'}
               </button>
-            </div>
-
-            {/* 图像质量 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                <Monitor size={14} /> {lang === 'zh' ? '图像质量' : 'Image Quality'}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {['1K', '2K', '4K'].map(q => (
-                  <button
-                    key={q}
-                    onClick={() => setQuality(q)}
-                    className={`py-2.5 rounded-lg text-xs font-medium transition-all border
-                      ${quality === q ? 'bg-[#06B6D4]/20 border-[#06B6D4] text-[#06B6D4]' : 'bg-white/5 border-white/10 text-white/60 hover:text-white'}`}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -1186,10 +1165,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
   // 核心状态
   const [prompt, setPrompt] = useState('');
   const [referImages, setReferImages] = useState([]); // 多参考图
-  const [imageSize, setImageSize] = useState('2K');
-  const [mode, setMode] = useState('gpt-image-2');
-  const [aspectRatio, setAspectRatio] = useState('1:1');
-  const [googleSearch, setGoogleSearch] = useState(false);
 
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -1356,11 +1331,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
 
     const taskName = lang === 'zh' ? '基础创作' : 'Basic Create';
     const taskId = taskManager.createTask('create', prompt, {
-      referImages,
-      imageSize,
-      mode,
-      aspectRatio,
-      googleSearch
+      referImages
     });
 
     // 立即添加到历史
@@ -1376,11 +1347,11 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
     setHistory(prev => [newItem, ...prev]);
     setActiveHistoryId(taskId);
 
-    executeCreateTask(taskId, prompt, referImages, imageSize, mode, aspectRatio, googleSearch);
+    executeCreateTask(taskId, prompt, referImages);
   };
 
   // 异步执行创作任务
-  const executeCreateTask = async (taskId, p, rImgs, paramSize, paramMode, paramRatio, paramSearch) => {
+  const executeCreateTask = async (taskId, p, rImgs) => {
     taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
     // setIsGenerating(false); // Removed
 
@@ -1395,10 +1366,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
       const formData = new FormData();
       formData.append('prompt', p);
       formData.append('image_urls_json', JSON.stringify(rImgs));
-      formData.append('image_size', paramSize);
-      formData.append('mode', paramMode);
-      formData.append('aspect_ratio', paramRatio);
-      formData.append('google_search', paramSearch);
 
       const res = await fetch(`${API_BASE_URL}/api/create`, {
         method: 'POST',
@@ -1529,80 +1496,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
                 )}
               </div>
               <p className="text-[10px] text-white/30">{lang === 'zh' ? '无图片=文生图 | 有图片=图生图/多参考图' : 'No image=Text2Img | With images=Img2Img'}</p>
-            </div>
-
-            {/* 图像质量 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                <Monitor size={14} /> {lang === 'zh' ? '图像质量' : 'Image Quality'}
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {['1K', '2K', '4K'].map(q => (
-                  <button
-                    key={q}
-                    onClick={() => setImageSize(q)}
-                    className={`py-2.5 rounded-lg text-xs font-medium transition-all border
-                      ${imageSize === q ? 'bg-[#10B981]/20 border-[#10B981] text-[#10B981]' : 'bg-white/5 border-white/10 text-white/60 hover:text-white'}`}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 模型版本 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                <Settings size={14} /> {lang === 'zh' ? '模型版本' : 'Model'}
-              </div>
-              <div className="grid grid-cols-1 gap-2">
-                {[
-                  { id: 'gpt-image-2', label: 'GPT Image 2' }
-                ].map(m => (
-                  <button
-                    key={m.id}
-                    onClick={() => setMode(m.id)}
-                    className={`py-2.5 rounded-lg text-xs font-medium transition-all border
-                      ${mode === m.id ? 'bg-[#10B981]/20 border-[#10B981] text-[#10B981]' : 'bg-white/5 border-white/10 text-white/60 hover:text-white'}`}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 图片比例 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                <BoxSelect size={14} /> {lang === 'zh' ? '图片比例' : 'Aspect Ratio'}
-              </div>
-              <div className="grid grid-cols-5 gap-1.5">
-                {['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'].map(r => (
-                  <button
-                    key={r}
-                    onClick={() => setAspectRatio(r)}
-                    className={`py-2 rounded-lg text-[10px] font-medium transition-all border
-                      ${aspectRatio === r ? 'bg-[#10B981]/20 border-[#10B981] text-[#10B981]' : 'bg-white/5 border-white/10 text-white/60 hover:text-white'}`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Google 搜索增强 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                  <Globe size={14} /> {lang === 'zh' ? 'Google 搜索增强' : 'Google Search'}
-                </div>
-                <button
-                  onClick={() => setGoogleSearch(!googleSearch)}
-                  className={`w-10 h-5 rounded-full transition-colors relative ${googleSearch ? 'bg-[#10B981]' : 'bg-white/20'}`}
-                >
-                  <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-all ${googleSearch ? 'left-5' : 'left-0.5'}`} />
-                </button>
-              </div>
             </div>
           </div>
 
@@ -2498,7 +2391,7 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
   const [prompt, setPrompt] = useState("");
   const [activeHistoryId, setActiveHistoryId] = useState(null);
 
-  const [config, setConfig] = useState({ style: 'Luxurious', ratio: '1:1', resolution: '2K' });
+  const [config, setConfig] = useState({ style: 'Luxurious' });
   // 初始化时立即从 TaskManager 读取运行中的任务，避免页面切换时数据消失
   const [history, setHistory] = useState(() => {
     const runningTasks = taskManager.getTasksByType('product')
@@ -2685,8 +2578,6 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
     const validUrls = sourceImages.filter(img => !img.uploading && img.url).map(img => img.url);
     const taskId = taskManager.createTask('product', prompt, {
       sourceImages: validUrls,
-      resolution: config.resolution,
-      ratio: config.ratio,
       style: config.style
     });
 
@@ -2718,8 +2609,6 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
     try {
       const formData = new FormData();
       formData.append('prompt', p);
-      formData.append('image_size', cfg.resolution);
-      formData.append('ratio', cfg.ratio);
       formData.append('style', cfg.style);
       formData.append('image_urls_json', JSON.stringify(urls));
 
@@ -2869,8 +2758,6 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
                   onSelect={handleSelectTemplate}
                   onHover={setHoverTemplate}
                 />
-                <ParamSection label={t.ratio} options={ratioOptions} active={config.ratio} onChange={v => setConfig({ ...config, ratio: v })} grid />
-                <ParamSection label={t.resolution} options={['1K', '2K', '4K']} active={config.resolution} onChange={v => setConfig({ ...config, resolution: v })} />
               </div>
             </div>
           </div>
