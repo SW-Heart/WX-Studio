@@ -5,7 +5,8 @@ import {
   History, Download, Maximize2, Palette,
   Monitor, BoxSelect, Copy, Camera, User, Edit3, Globe,
   LogOut, X, Loader2, Check, Lock, AlertCircle, RefreshCw, Zap, Plus, Trash2, CheckCircle,
-  Home, ArrowRight, Wand2, ArrowLeft, FolderOpen, Filter
+  Home, ArrowRight, Wand2, ArrowLeft, FolderOpen, Filter,
+  Video, PlayCircle, Film,
 } from 'lucide-react';
 import { Layout } from './components/layout/Layout';
 import { TaskProvider, useTaskManager, TASK_STATUS } from './context/TaskContext';
@@ -215,9 +216,26 @@ const Toast = ({ message, type = 'success', onClose }) => {
 // ==========================================
 // 📂 全局图库组件
 // ==========================================
+
+const MediaRenderer = ({ src, alt, className, onClick }) => {
+  if (!src) return null;
+  const isVideo = src.includes('.mp4') || src.includes('video');
+  if (isVideo) {
+    return (
+      <video 
+        src={src} 
+        className={`${className} object-cover`} 
+        onClick={onClick}
+        autoPlay loop muted playsInline
+      />
+    );
+  }
+  return <img src={src} alt={alt || 'media'} className={className} onClick={onClick} />;
+};
+
 const GalleryModal = ({ isOpen, onClose, token, lang }) => {
   const [history, setHistory] = useState([]);
-  const [filter, setFilter] = useState('all'); // all, product, retouch, portrait
+  const [filter, setFilter,] = useState('all'); // all, product, retouch, portrait
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null); // 要删除的图片ID
@@ -229,7 +247,8 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
     { id: 'all', label: { zh: '全部', en: 'All' } },
     { id: 'product', label: { zh: '商品摄影', en: 'Product' } },
     { id: 'retouch', label: { zh: '智能修图', en: 'Retouch' } },
-    { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } }
+    { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } },
+    { id: 'video', label: { zh: '视频生成', en: 'Video' } }
   ];
 
   const fetchAllHistory = async () => {
@@ -288,7 +307,7 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
             {filterOptions.map(opt => (
               <button
                 key={opt.id}
-                onClick={() => setFilter(opt.id)}
+                onClick={() => setFilter,(opt.id)}
                 className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all
                   ${filter === opt.id ? 'bg-[#FF8A3D] text-white' : 'text-white/60 hover:text-white'}`}
               >
@@ -405,6 +424,14 @@ const HomePage = ({ onNavigate, token, lang }) => {
   const [loadingHistory, setLoadingHistory] = useState(false);
 
   const features = [
+    {
+      id: 'video',
+      icon: <Film size={28} />,
+      title: { zh: '视频生成', en: 'Video Generation' },
+      desc: { zh: '让画面动起来，赋予无限生命力。', en: 'Bring your images to life with motion.' },
+      available: true,
+      gradient: 'from-[#EF4444] to-[#B91C1C]'
+    },
     {
       id: 'product',
       icon: <Camera size={28} />,
@@ -3066,6 +3093,8 @@ const App = () => {
         return <AIRetouchStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'portrait':
         return <PortraitStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
+      case 'video':
+        return <VideoStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'create':
         return <BasicCreateStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'product':
@@ -3104,7 +3133,7 @@ const App = () => {
 // ==========================================
 const GalleryPage = ({ token, lang, onNavigate }) => {
   const [history, setHistory] = useState([]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter,] = useState('all');
   const [loading, setLoading] = useState(false);
   const [selectedImage, setSelectedImage] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
@@ -3115,6 +3144,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
     { id: 'product', label: { zh: '商品摄影', en: 'Product' } },
     { id: 'retouch', label: { zh: '智能修图', en: 'Retouch' } },
     { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } },
+    { id: 'video', label: { zh: '视频生成', en: 'Video' } },
     { id: 'create', label: { zh: '基础创作', en: 'Create' } }
   ];
 
@@ -3166,7 +3196,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
           {filterOptions.map(opt => (
             <button
               key={opt.id}
-              onClick={() => setFilter(opt.id)}
+              onClick={() => setFilter,(opt.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap
                 ${filter === opt.id ? 'bg-[#FF8A3D] text-white' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}
             >
@@ -3275,6 +3305,489 @@ const AIRetouchStudioContent = ({ lang, token, onNavigate }) => (
 
 const PortraitStudioContent = ({ lang, token, onNavigate }) => (
   <PortraitStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
+);
+
+const VideoStudio = ({ onBack, lang, setLang }) => {
+  const t = TRANSLATIONS[lang];
+  const taskManager = useTaskManager();
+  const taskManagerRef = useRef(taskManager);
+  taskManagerRef.current = taskManager; // 保持最新引用
+
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+  const [username, setUsername] = useState(() => localStorage.getItem('username') || 'Guest');
+  const [quota, setQuota] = useState(() => {
+    const saved = localStorage.getItem('quota');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+
+  const [showLogin, setShowLogin] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showFullscreen, setShowFullscreen] = useState(false);
+  const [toast, setToast] = useState(null);
+  const showToast = (message, type = 'success') => setToast({ message, type });
+
+  // 核心状态
+  const [prompt, setPrompt] = useState('');
+  const [referImages, setReferImages] = useState([]); // 多参考图
+
+  const [result, setResult] = useState(null);
+  const [progress, setProgress] = useState(0);
+  // 初始化时立即从 TaskManager 读取运行中的任务，避免页面切换时数据消失
+  const [history, setHistory] = useState(() => {
+    const runningTasks = taskManager.getTasksByType('video')
+      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
+      .map(t => ({
+        id: t.id,
+        image: t.metadata?.referImages?.[0] || '',
+        prompt: t.prompt,
+        timestamp: t.startTime / 1000,
+        type: 'video',
+        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
+        progress: t.progress || 0
+      }));
+    return runningTasks;
+  });
+  const [activeHistoryId, setActiveHistoryId] = useState(null);
+  const activeHistoryIdRef = useRef(activeHistoryId);
+  activeHistoryIdRef.current = activeHistoryId; // 保持最新值，避免闭包问题
+
+  const isLoggedIn = !!token;
+  const isValid = prompt.trim().length > 0;
+
+  const handleBack = () => {
+    onBack?.();
+  };
+
+  const handleLogin = (newToken, newUser, newQuota) => {
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('username', newUser);
+    localStorage.setItem('quota', newQuota.toString());
+    setToken(newToken); setUsername(newUser); setQuota(newQuota);
+    setShowLogin(false);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    localStorage.removeItem('quota');
+    setToken(null); setUsername('Guest'); setQuota(0);
+    setHistory([]); setActiveHistoryId(null);
+  };
+
+  // 加载历史记录
+  const fetchHistory = async () => {
+    if (!token) return;
+    const createHistory = [];
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        const serverHistory = data.filter(item => item.type === 'video').map(item => ({ ...item, status: 'done', progress: 100 }));
+        createHistory.push(...serverHistory);
+      }
+    } catch (err) { console.error('Fetch history failed:', err); }
+
+    // 智能对账：清理僵尸任务 (Smart Reconciliation)
+    const runningTasks = taskManagerRef.current.getTasksByType('video')
+      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING);
+
+    runningTasks.forEach(localTask => {
+      const match = createHistory.find(serverItem => {
+        const timeMatch = serverItem.timestamp >= (localTask.startTime / 1000) - 600;
+        return serverItem.prompt === localTask.prompt && timeMatch;
+      });
+
+      if (match) {
+        taskManagerRef.current.completeTask(localTask.id, match.image);
+      } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
+        taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
+      }
+    });
+
+    const activeRunningTasks = taskManagerRef.current.getTasksByType('video')
+      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
+      .map(t => ({
+        id: t.id,
+        image: t.metadata?.referImages?.[0] || '', // 如有参考图则显示第一张，否则可能为空
+        prompt: t.prompt,
+        timestamp: t.startTime / 1000,
+        type: 'video',
+        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
+        progress: t.progress || 0
+      }));
+
+    const finalHistory = [...activeRunningTasks, ...createHistory];
+    setHistory(finalHistory);
+    if ((activeRunningTasks.length > 0 || finalHistory.length > 0) && !activeHistoryIdRef.current) {
+      setActiveHistoryId(finalHistory[0]?.id);
+    }
+  };
+
+  useEffect(() => {
+    if (!token) return;
+    fetchHistory();
+    const interval = setInterval(fetchHistory, 5000); // 加快刷新
+    return () => clearInterval(interval);
+  }, [token]);
+
+  // 同步任务进度
+  useEffect(() => {
+    const syncTaskProgress = () => {
+      const runningTasks = taskManager.getTasksByType('video');
+      if (runningTasks.length === 0) return;
+
+      setHistory(prev => prev.map(h => {
+        const task = runningTasks.find(t => t.id === h.id);
+        if (task) {
+          let newStatus = h.status;
+          if (task.status === TASK_STATUS.SUCCESS) newStatus = 'done';
+          else if (task.status === TASK_STATUS.ERROR) newStatus = 'error';
+          else if (task.status === TASK_STATUS.RUNNING) newStatus = 'running';
+          else newStatus = 'pending';
+
+          return {
+            ...h,
+            progress: task.progress || h.progress,
+            status: newStatus,
+            image: task.result || h.image,
+            error: task.error || h.error
+          };
+        }
+        return h;
+      }));
+    };
+    const interval = setInterval(syncTaskProgress, 500);
+    return () => clearInterval(interval);
+  }, [taskManager]);
+
+  // 上传图片
+  const uploadImage = async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch(`${API_BASE_URL}/api/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    return data.url;
+  };
+
+  const handleAddImage = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!token) { setShowLogin(true); return; }
+
+    try {
+      const url = await uploadImage(file);
+      setReferImages(prev => [...prev, url]);
+    } catch { showToast('上传失败', 'error'); }
+    e.target.value = '';
+  };
+
+  const handleRemoveImage = (index) => {
+    setReferImages(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGenerate = async () => {
+    if (!isValid || !token) return;
+    if (quota <= 0) { showToast(t.toast.noQuota, 'error'); return; }
+
+    const taskName = lang === 'zh' ? '视频生成' : 'Video Generation';
+    const taskId = taskManager.createTask('video', prompt, {
+      referImages
+    });
+
+    // 立即添加到历史
+    const newItem = {
+      id: taskId,
+      image: referImages[0] || null, // 优先显示参考图作为占位
+      prompt: prompt,
+      timestamp: Date.now() / 1000,
+      type: 'video',
+      status: 'pending',
+      progress: 0
+    };
+    setHistory(prev => [newItem, ...prev]);
+    setActiveHistoryId(taskId);
+
+    executeCreateTask(taskId, prompt, referImages);
+  };
+
+  // 异步执行创作任务
+  const executeCreateTask = async (taskId, p, rImgs) => {
+    taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
+    // setIsGenerating(false); // Removed
+
+    let currentProgress = 0;
+    const progressInterval = setInterval(() => {
+      currentProgress = Math.min(currentProgress + 1 + Math.random() * 2, 95);
+      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, progress: currentProgress } : h));
+      taskManager.updateProgress(taskId, currentProgress);
+    }, 500);
+
+    try {
+      const formData = new FormData();
+      formData.append('prompt', p);
+      formData.append('image_urls_json', JSON.stringify(rImgs));
+
+      const res = await fetch(`${API_BASE_URL}/api/video`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData
+      });
+
+      clearInterval(progressInterval);
+
+      if (!res.ok) {
+        let errMsg = 'Generation failed';
+        try {
+          const errData = await res.json();
+          errMsg = errData.detail || errData.message || errMsg;
+        } catch (e) {
+          // If JSON parsing fails, just use the default message or response status
+          errMsg = `Server error: ${res.status}`;
+        }
+        throw new Error(errMsg);
+      }
+
+      const data = await res.json();
+
+      taskManager.completeTask(taskId, data.data.image_url);
+      setQuota(data.data.remaining_quota);
+      localStorage.setItem('quota', data.data.remaining_quota.toString());
+
+      setHistory(prev => prev.map(h => h.id === taskId ? {
+        ...h,
+        image: data.data.image_url,
+        status: 'done',
+        progress: 100
+      } : h));
+
+      if (activeHistoryId === taskId) setResult(data.data.image_url);
+
+    } catch (err) {
+      clearInterval(progressInterval);
+      taskManager.failTask(taskId, err.message);
+      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, status: 'error', error: err.message } : h));
+      showToast(err.message, 'error');
+    }
+  };
+
+  const currentImage = history.find(h => h.id === activeHistoryId)?.image || (activeHistoryId ? null : result);
+
+  const handleDownload = async () => {
+    if (!currentImage) return;
+    const secureUrl = toSecureUrl(currentImage);
+    try {
+      const response = await fetch(secureUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error('Fetch failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `create_${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      showToast(t.toast.downloadSuccess);
+    } catch (error) {
+      // 降级方案：在新标签页打开
+      window.open(secureUrl, '_blank');
+      showToast(lang === 'zh' ? '已在新标签页打开，请右键保存图片' : 'Opened in new tab, right-click to save', 'info');
+    }
+  };
+
+  const handleCopy = async () => {
+    if (!currentImage) return;
+    const secureUrl = toSecureUrl(currentImage);
+    try {
+      const response = await fetch(secureUrl, { mode: 'cors' });
+      if (!response.ok) throw new Error('Fetch failed');
+      const blob = await response.blob();
+      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
+      showToast(t.toast.copySuccess);
+    } catch (err) {
+      // 降级方案：复制图片URL到剪贴板
+      try {
+        await navigator.clipboard.writeText(secureUrl);
+        showToast(lang === 'zh' ? '已复制图片链接' : 'Image URL copied', 'success');
+      } catch {
+        showToast(t.toast.copyFail, 'error');
+      }
+    }
+  };
+
+  return (
+    <div className="w-full h-full bg-[#050505] text-white font-sans flex flex-col overflow-hidden">
+      <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={handleLogin} t={t} />
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      {/* Main Content */}
+      <main className="flex-1 flex flex-col md:flex-row gap-0 min-h-0 overflow-hidden">
+        {/* Left Panel */}
+        <div className="w-full md:w-[380px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Prompt 输入 */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
+                <Edit3 size={14} /> {lang === 'zh' ? '创意描述' : 'Prompt'} <span className="text-red-400">*</span>
+              </div>
+              <textarea
+                value={prompt}
+                onChange={e => setPrompt(e.target.value)}
+                placeholder={lang === 'zh' ? '描述你想要生成的图像...' : 'Describe the image you want to create...'}
+                className="w-full h-32 bg-[#111] border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-white/30 resize-none focus:border-[#10B981] focus:outline-none transition-colors"
+              />
+            </div>
+
+            {/* 参考图片（选填） */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
+                  <ImageIcon size={14} /> {lang === 'zh' ? '参考图片（选填）' : 'Reference Images (Optional)'}
+                </div>
+                <span className="text-[10px] text-white/30">{referImages.length}/5</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {referImages.map((url, i) => (
+                  <div key={i} className="aspect-square rounded-lg overflow-hidden relative group border border-white/10">
+                    <img src={toSecureUrl(url)} className="w-full h-full object-cover" alt="" />
+                    <button onClick={() => handleRemoveImage(i)} className="absolute top-1 right-1 p-1 bg-red-500/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                {referImages.length < 5 && (
+                  <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors">
+                    <Plus size={20} className="text-white/30" />
+                    <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
+                  </label>
+                )}
+              </div>
+              <p className="text-[10px] text-white/30">{lang === 'zh' ? '无图片=文生图 | 有图片=图生图/多参考图' : 'No image=Text2Img | With images=Img2Img'}</p>
+            </div>
+          </div>
+
+          {/* 生成按钮 */}
+          <div className="p-4 border-t border-white/5">
+            <button
+              onClick={handleGenerate}
+              disabled={!isValid || !isLoggedIn}
+              className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all
+                ${isValid && isLoggedIn
+                  ? 'bg-gradient-to-r from-[#10B981] to-[#059669] hover:opacity-90 text-white shadow-lg shadow-emerald-500/20'
+                  : 'bg-white/10 text-white/30 cursor-not-allowed'}`}
+            >
+              <><Sparkles size={18} /> {lang === 'zh' ? '开始创作' : 'Create'}</>
+            </button>
+          </div>
+        </div>
+
+        {/* Center: Result */}
+        <div className="flex-1 bg-[#050505] p-6 flex flex-col">
+          <div className="flex-1 rounded-2xl bg-[#0a0a0a] border border-white/5 relative overflow-hidden flex items-center justify-center group">
+            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+
+            {activeHistoryId && (() => {
+              const activeTask = history.find(h => h.id === activeHistoryId);
+              if (activeTask && (activeTask.status === 'pending' || activeTask.status === 'running')) {
+                return (
+                  <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
+                    <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden mb-4">
+                      <div className="h-full bg-[#10B981] transition-all duration-300" style={{ width: `${activeTask.progress}%` }}></div>
+                    </div>
+                    <div className="text-[#10B981] font-mono text-2xl animate-pulse">{Math.round(activeTask.progress)}%</div>
+                    <div className="text-white/40 text-xs mt-2">{lang === 'zh' ? '正在创作中...' : 'Creating...'}</div>
+                  </div>
+                );
+              }
+              // 修复：如果任务失败，显示错误信息
+              if (activeTask && activeTask.status === 'error') {
+                return (
+                  <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
+                    <AlertCircle size={48} className="text-red-500 mb-4" />
+                    <div className="text-red-400 text-sm">{activeTask.error || 'Creation Failed'}</div>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
+            <div className="relative w-full h-full p-8 flex items-center justify-center">
+              {currentImage ? (
+                <img src={toSecureUrl(currentImage)} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" alt="Result" />
+              ) : (
+                <div className="text-center opacity-20 flex flex-col items-center gap-4">
+                  <div className="w-20 h-20 rounded-2xl border border-dashed border-white/30 flex items-center justify-center">
+                    <Edit3 size={32} />
+                  </div>
+                  <p className="text-sm font-medium">{lang === 'zh' ? '视频生成就绪' : 'Video Generation Ready'}</p>
+                </div>
+              )}
+            </div>
+
+            {currentImage && (
+              <div className="absolute bottom-8 flex items-center gap-3 p-2 rounded-full bg-[#1e1e1e]/80 border border-white/10 shadow-2xl backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
+                <ActionBtn icon={<Download size={18} />} onClick={handleDownload} tooltip={t.actions.download} />
+                <ActionBtn icon={<Maximize2 size={18} />} onClick={() => setShowFullscreen(true)} tooltip={t.actions.fullscreen} />
+                <div className="w-[1px] h-4 bg-white/10"></div>
+                <ActionBtn icon={<Copy size={18} />} onClick={handleCopy} tooltip={t.actions.copy} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <FullscreenViewer isOpen={showFullscreen} image={currentImage} onClose={() => setShowFullscreen(false)} />
+
+        {/* Right History Panel */}
+        <div className="hidden lg:flex w-[200px] bg-[#0a0a0a] border-l border-white/5 flex-col">
+          <div className="p-4 border-b border-white/5">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
+              <History size={14} /> {t.gallery.title}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3">
+            {history.map(item => (
+              <div
+                key={item.id}
+                onClick={() => setActiveHistoryId(item.id)}
+                className={`aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all relative
+                  ${activeHistoryId === item.id ? 'border-[#10B981] ring-2 ring-[#10B981]/30' : 'border-white/5 hover:border-white/20'}`}
+              >
+                {item.image && <img src={toSecureUrl(item.image)} className={`w-full h-full object-cover transition-opacity ${item.status === 'done' ? 'opacity-100' : 'opacity-40'}`} alt="" />}
+
+                {/* 进度覆盖层 */}
+                {(item.status === 'pending' || item.status === 'running') && (
+                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                    <Loader2 size={16} className="text-[#10B981] animate-spin mb-1" />
+                    <span className="text-[10px] text-[#10B981] font-mono">{Math.round(item.progress || 0)}%</span>
+                  </div>
+                )}
+
+                {/* 失败覆盖层 */}
+                {item.status === 'error' && (
+                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                    <AlertCircle size={16} className="text-red-500" />
+                  </div>
+                )}
+              </div>
+            ))}
+            {history.length === 0 && (
+              <div className="text-center text-white/20 text-xs py-8">{t.gallery.empty}</div>
+            )}
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
+
+
+const VideoStudioContent = ({ lang, token, onNavigate }) => (
+  <VideoStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
 );
 
 const BasicCreateStudioContent = ({ lang, token, onNavigate }) => (

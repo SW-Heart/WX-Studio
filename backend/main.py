@@ -31,8 +31,30 @@ SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 
 TT_API_KEY = os.getenv("TT_API_KEY")
+TUZI_API_KEY = os.getenv("TUZI_API_KEY")
 TT_ENDPOINT = "https://api.ttapi.io/openai/gpt/generations"
 TT_FETCH_ENDPOINT = "https://api.ttapi.io/openai/gpt/fetch"
+TUZI_VIDEO_ENDPOINT = "https://api.tu-zi.com/v1/videos"
+
+def poll_tuzi_video_result(job_id: str, headers: dict, timeout: int = 600) -> str:
+    start_time = time.time()
+    while True:
+        if time.time() - start_time > timeout:
+            raise Exception("Timeout waiting for video generation")
+        try:
+            resp = requests.get(f"{TUZI_VIDEO_ENDPOINT}/{job_id}", headers=headers, timeout=10, proxies={"http": None, "https": None})
+            if resp.status_code == 200:
+                res_json = resp.json()
+                status = res_json.get("status")
+                if status == "completed":
+                    return res_json.get("video_url")
+                elif status in ["failed", "error"]:
+                    raise RuntimeError("Video generation failed")
+        except RuntimeError:
+            raise
+        except Exception:
+            pass
+        time.sleep(5)
 
 def poll_ttapi_result(job_id: str, headers: dict, timeout: int = 300) -> str:
     start_time = time.time()
@@ -551,7 +573,8 @@ def portrait_generate(
     # 预扣分（原子操作，防止并发超用）
     remaining_quota = deduct_quota_atomic(username)
     
-    headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
+    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {
         "prompt": PORTRAIT_PROMPT,
         "model": "gpt-image-2",
@@ -633,7 +656,8 @@ def basic_create(
     # 预扣分
     remaining_quota = deduct_quota_atomic(username)
     
-    headers = {"TT-API-KEY": TT_API_KEY, "Content-Type": "application/json"}
+    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     payload = {
         "prompt": prompt,
         "model": "gpt-image-2",
@@ -698,6 +722,107 @@ def basic_create(
         print(f"Create Exception: {str(e)}")
         refund_quota(username)
         raise HTTPException(500, str(e))
+
+# ==========================================
+# 🎬 视频生成接口
+# ==========================================
+
+def background_generate_video(
+    task_id: str,
+    username: str,
+    prompt: str,
+    image_list: list,
+):
+    result_url = None
+    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    try:
+        print(f"🎬 正在后台为您生成视频... 任务 ID: {task_id}")
+        payload = {
+            "model": "veo3.1-components-4k",
+            "prompt": prompt
+        }
+        # 视频接口支持首尾帧
+        if image_list:
+            payload["input_reference"] = image_list # 根据 Tuzi API (veo3.1) 官方文档，统一传入字符串数组
+            
+        resp = requests.post(TUZI_VIDEO_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
+        if resp.status_code != 200:
+            print(f"Video API Error: {resp.text}")
+            raise RuntimeError(f"Video API request failed: {resp.text}")
+            
+        job_data = resp.json()
+        job_id = job_data.get("id")
+        
+        if not job_id:
+            raise RuntimeError(f"Video API failed to return job ID: {resp.text}")
+            
+        print(f"🔍 视频任务已提交，获取到后端作业 ID: {job_id}，开始轮询结果...")
+        video_url = poll_tuzi_video_result(job_id, headers=headers)
+        
+        if video_url:
+            print(f"✅ 视频生成成功，URL: {video_url}")
+            result_url = video_url
+            
+    except Exception as e:
+        print(f"❌ 视频生成出错: {str(e)}")
+        refund_quota(username)
+    finally:
+        with db_lock:
+            db = load_db()
+            if username not in db["history"]:
+                db["history"][username] = []
+            
+            # 更新状态
+            for item in db["history"][username]:
+                if item["id"] == task_id:
+                    item["status"] = "SUCCESS" if result_url else "FAILED"
+                    item["image"] = result_url  # 为了兼容前端，我们复用 image 字段存储视频URL，前端通过 type="video" 判断
+                    break
+            save_db(db)
+
+@app.post("/api/video")
+def video_generate(
+    background_tasks: BackgroundTasks,
+    prompt: str = Form(...),
+    image_urls_json: str = Form("[]"),
+    username: str = Depends(get_current_user)
+):
+    deduct_quota_atomic(username)
+
+    try:
+        image_list = json.loads(image_urls_json)
+        if not isinstance(image_list, list):
+            image_list = []
+    except:
+        image_list = []
+
+    task_id = str(uuid.uuid4())
+    
+    with db_lock:
+        db = load_db()
+        if username not in db["history"]:
+            db["history"][username] = []
+        db["history"][username].append({
+            "id": task_id,
+            "username": username,
+            "type": "video",
+            "prompt": prompt,
+            "status": "ON_QUEUE",
+            "image": None,
+            "timestamp": datetime.now().timestamp()
+        })
+        save_db(db)
+
+    background_tasks.add_task(
+        background_generate_video,
+        task_id=task_id,
+        username=username,
+        prompt=prompt,
+        image_list=image_list
+    )
+
+    return {"message": "Video task started", "taskId": task_id}
 
 # ==========================================
 # 💬 反馈收集接口
