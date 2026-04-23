@@ -307,7 +307,7 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
             {filterOptions.map(opt => (
               <button
                 key={opt.id}
-                onClick={() => setFilter,(opt.id)}
+                onClick={() => setFilter(opt.id)}
                 className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all
                   ${filter === opt.id ? 'bg-[#FF8A3D] text-white' : 'text-white/60 hover:text-white'}`}
               >
@@ -3196,7 +3196,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
           {filterOptions.map(opt => (
             <button
               key={opt.id}
-              onClick={() => setFilter,(opt.id)}
+              onClick={() => setFilter(opt.id)}
               className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap
                 ${filter === opt.id ? 'bg-[#FF8A3D] text-white' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}
             >
@@ -3546,26 +3546,14 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
           const errData = await res.json();
           errMsg = errData.detail || errData.message || errMsg;
         } catch (e) {
-          // If JSON parsing fails, just use the default message or response status
           errMsg = `Server error: ${res.status}`;
         }
         throw new Error(errMsg);
       }
 
-      const data = await res.json();
-
-      taskManager.completeTask(taskId, data.data.image_url);
-      setQuota(data.data.remaining_quota);
-      localStorage.setItem('quota', data.data.remaining_quota.toString());
-
-      setHistory(prev => prev.map(h => h.id === taskId ? {
-        ...h,
-        image: data.data.image_url,
-        status: 'done',
-        progress: 100
-      } : h));
-
-      if (activeHistoryId === taskId) setResult(data.data.image_url);
+      // 视频是后台异步生成的，不需要在这里获取 image_url
+      // 智能对账系统 (Smart Reconciliation) 会通过轮询 /api/history 自动发现并完成该任务
+      showToast(lang === 'zh' ? '视频生成已在后台启动，这可能需要几分钟...' : 'Video generation started in background...', 'success');
 
     } catch (err) {
       clearInterval(progressInterval);
