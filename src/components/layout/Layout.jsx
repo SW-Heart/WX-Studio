@@ -2,7 +2,7 @@ import React, { useState, createContext, useContext } from 'react';
 import {
     Home, Camera, Wand2, User, Edit3, FolderOpen,
     ChevronLeft, ChevronRight, LogOut, Zap, Globe, Menu, X, PanelLeftClose, PanelLeft,
-    MessageSquare, Send, Loader2
+    MessageSquare, Send, Loader2, Film
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -131,6 +131,7 @@ const NAV_ITEMS = [
     { id: 'product', icon: Camera, label: { zh: '商品摄影', en: 'Product' }, gradient: 'from-[#FF8A3D] to-[#E65100]' },
     { id: 'retouch', icon: Wand2, label: { zh: '智能修图', en: 'Retouch' }, gradient: 'from-[#8B5CF6] to-[#6D28D9]' },
     { id: 'portrait', icon: User, label: { zh: '人像写真', en: 'Portrait' }, gradient: 'from-[#06B6D4] to-[#0891B2]' },
+    { id: 'video', icon: Film, label: { zh: '视频生成', en: 'Video' }, gradient: 'from-[#EF4444] to-[#B91C1C]' },
     { id: 'create', icon: Edit3, label: { zh: '基础创作', en: 'Create' }, gradient: 'from-[#10B981] to-[#059669]' },
     { id: 'gallery', icon: FolderOpen, label: { zh: '我的图库', en: 'Gallery' } },
 ];
