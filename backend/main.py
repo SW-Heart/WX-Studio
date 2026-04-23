@@ -573,8 +573,7 @@ def portrait_generate(
     # 预扣分（原子操作，防止并发超用）
     remaining_quota = deduct_quota_atomic(username)
     
-    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
         "prompt": PORTRAIT_PROMPT,
         "model": "gpt-image-2",
@@ -656,8 +655,7 @@ def basic_create(
     # 预扣分
     remaining_quota = deduct_quota_atomic(username)
     
-    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
     payload = {
         "prompt": prompt,
         "model": "gpt-image-2",
