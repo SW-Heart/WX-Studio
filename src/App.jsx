@@ -3626,7 +3626,7 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
               <textarea
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
-                placeholder={lang === 'zh' ? '描述你想要生成的图像...' : 'Describe the image you want to create...'}
+                placeholder={lang === 'zh' ? '描述你想要生成的视频...' : 'Describe the video you want to create...'}
                 className="w-full h-32 bg-[#111] border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-white/30 resize-none focus:border-[#10B981] focus:outline-none transition-colors"
               />
             </div>
@@ -3635,9 +3635,9 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                  <ImageIcon size={14} /> {lang === 'zh' ? '参考图片（选填）' : 'Reference Images (Optional)'}
+                  <ImageIcon size={14} /> {lang === 'zh' ? '首尾帧图片（选填）' : 'Start & End Frames (Optional)'}
                 </div>
-                <span className="text-[10px] text-white/30">{referImages.length}/5</span>
+                <span className="text-[10px] text-white/30">{referImages.length}/2</span>
               </div>
               <div className="grid grid-cols-3 gap-2">
                 {referImages.map((url, i) => (
@@ -3648,14 +3648,14 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
                     </button>
                   </div>
                 ))}
-                {referImages.length < 5 && (
+                {referImages.length < 2 && (
                   <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors">
                     <Plus size={20} className="text-white/30" />
                     <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
                   </label>
                 )}
               </div>
-              <p className="text-[10px] text-white/30">{lang === 'zh' ? '无图片=文生图 | 有图片=图生图/多参考图' : 'No image=Text2Img | With images=Img2Img'}</p>
+              <p className="text-[10px] text-white/30">{lang === 'zh' ? '无图=文生视频 | 1张图=首帧参考 | 2张图=首尾帧约束' : '0 images=Text2Video | 1 image=Start Frame | 2 images=Start&End'}</p>
             </div>
           </div>
 
