@@ -49,7 +49,7 @@ def poll_tuzi_video_result(job_id: str, headers: dict, timeout: int = 600) -> st
                 if status == "completed":
                     return res_json.get("video_url")
                 elif status in ["failed", "error"]:
-                    raise RuntimeError("Video generation failed")
+                    raise RuntimeError(f"Video generation failed: {res_json}")
         except RuntimeError:
             raise
         except Exception:
@@ -735,18 +735,31 @@ def background_generate_video(
 ):
     result_url = None
     key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
-    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {key}"} # 移除 Content-Type，由 requests 自动处理 multipart/form-data boundary
     try:
         print(f"🎬 正在后台为您生成视频... 任务 ID: {task_id}")
-        payload = {
-            "model": "veo3.1-components-4k",
-            "prompt": prompt
+        
+        # 强制使用 multipart/form-data 传递基础参数
+        files = {
+            "model": (None, "veo3.1-4k"),
+            "prompt": (None, prompt)
         }
-        # 视频接口支持首尾帧
-        if image_list:
-            payload["input_reference"] = image_list # 根据 Tuzi API (veo3.1) 官方文档，统一传入字符串数组
+        
+        # 视频接口支持首帧图：需下载后作为文件上传
+        if image_list and len(image_list) > 0:
+            try:
+                img_url = image_list[0]
+                print(f"📥 正在下载首帧参考图: {img_url}")
+                img_resp = requests.get(img_url, timeout=10)
+                if img_resp.status_code == 200:
+                    files["image"] = ("image.png", img_resp.content, "image/png")
+                    print("✅ 成功下载并附加首帧参考图")
+                else:
+                    print(f"⚠️ 下载参考图失败: HTTP {img_resp.status_code}")
+            except Exception as e:
+                print(f"⚠️ 下载参考图异常: {str(e)}")
             
-        resp = requests.post(TUZI_VIDEO_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
+        resp = requests.post(TUZI_VIDEO_ENDPOINT, headers=headers, files=files, timeout=30, proxies={"http": None, "https": None})
         if resp.status_code != 200:
             print(f"Video API Error: {resp.text}")
             raise RuntimeError(f"Video API request failed: {resp.text}")

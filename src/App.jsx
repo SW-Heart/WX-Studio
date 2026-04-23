@@ -3674,7 +3674,10 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
                 {referImages.length < 2 && (
                   <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors relative">
                     {isUploadingImage ? (
-                      <Loader2 size={20} className="text-[#10B981] animate-spin" />
+                      <div className="flex flex-col items-center justify-center text-[#10B981]">
+                        <Loader2 size={20} className="animate-spin mb-1" />
+                        <span className="text-[10px] font-medium">{lang === 'zh' ? '上传中...' : 'Uploading'}</span>
+                      </div>
                     ) : (
                       <>
                         <Plus size={20} className="text-white/30" />
