@@ -3329,6 +3329,7 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
   // 核心状态
   const [prompt, setPrompt] = useState('');
   const [referImages, setReferImages] = useState([]); // 多参考图
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState(0);
@@ -3382,7 +3383,14 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
       const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
-        const serverHistory = data.filter(item => item.type === 'video').map(item => ({ ...item, status: 'done', progress: 100 }));
+        const serverHistory = data.filter(item => item.type === 'video').map(item => {
+          let st = 'running';
+          let prog = 50;
+          if (item.status === 'SUCCESS') { st = 'done'; prog = 100; }
+          else if (item.status === 'FAILED') { st = 'error'; }
+          else if (item.status === 'ON_QUEUE') { st = 'pending'; prog = 10; }
+          return { ...item, status: st, progress: prog };
+        });
         createHistory.push(...serverHistory);
       }
     } catch (err) { console.error('Fetch history failed:', err); }
@@ -3398,7 +3406,11 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
       });
 
       if (match) {
-        taskManagerRef.current.completeTask(localTask.id, match.image);
+        if (match.status === 'done') {
+          taskManagerRef.current.completeTask(localTask.id, match.image);
+        } else if (match.status === 'error') {
+          taskManagerRef.current.failTask(localTask.id, 'Server reported failure');
+        }
       } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
         taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
       }
@@ -3416,7 +3428,16 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
         progress: t.progress || 0
       }));
 
-    const finalHistory = [...activeRunningTasks, ...createHistory];
+    // 过滤掉服务器历史中已经正在本地运行的任务，防止UI出现双份
+    const filteredServerHistory = createHistory.filter(serverItem => {
+      const isMatched = activeRunningTasks.some(localTask => {
+        const timeMatch = serverItem.timestamp >= (localTask.timestamp) - 600;
+        return serverItem.prompt === localTask.prompt && timeMatch;
+      });
+      return !isMatched;
+    });
+
+    const finalHistory = [...activeRunningTasks, ...filteredServerHistory];
     setHistory(finalHistory);
     if ((activeRunningTasks.length > 0 || finalHistory.length > 0) && !activeHistoryIdRef.current) {
       setActiveHistoryId(finalHistory[0]?.id);
@@ -3479,10 +3500,12 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
     if (!file) return;
     if (!token) { setShowLogin(true); return; }
 
+    setIsUploadingImage(true);
     try {
       const url = await uploadImage(file);
       setReferImages(prev => [...prev, url]);
     } catch { showToast('上传失败', 'error'); }
+    setIsUploadingImage(false);
     e.target.value = '';
   };
 
@@ -3649,9 +3672,15 @@ const VideoStudio = ({ onBack, lang, setLang }) => {
                   </div>
                 ))}
                 {referImages.length < 2 && (
-                  <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors">
-                    <Plus size={20} className="text-white/30" />
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
+                  <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors relative">
+                    {isUploadingImage ? (
+                      <Loader2 size={20} className="text-[#10B981] animate-spin" />
+                    ) : (
+                      <>
+                        <Plus size={20} className="text-white/30" />
+                        <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} disabled={isUploadingImage} />
+                      </>
+                    )}
                   </label>
                 )}
               </div>
