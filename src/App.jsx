@@ -4,12 +4,15 @@ import {
   Image as ImageIcon, Settings, Sparkles, UploadCloud,
   History, Download, Maximize2, Palette,
   Monitor, BoxSelect, Copy, Camera, User, Edit3, Globe,
-  LogOut, X, Loader2, Check, Lock, AlertCircle, RefreshCw, Zap, Plus, Trash2, CheckCircle,
+  LogOut, X, Loader2, Check, Lock, AlertCircle, RefreshCw, Zap, Plus, Minus, Trash2, CheckCircle,
   Home, ArrowRight, Wand2, ArrowLeft, FolderOpen, Filter,
-  Video, PlayCircle, Film,
+  Video, PlayCircle, Film, ChevronDown, ArrowUp
 } from 'lucide-react';
 import { Layout } from './components/layout/Layout';
 import { TaskProvider, useTaskManager, TASK_STATUS } from './context/TaskContext';
+import AdminPanel from './pages/AdminPanel';
+import InfiniteCanvas, { getNewNodePositions, NODE_DEFAULT_W, NODE_DEFAULT_H } from './components/InfiniteCanvas';
+import ChatGptIcon from './assets/ChatGPT.svg';
 
 //t [重要配置] 开发环境从 .env.development 读取, 生产环境留空让 Nginx 转发
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -74,10 +77,15 @@ const TRANSLATIONS = {
       login: "Log In", logout: "Log Out", submit: "Sign In", welcome: "Welcome",
       productName: "OG AI",
       subtitle: "Professional AI Photography",
+      tabPassword: "Account Login", tabPhone: "Phone Login",
+      username: "Username", password: "Password",
+      placeholderUsername: "Enter username",
+      placeholderPassword: "Enter password",
       phone: "Phone Number", code: "Verification Code",
       placeholderPhone: "Enter your phone number",
       placeholderCode: "Enter 6-digit code",
-      sendCode: "Get Code", sending: "Sending...", resend: "Resend"
+      sendCode: "Get Code", sending: "Sending...", resend: "Resend",
+      slideToVerify: "Slide to verify", verified: "Verified"
     },
     upload: { title: "Reference Images", desc: "Upload", uploaded: "Ready", uploading: "...", change: "Change" },
     prompt: { label: "Creative Prompt", placeholder: "Describe materials, lighting, and mood...", enhance: "AI Enhance", enhancing: "Optimizing..." },
@@ -97,10 +105,15 @@ const TRANSLATIONS = {
       login: "登录 / 注册", logout: "退出登录", submit: "登录 / 注册", welcome: "欢迎回来",
       productName: "OG AI",
       subtitle: "专业 AI 商品摄影工坊",
+      tabPassword: "账号登录", tabPhone: "手机登录",
+      username: "用户名", password: "密码",
+      placeholderUsername: "请输入用户名",
+      placeholderPassword: "请输入密码",
       phone: "手机号", code: "验证码",
       placeholderPhone: "请输入手机号",
       placeholderCode: "请输入6位验证码",
-      sendCode: "获取验证码", sending: "发送中...", resend: "重新获取"
+      sendCode: "获取验证码", sending: "发送中...", resend: "重新获取",
+      slideToVerify: "拖动滑块完成验证", verified: "验证通过"
     },
     upload: { title: "参考图", desc: "上传参考图", uploaded: "已就绪", uploading: "上传中...", change: "更换" },
     prompt: { label: "创意描述", placeholder: "描述材质、光影氛围、背景细节...", enhance: "AI 润色", enhancing: "优化中..." },
@@ -356,7 +369,7 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
                 <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent" onClick={() => setSelectedImage(item)}>
                   <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
                   <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                    ${item.type === 'retouch' ? 'bg-purple-500/30 text-purple-300' :
+                    ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
                       item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
                         'bg-orange-500/30 text-orange-300'}`}>
                     {item.type === 'retouch' ? '修图' : item.type === 'portrait' ? '人像' : '商品'}
@@ -459,7 +472,7 @@ const HomePage = ({ onNavigate, token, lang }) => {
     {
       id: 'create',
       icon: <Edit3 size={28} />,
-      title: { zh: '基础创作', en: 'Basic Create' },
+      title: { zh: '自由创作', en: 'Basic Create' },
       desc: { zh: '文生图、图生图，任意创作。', en: 'Text2Img, Img2Img, free creation.' },
       available: true,
       gradient: 'from-[#10B981] to-[#059669]'
@@ -494,10 +507,10 @@ const HomePage = ({ onNavigate, token, lang }) => {
         <meta name="description" content={lang === 'zh' ? 'OG AI - 专业的AI商品摄影和智能修图平台。一键生成高质量商品图片，AI智能修图，个人写真制作。' : 'OG AI - Professional AI photography and editing platform. Generate high-quality product images with one click.'} />
       </Helmet>
       <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
-        {/* 动态光晕背景 */}
+        {/* 极简背景光晕 */}
         <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-          <div className="absolute top-1/4 left-1/4 w-[500px] h-[500px] bg-[#FF8A3D]/8 rounded-full blur-[150px] animate-pulse" />
-          <div className="absolute bottom-1/4 right-1/4 w-[400px] h-[400px] bg-[#8B5CF6]/8 rounded-full blur-[150px] animate-pulse" style={{ animationDelay: '1s' }} />
+          <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-white/5 rounded-full blur-[150px]" />
+          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-white/5 rounded-full blur-[150px]" />
         </div>
 
         {/* 欢迎区域 */}
@@ -510,9 +523,54 @@ const HomePage = ({ onNavigate, token, lang }) => {
           </p>
         </div>
 
-        {/* 快捷入口卡片 */}
+        {/* 主打功能：自由创作 */}
+        <div className="relative z-10 mb-8">
+          {features.filter(f => f.id === 'create').map(feature => (
+            <div
+              key={feature.id}
+              onClick={() => feature.available && onNavigate(feature.id)}
+              className={`group relative p-6 md:p-8 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden
+              ${feature.available
+                  ? 'bg-gradient-to-br from-[#10B981]/5 to-[#059669]/5 border-[#10B981]/20 hover:border-[#10B981]/40 hover:shadow-2xl hover:shadow-[#10B981]/10 hover:scale-[1.01]'
+                  : 'bg-white/[0.02] border-white/5 cursor-not-allowed opacity-60'
+                }`}
+            >
+              {/* Background Glow */}
+              <div className="absolute top-0 right-0 w-64 h-64 bg-[#10B981]/10 rounded-full blur-[80px] -mr-10 -mt-10 pointer-events-none" />
+
+              <div className="flex items-center gap-5 md:gap-6 relative z-10">
+                {/* 图标 */}
+                <div className={`shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-og-gradient flex items-center justify-center shadow-lg
+                ${feature.available ? 'group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 text-white' : 'grayscale text-white/50'}`}>
+                  {React.cloneElement(feature.icon, { size: 36 })}
+                </div>
+
+                {/* 文字 */}
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-1 md:mb-2">
+                    <h3 className="text-xl md:text-2xl font-bold text-white transition-colors">{feature.title[lang]}</h3>
+                    <span className="px-2 py-0.5 rounded-md bg-white/10 text-white text-[10px] font-bold uppercase border border-white/20">Hot</span>
+                  </div>
+                  <p className="text-white/60 text-sm md:text-base leading-relaxed">{feature.desc[lang]}</p>
+                </div>
+
+                {/* 进入箭头 */}
+                {feature.available && (
+                  <div className="hidden sm:flex w-12 h-12 rounded-full bg-white/5 items-center justify-center group-hover:bg-white group-hover:text-black transition-all duration-300 group-hover:translate-x-2 border border-white/10 group-hover:border-white">
+                    <ArrowRight size={20} />
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* 快捷入口卡片 / 其他小功能 */}
+        <h2 className="text-sm font-bold text-white/40 mb-3 flex items-center gap-2">
+          <Wand2 size={16} /> {lang === 'zh' ? '专业工具' : 'Pro Tools'}
+        </h2>
         <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
-          {features.map((feature) => (
+          {features.filter(f => f.id !== 'create').map((feature) => (
             <div
               key={feature.id}
               onClick={() => feature.available && onNavigate(feature.id)}
@@ -523,20 +581,20 @@ const HomePage = ({ onNavigate, token, lang }) => {
                 }`}
             >
               {/* 图标 */}
-              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-tr ${feature.gradient} flex items-center justify-center mb-3 
-              ${feature.available ? 'group-hover:scale-110 transition-transform duration-300' : 'grayscale'}`}>
+              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 shadow-sm
+              ${feature.available ? 'group-hover:scale-110 transition-transform duration-300 text-white' : 'grayscale text-white/50'}`}>
                 {feature.icon}
               </div>
 
               {/* 标题 */}
-              <h3 className="text-base md:text-lg font-bold mb-1">{feature.title[lang]}</h3>
+              <h3 className="text-base md:text-lg font-bold mb-1 text-white">{feature.title[lang]}</h3>
 
               {/* 描述 */}
               <p className="text-white/40 text-xs md:text-sm line-clamp-2">{feature.desc[lang]}</p>
 
               {/* 进入箭头 */}
               {feature.available && (
-                <ArrowRight size={16} className="absolute top-4 right-4 text-white/20 group-hover:text-[#FF8A3D] group-hover:translate-x-1 transition-all" />
+                <ArrowRight size={16} className="absolute top-4 right-4 text-white/20 group-hover:text-white/80 group-hover:translate-x-1 transition-all" />
               )}
             </div>
           ))}
@@ -582,7 +640,7 @@ const HomePage = ({ onNavigate, token, lang }) => {
                     <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
                       <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
                       <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                      ${item.type === 'retouch' ? 'bg-purple-500/30 text-purple-300' :
+                      ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
                           item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
                             item.type === 'create' ? 'bg-green-500/30 text-green-300' :
                               'bg-orange-500/30 text-orange-300'}`}>
@@ -836,6 +894,12 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
     if (!isValid || !token) return;
     if (quota <= 0) { showToast(t.toast.noQuota, 'error'); return; }
 
+    // 乐观扣分：立即显示积分减少
+    const optimisticQuota = Math.max(0, quota - 1);
+    setQuota(optimisticQuota);
+    localStorage.setItem('quota', optimisticQuota.toString());
+    window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
+
     const taskName = lang === 'zh' ? '人像写真' : 'Portrait';
     const taskId = taskManager.createTask('portrait', `[${taskName}]`, {
       subjectImage,
@@ -896,6 +960,8 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
       taskManager.completeTask(taskId, data.data.image_url);
       setQuota(data.data.remaining_quota);
       localStorage.setItem('quota', data.data.remaining_quota.toString());
+      // 通知顶层 App 立即刷新 Header 积分显示
+      window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
 
       setHistory(prev => prev.map(h => h.id === taskId ? {
         ...h,
@@ -1168,13 +1234,195 @@ const PortraitStudio = ({ onBack, lang, setLang }) => {
 };
 
 // ==========================================
-// ✏️ 基础创作组件
+// 🎨 自定义交互组件
 // ==========================================
-const BasicCreateStudio = ({ onBack, lang, setLang }) => {
+const CustomSelect = ({ value, onChange, options, label }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const dropdownRef = useRef(null);
+
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const selected = options.find(o => o.value === value) || options[0];
+
+  return (
+    <div className="relative" ref={dropdownRef}>
+      <label className="text-xs text-white/40 mb-1.5 block">{label}</label>
+      <div 
+        className={`w-full bg-[#111] border ${isOpen ? 'border-[#10B981]' : 'border-white/10 hover:border-white/20'} rounded-xl p-3 text-sm text-white cursor-pointer flex items-center justify-between transition-all`}
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <span className="flex items-center gap-2">
+          {selected.icon && <span className="text-white/40">{selected.icon}</span>}
+          {selected.label}
+        </span>
+        <ChevronDown size={14} className={`text-white/40 transition-transform duration-200 ${isOpen ? 'rotate-180 text-[#10B981]' : ''}`} />
+      </div>
+      
+      {isOpen && (
+        <div className="absolute z-50 w-full mt-2 bg-[#1a1a1a] border border-white/10 rounded-xl shadow-2xl shadow-black/80 py-1 max-h-60 overflow-y-auto custom-scrollbar animate-in fade-in zoom-in-95 duration-200">
+          {options.map((opt) => (
+            <div
+              key={opt.value}
+              className={`px-3 py-2.5 mx-1 my-0.5 rounded-lg text-sm cursor-pointer transition-colors flex items-center justify-between
+                ${value === opt.value ? 'text-[#10B981] bg-[#10B981]/10 font-medium' : 'text-white/70 hover:bg-white/5 hover:text-white'}`}
+              onClick={() => {
+                onChange(opt.value);
+                setIsOpen(false);
+              }}
+            >
+              <div className="flex items-center gap-2">
+                {opt.icon && <span className={value === opt.value ? 'text-[#10B981]' : 'text-white/40'}>{opt.icon}</span>}
+                {opt.label}
+              </div>
+              {value === opt.value && <Check size={14} />}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const SegmentedControl = ({ value, onChange, options, label }) => {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs text-white/40 block">{label}</label>
+      <div className="flex bg-[#111] p-1 rounded-xl border border-white/10">
+        {options.map(opt => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`flex-1 py-2 text-sm rounded-lg transition-all duration-200 font-medium ${
+              value === opt.value 
+                ? 'bg-[#10B981] text-white shadow-lg shadow-[#10B981]/20' 
+                : 'text-white/40 hover:text-white/70 hover:bg-white/5'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+const calculateSize = (ratio, level) => {
+  if (ratio === 'auto') return { w: 0, h: 0, str: 'auto' };
+  const [wRatio, hRatio] = ratio.split(':').map(Number);
+  
+  let targetPixels;
+  if (level === '1K') targetPixels = 1048576; // 1024 * 1024
+  else if (level === '2K') targetPixels = 4194304; // 2048 * 2048
+  else if (level === '4K') targetPixels = 8294400; // max allowed rule
+
+  // 1. Initial guess based on exact target
+  let idealH = Math.sqrt((targetPixels * hRatio) / wRatio);
+  let idealW = idealH * (wRatio / hRatio);
+
+  // Clamp ideal to max side 3840
+  if (idealW > 3840) {
+    idealW = 3840;
+    idealH = idealW * (hRatio / wRatio);
+  }
+  if (idealH > 3840) {
+    idealH = 3840;
+    idealW = idealH * (wRatio / hRatio);
+  }
+
+  // 2. Start from Math.floor to multiples of 16
+  let bestW = Math.floor(idealW / 16) * 16;
+  let bestH = Math.floor(idealH / 16) * 16;
+  let bestPixels = bestW * bestH;
+
+  // 3. Simple local search to maximize pixels without exceeding 8294400 or max side 3840
+  const candidates = [
+    { w: bestW + 16, h: bestH },
+    { w: bestW, h: bestH + 16 },
+    { w: bestW + 16, h: bestH + 16 },
+    { w: bestW, h: bestH }
+  ];
+
+  let maxAllowed = Math.min(targetPixels, 8294400); // 4K can reach max
+
+  for (let c of candidates) {
+    if (c.w <= 3840 && c.h <= 3840) {
+      let pixels = c.w * c.h;
+      if (pixels <= maxAllowed && pixels > bestPixels) {
+        bestW = c.w;
+        bestH = c.h;
+        bestPixels = pixels;
+      }
+    }
+  }
+
+  // 4. Enforce global MIN limit
+  if (bestPixels < 655360) {
+    let scale = Math.sqrt(655360 / bestPixels);
+    bestW = Math.ceil((bestW * scale) / 16) * 16;
+    bestH = Math.ceil((bestH * scale) / 16) * 16;
+    while (bestW * bestH < 655360) {
+      bestW += 16;
+      bestH += 16;
+    }
+  }
+
+  // 5. Enforce aspect ratio <= 3:1 limit
+  if (bestW / bestH > 3) {
+    bestW = bestH * 3;
+    bestW = Math.floor(bestW / 16) * 16;
+  }
+  if (bestH / bestW > 3) {
+    bestH = bestW * 3;
+    bestH = Math.floor(bestH / 16) * 16;
+  }
+
+  return { w: bestW, h: bestH, str: `${bestW}x${bestH}` };
+};
+
+const getRatioBox = (ratioStr, active) => {
+  if (ratioStr === 'auto') return <Sparkles size={14} className={active ? "text-[#10B981]" : "text-white/40"} />;
+  const [w, h] = ratioStr.split(':').map(Number);
+  const max = Math.max(w, h);
+  const rw = (w / max) * 14;
+  const rh = (h / max) * 14;
+  return (
+    <div 
+      className={`border-2 rounded-[3px] transition-colors ${active ? 'border-[#10B981]' : 'border-white/40'}`} 
+      style={{ width: Math.max(6, rw), height: Math.max(6, rh) }} 
+    />
+  );
+};
+
+const RATIOS = ['auto', '21:9', '16:9', '3:2', '4:3', '1:1', '3:4', '2:3', '9:16'];
+const RES_LEVELS = [
+  { id: '1K', label: { zh: '标清 1K', en: '1K SD' } },
+  { id: '2K', label: { zh: '高清 2K', en: '2K HD' } },
+  { id: '4K', label: { zh: '超清 4K', en: '4K UHD' }, premium: true }
+];
+const QUALITIES = [
+  { id: 'auto', label: { zh: '自动', en: 'Auto' } },
+  { id: 'low', label: { zh: '低', en: 'Low' } },
+  { id: 'medium', label: { zh: '中', en: 'Med' } },
+  { id: 'high', label: { zh: '高', en: 'High' } }
+];
+
+// ==========================================
+// ✏️ 自由创作组件
+// ==========================================
+const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersive }) => {
   const t = TRANSLATIONS[lang];
   const taskManager = useTaskManager();
   const taskManagerRef = useRef(taskManager);
   taskManagerRef.current = taskManager; // 保持最新引用
+  const isSubmittingRef = useRef(false);
 
   const [token, setToken] = useState(() => localStorage.getItem('token'));
   const [username, setUsername] = useState(() => localStorage.getItem('username') || 'Guest');
@@ -1192,24 +1440,53 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
   // 核心状态
   const [prompt, setPrompt] = useState('');
   const [referImages, setReferImages] = useState([]); // 多参考图
+  const [model, setModel] = useState('gpt-image-2');
+  const [aspectRatio, setAspectRatio] = useState('1:1');
+  const [resLevel, setResLevel] = useState('2K');
+  const [quality, setQuality] = useState('auto');
+  const [numImages, setNumImages] = useState(1);
+  
+  const currentDimensions = calculateSize(aspectRatio, resLevel);
+  const pointsPerImage = resLevel === '4K' ? 2 : 1;
+  const totalPoints = (numImages || 1) * pointsPerImage;
 
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState(0);
-  // 初始化时立即从 TaskManager 读取运行中的任务，避免页面切换时数据消失
-  const [history, setHistory] = useState(() => {
+
+  // 画布节点状态（替代原来的 history 列表）
+  const [canvasNodes, setCanvasNodes] = useState(() => {
+    // 从 localStorage 恢复画布状态
+    try {
+      const saved = localStorage.getItem('wx_canvas_nodes');
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    // fallback: 从运行中的任务恢复
     const runningTasks = taskManager.getTasksByType('create')
       .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map(t => ({
+      .map((t, i) => ({
         id: t.id,
-        image: t.metadata?.referImages?.[0] || '',
+        x: 100 + (i % 3) * 380,
+        y: 100 + Math.floor(i / 3) * 380,
+        w: NODE_DEFAULT_W,
+        h: NODE_DEFAULT_H,
+        image: null,
         prompt: t.prompt,
-        timestamp: t.startTime / 1000,
-        type: 'create',
         status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
-        progress: t.progress || 0
+        progress: t.progress || 0,
+        zIndex: 1,
       }));
     return runningTasks;
   });
+
+  // 保存画布状态到 localStorage
+  useEffect(() => {
+    localStorage.setItem('wx_canvas_nodes', JSON.stringify(canvasNodes));
+  }, [canvasNodes]);
+
+  // 为了兼容原有逻辑，history 作为 canvasNodes 的别名
+  const history = canvasNodes;
+  const setHistory = setCanvasNodes;
+
   const [activeHistoryId, setActiveHistoryId] = useState(null);
   const activeHistoryIdRef = useRef(activeHistoryId);
   activeHistoryIdRef.current = activeHistoryId; // 保持最新值，避免闭包问题
@@ -1254,6 +1531,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
     const runningTasks = taskManagerRef.current.getTasksByType('create')
       .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING);
 
+    const matchedServerIds = new Set();
     runningTasks.forEach(localTask => {
       const match = createHistory.find(serverItem => {
         const timeMatch = serverItem.timestamp >= (localTask.startTime / 1000) - 600;
@@ -1261,29 +1539,47 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
       });
 
       if (match) {
+        matchedServerIds.add(match.id);
         taskManagerRef.current.completeTask(localTask.id, match.image);
       } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
         taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
       }
     });
 
-    const activeRunningTasks = taskManagerRef.current.getTasksByType('create')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map(t => ({
-        id: t.id,
-        image: t.metadata?.referImages?.[0] || '', // 如有参考图则显示第一张，否则可能为空
-        prompt: t.prompt,
-        timestamp: t.startTime / 1000,
-        type: 'create',
-        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
-        progress: t.progress || 0
-      }));
+    // 将服务器历史合并到画布节点（只添加尚未存在的）
+    setCanvasNodes(prev => {
+      const existingTaskIds = new Set(prev.map(n => n.taskId).filter(Boolean));
+      const existingIds = new Set(prev.map(n => n.id));
+      const existingUrls = new Set(prev.map(n => n.image).filter(Boolean));
+      // 过滤：1. 必须有真实 image 2. 不能和现有的 id 重复 3. 不能和本地任务的 taskId 重复 4. 不能是被本地任务刚刚匹配认领走的 5. 不能和现有的 url 重复
+      const newFromServerItems = createHistory.filter(item => 
+        item.image && 
+        !existingIds.has(item.id) && 
+        !existingTaskIds.has(item.id) && 
+        !matchedServerIds.has(item.id) &&
+        !existingUrls.has(item.image)
+      );
+      if (newFromServerItems.length === 0) return prev;
 
-    const finalHistory = [...activeRunningTasks, ...createHistory];
-    setHistory(finalHistory);
-    if ((activeRunningTasks.length > 0 || finalHistory.length > 0) && !activeHistoryIdRef.current) {
-      setActiveHistoryId(finalHistory[0]?.id);
-    }
+      // 动态计算位置
+      const center = canvasRef.current?.getViewportCenter() || { x: 500, y: 300 };
+      const positions = getNewNodePositions(newFromServerItems.length, prev, center);
+
+      const newFromServer = newFromServerItems.map((item, i) => ({
+          id: item.id,
+          x: positions[i].x,
+          y: positions[i].y,
+          w: NODE_DEFAULT_W,
+          h: NODE_DEFAULT_H,
+          image: item.image,
+          image_urls: item.image_urls,
+          prompt: item.prompt,
+          status: 'done',
+          progress: 100,
+          zIndex: 1,
+      }));
+      return [...prev, ...newFromServer];
+    });
   };
 
   useEffect(() => {
@@ -1299,24 +1595,25 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
       const runningTasks = taskManager.getTasksByType('create');
       if (runningTasks.length === 0) return;
 
-      setHistory(prev => prev.map(h => {
-        const task = runningTasks.find(t => t.id === h.id);
+      setCanvasNodes(prev => prev.map(node => {
+        // 用 taskId 匹配画布节点和任务管理器的任务
+        const task = runningTasks.find(t => t.id === node.taskId || t.id === node.id);
         if (task) {
-          let newStatus = h.status;
+          let newStatus = node.status;
           if (task.status === TASK_STATUS.SUCCESS) newStatus = 'done';
           else if (task.status === TASK_STATUS.ERROR) newStatus = 'error';
           else if (task.status === TASK_STATUS.RUNNING) newStatus = 'running';
           else newStatus = 'pending';
 
           return {
-            ...h,
-            progress: task.progress || h.progress,
+            ...node,
+            progress: task.progress || node.progress,
             status: newStatus,
-            image: task.result || h.image,
-            error: task.error || h.error
+            image: task.result || node.image,
+            error: task.error || node.error
           };
         }
-        return h;
+        return node;
       }));
     };
     const interval = setInterval(syncTaskProgress, 500);
@@ -1354,46 +1651,80 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
   };
 
   const handleGenerate = async () => {
-    if (!isValid || !token) return;
+    if (!isValid || !token || isSubmittingRef.current) return;
     if (quota <= 0) { showToast(t.toast.noQuota, 'error'); return; }
+    isSubmittingRef.current = true;
 
-    const taskName = lang === 'zh' ? '基础创作' : 'Basic Create';
+    // 乐观扣分：立即在前端显示扣减后的积分（后端会真正扣分，API返回后用真实值覆盖）
+    const optimisticQuota = Math.max(0, quota - totalPoints);
+    setQuota(optimisticQuota);
+    localStorage.setItem('quota', optimisticQuota.toString());
+    window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
+
+    const taskName = lang === 'zh' ? '自由创作' : 'Basic Create';
     const taskId = taskManager.createTask('create', prompt, {
-      referImages
+      referImages, model, size: currentDimensions.str, quality, n: numImages
     });
 
-    // 立即添加到历史
-    const newItem = {
-      id: taskId,
-      image: referImages[0] || null, // 优先显示参考图作为占位
-      prompt: prompt,
-      timestamp: Date.now() / 1000,
-      type: 'create',
-      status: 'pending',
-      progress: 0
-    };
-    setHistory(prev => [newItem, ...prev]);
+    // 在画布上创建 N 个加载占位节点
+    const n = numImages || 1;
+    // 动态获取当前画布视角的中心点
+    const center = canvasRef.current?.getViewportCenter() || { x: 500, y: 300 };
+    const positions = getNewNodePositions(n, canvasNodes, center);
+    const newNodes = [];
+    for (let i = 0; i < n; i++) {
+      newNodes.push({
+        id: `${taskId}_${i}`,
+        taskId: taskId,
+        x: positions[i].x,
+        y: positions[i].y,
+        w: 512,
+        h: currentDimensions.w && currentDimensions.h ? 512 * (currentDimensions.h / currentDimensions.w) : 512,
+        image: null,
+        referImages: [...referImages],
+        prompt: prompt,
+        timestamp: Date.now() / 1000,
+        type: 'create',
+        status: 'pending',
+        progress: 0,
+        slotIndex: i,
+        zIndex: 1,
+      });
+    }
+    setCanvasNodes(prev => [...prev, ...newNodes]);
     setActiveHistoryId(taskId);
+    setPrompt(''); // 发送后清空输入框
+    setTimeout(() => {
+      const ta = document.getElementById('main-prompt-input');
+      if (ta) ta.style.height = 'auto';
+    }, 10);
 
-    executeCreateTask(taskId, prompt, referImages);
+    executeCreateTask(taskId, prompt, referImages, { model, size: currentDimensions.str, quality, n: numImages });
+    isSubmittingRef.current = false;
   };
 
-  // 异步执行创作任务
-  const executeCreateTask = async (taskId, p, rImgs) => {
+  // 异步执行创作任务（提交 + 轮询模式，支持长时间生成）
+  const executeCreateTask = async (taskId, p, rImgs, params) => {
     taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
-    // setIsGenerating(false); // Removed
 
     let currentProgress = 0;
     const progressInterval = setInterval(() => {
-      currentProgress = Math.min(currentProgress + 1 + Math.random() * 2, 95);
-      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, progress: currentProgress } : h));
+      currentProgress = Math.min(currentProgress + 0.5 + Math.random() * 1, 95);
+      setCanvasNodes(prev => prev.map(node =>
+        node.taskId === taskId ? { ...node, progress: currentProgress } : node
+      ));
       taskManager.updateProgress(taskId, currentProgress);
-    }, 500);
+    }, 1000);
 
     try {
+      // 1. 提交任务（后端立即返回 taskId）
       const formData = new FormData();
       formData.append('prompt', p);
       formData.append('image_urls_json', JSON.stringify(rImgs));
+      if (params.model) formData.append('model', params.model);
+      if (params.size) formData.append('size', params.size);
+      if (params.quality) formData.append('quality', params.quality);
+      if (params.n) formData.append('n', params.n.toString());
 
       const res = await fetch(`${API_BASE_URL}/api/create`, {
         method: 'POST',
@@ -1401,48 +1732,136 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
         body: formData
       });
 
-      clearInterval(progressInterval);
-
       if (!res.ok) {
         let errMsg = 'Generation failed';
         try {
           const errData = await res.json();
           errMsg = errData.detail || errData.message || errMsg;
         } catch (e) {
-          // If JSON parsing fails, just use the default message or response status
           errMsg = `Server error: ${res.status}`;
         }
         throw new Error(errMsg);
       }
 
-      const data = await res.json();
+      const submitData = await res.json();
+      const serverTaskId = submitData.data.taskId;
 
-      taskManager.completeTask(taskId, data.data.image_url);
-      setQuota(data.data.remaining_quota);
-      localStorage.setItem('quota', data.data.remaining_quota.toString());
+      // 更新积分（预扣分已在后端完成）
+      if (submitData.data.remaining_quota !== undefined) {
+        setQuota(submitData.data.remaining_quota);
+        localStorage.setItem('quota', submitData.data.remaining_quota.toString());
+        window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: submitData.data.remaining_quota } }));
+      }
 
-      setHistory(prev => prev.map(h => h.id === taskId ? {
-        ...h,
-        image: data.data.image_url,
-        status: 'done',
-        progress: 100
-      } : h));
+      // 2. 轮询任务状态（每 3 秒查询一次，最长等 15 分钟）
+      const maxPollTime = 15 * 60 * 1000; // 15 分钟
+      const pollStart = Date.now();
 
-      if (activeHistoryId === taskId) setResult(data.data.image_url);
+      while (Date.now() - pollStart < maxPollTime) {
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        try {
+          const statusRes = await fetch(`${API_BASE_URL}/api/create/status/${serverTaskId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+
+          if (!statusRes.ok) continue;
+
+          const statusData = await statusRes.json();
+
+          if (statusData.status === 'SUCCESS') {
+            clearInterval(progressInterval);
+            const imageUrl = statusData.image_url;
+            const imageUrls = statusData.image_urls || [imageUrl];
+
+            taskManager.completeTask(taskId, imageUrl);
+            // 将每张图片分配到对应的画布节点
+            setCanvasNodes(prev => prev.map(node => {
+              if (node.taskId !== taskId) return node;
+              const idx = node.slotIndex || 0;
+              const url = imageUrls[idx] || imageUrls[0] || imageUrl;
+              return {
+                ...node,
+                image: url,
+                image_urls: imageUrls,
+                status: 'done',
+                progress: 100,
+              };
+            }));
+
+            if (activeHistoryId === taskId) setResult(imageUrl);
+            return; // 成功，退出
+          }
+
+          if (statusData.status === 'FAILED') {
+            throw new Error(lang === 'zh' ? '图片生成失败，请重试' : 'Image generation failed, please retry');
+          }
+          // ON_QUEUE 状态 → 继续轮询
+        } catch (pollErr) {
+          if (pollErr.message.includes('生成失败') || pollErr.message.includes('generation failed')) {
+            throw pollErr;
+          }
+          // 网络抖动等 → 忽略，继续轮询
+        }
+      }
+
+      // 超过15分钟仍未完成
+      throw new Error(lang === 'zh' ? '生成超时，请稍后在历史记录中查看' : 'Generation timed out');
 
     } catch (err) {
       clearInterval(progressInterval);
       taskManager.failTask(taskId, err.message);
-      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, status: 'error', error: err.message } : h));
+      setCanvasNodes(prev => prev.map(node =>
+        node.taskId === taskId ? { ...node, status: 'error', error: err.message } : node
+      ));
       showToast(err.message, 'error');
+    } finally {
+      // 任务结束（无论成功或失败），静默同步最新积分（解决失败返还积分不同步问题）
+      try {
+        const userRes = await fetch(`${API_BASE_URL}/api/user/me`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (userRes.ok) {
+          const userData = await userRes.json();
+          window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: userData.quota } }));
+        }
+      } catch (e) {}
     }
   };
 
   const currentImage = history.find(h => h.id === activeHistoryId)?.image || (activeHistoryId ? null : result);
 
-  const handleDownload = async () => {
-    if (!currentImage) return;
-    const secureUrl = toSecureUrl(currentImage);
+  const [showParams, setShowParams] = useState(false);
+  const [showMode, setShowMode] = useState(false);
+  const [showModel, setShowModel] = useState(false);
+  const [hoveringNodeImage, setHoveringNodeImage] = useState(null);
+  const isHoveringDropzoneRef = useRef(false);
+
+  const canvasRef = useRef(null);
+  const paramsRef = useRef(null);
+  const paramsBtnRef = useRef(null);
+  const modeRef = useRef(null);
+  const modeBtnRef = useRef(null);
+  const modelRef = useRef(null);
+  const modelBtnRef = useRef(null);
+  
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (paramsRef.current && !paramsRef.current.contains(e.target) && paramsBtnRef.current && !paramsBtnRef.current.contains(e.target)) {
+        setShowParams(false);
+      }
+      if (modeRef.current && !modeRef.current.contains(e.target) && modeBtnRef.current && !modeBtnRef.current.contains(e.target)) {
+        setShowMode(false);
+      }
+      if (modelRef.current && !modelRef.current.contains(e.target) && modelBtnRef.current && !modelBtnRef.current.contains(e.target)) {
+        setShowModel(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleDownload = async (imgUrl) => {
+    if (!imgUrl) return;
+    const secureUrl = toSecureUrl(imgUrl);
     try {
       const response = await fetch(secureUrl, { mode: 'cors' });
       if (!response.ok) throw new Error('Fetch failed');
@@ -1457,15 +1876,14 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
       window.URL.revokeObjectURL(url);
       showToast(t.toast.downloadSuccess);
     } catch (error) {
-      // 降级方案：在新标签页打开
       window.open(secureUrl, '_blank');
       showToast(lang === 'zh' ? '已在新标签页打开，请右键保存图片' : 'Opened in new tab, right-click to save', 'info');
     }
   };
 
-  const handleCopy = async () => {
-    if (!currentImage) return;
-    const secureUrl = toSecureUrl(currentImage);
+  const handleCopy = async (imgUrl) => {
+    if (!imgUrl) return;
+    const secureUrl = toSecureUrl(imgUrl);
     try {
       const response = await fetch(secureUrl, { mode: 'cors' });
       if (!response.ok) throw new Error('Fetch failed');
@@ -1473,7 +1891,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
       await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
       showToast(t.toast.copySuccess);
     } catch (err) {
-      // 降级方案：复制图片URL到剪贴板
       try {
         await navigator.clipboard.writeText(secureUrl);
         showToast(lang === 'zh' ? '已复制图片链接' : 'Image URL copied', 'success');
@@ -1484,166 +1901,305 @@ const BasicCreateStudio = ({ onBack, lang, setLang }) => {
   };
 
   return (
-    <div className="w-full h-full bg-[#050505] text-white font-sans flex flex-col overflow-hidden">
+    <div className={`w-full h-full bg-[#050505] text-white font-sans flex flex-col overflow-hidden relative ${isImmersive ? 'fixed inset-0 z-[9999]' : ''}`}>
       <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={handleLogin} t={t} />
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <FullscreenViewer isOpen={showFullscreen} image={result} onClose={() => setShowFullscreen(false)} />
 
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col md:flex-row gap-0 min-h-0 overflow-hidden">
-        {/* Left Panel */}
-        <div className="w-full md:w-[380px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Prompt 输入 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                <Edit3 size={14} /> {lang === 'zh' ? '创意描述' : 'Prompt'} <span className="text-red-400">*</span>
+      {/* Main Content: Infinite Canvas */}
+      <main className="flex-1 overflow-hidden w-full relative">
+        <InfiniteCanvas
+          ref={canvasRef}
+          nodes={canvasNodes.map(n => ({ ...n, image: n.image ? toSecureUrl(n.image) : null }))}
+          onNodesChange={setCanvasNodes}
+          isImmersive={isImmersive}
+          onToggleImmersive={onToggleImmersive}
+          onNodeDragMove={(e, node) => {
+            if (!node || !node.image) return;
+            const dropzone = document.getElementById('upload-dropzone');
+            if (dropzone) {
+              const rect = dropzone.getBoundingClientRect();
+              const isHovering = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+              if (isHovering !== isHoveringDropzoneRef.current) {
+                isHoveringDropzoneRef.current = isHovering;
+                if (isHovering) {
+                  setHoveringNodeImage(node.image);
+                } else {
+                  setHoveringNodeImage(null);
+                }
+              }
+            }
+          }}
+          onNodeDragEnd={(e, node) => {
+            isHoveringDropzoneRef.current = false;
+            setHoveringNodeImage(null);
+            
+            const dropzone = document.getElementById('upload-dropzone');
+            if (dropzone && node && node.image) {
+              const rect = dropzone.getBoundingClientRect();
+              // Check if mouse released within the dropzone rect
+              if (e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom) {
+                // Prevent duplicate
+                if (referImages.includes(node.image)) return;
+                
+                setReferImages(prev => {
+                  if (prev.includes(node.image)) return prev;
+                  return [...prev, node.image];
+                });
+              }
+            }
+          }}
+          onNodeAction={(action, node) => {
+            if (!node) return;
+            if (action === 'download') handleDownload(node.image);
+            else if (action === 'fullscreen') { setResult(node.image); setShowFullscreen(true); }
+            else if (action === 'delete') {
+              setCanvasNodes(prev => prev.filter(n => n.id !== node.id));
+            }
+          }}
+          onDoubleClickNode={(node) => {
+            if (node.image) { setResult(node.image); setShowFullscreen(true); }
+          }}
+          onMetaUpdate={(nodeId, updates) => {
+            setCanvasNodes(prev => prev.map(n => n.id === nodeId ? { ...n, ...updates } : n));
+          }}
+        />
+      </main>
+
+      {/* Sticky Input Bar */}
+      <div className={`absolute bottom-0 left-0 w-full pb-6 px-4 md:px-8 flex justify-center pointer-events-none z-40 transition-all duration-300`}>
+        <div className="w-full max-w-4xl pointer-events-auto flex flex-col gap-2 relative">
+          <div className="bg-[#1c1c1e] rounded-[24px] p-3 pb-4 flex flex-col relative transition-all border border-transparent shadow-none">
+            
+            {/* Input Row */}
+            <div className="flex items-start gap-3 px-1 pb-3 pt-1">
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <label id="upload-dropzone" className="w-[52px] h-[52px] rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center cursor-pointer transition-colors shrink-0">
+                  <Plus size={20} className="text-white/30" />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
+                </label>
+                {referImages.map((url, i) => (
+                  <div key={i} className="relative w-[52px] h-[52px] rounded-xl border border-white/10 overflow-hidden group shadow-sm shrink-0 animate-in zoom-in-90 duration-200">
+                    <img src={toSecureUrl(url)} className="w-full h-full object-cover" alt="ref" />
+                    <button onClick={() => handleRemoveImage(i)} className="absolute top-1 right-1 p-1 bg-black/60 backdrop-blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity"><X size={10} /></button>
+                  </div>
+                ))}
+                {/* 悬停时的缩略图预览 */}
+                {hoveringNodeImage && !referImages.includes(hoveringNodeImage) && (
+                  <div className="relative w-[52px] h-[52px] rounded-xl border-2 border-[#00C4B6] border-dashed overflow-hidden opacity-80 shrink-0 animate-in fade-in zoom-in-95 duration-200">
+                    <img src={toSecureUrl(hoveringNodeImage)} className="w-full h-full object-cover" alt="ref-preview" />
+                    <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                      <div className="bg-[#00C4B6] rounded-full p-1 shadow-lg">
+                        <Check size={12} className="text-white" />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
+              
               <textarea
+                id="main-prompt-input"
                 value={prompt}
                 onChange={e => setPrompt(e.target.value)}
-                placeholder={lang === 'zh' ? '描述你想要生成的图像...' : 'Describe the image you want to create...'}
-                className="w-full h-32 bg-[#111] border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-white/30 resize-none focus:border-[#10B981] focus:outline-none transition-colors"
+                placeholder={lang === 'zh' ? '今天我们要生成点什么？' : 'What are we creating today?'}
+                className="flex-1 bg-transparent border-none text-white text-[14px] placeholder:text-white/30 resize-none outline-none py-2 max-h-40 min-h-[52px] custom-scrollbar leading-relaxed"
+                rows={1}
+                onInput={(e) => {
+                  e.target.style.height = 'auto';
+                  e.target.style.height = (e.target.scrollHeight) + 'px';
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (isValid && isLoggedIn) handleGenerate();
+                  }
+                }}
               />
             </div>
 
-            {/* 参考图片（选填） */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                  <ImageIcon size={14} /> {lang === 'zh' ? '参考图片（选填）' : 'Reference Images (Optional)'}
-                </div>
-                <span className="text-[10px] text-white/30">{referImages.length}/5</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {referImages.map((url, i) => (
-                  <div key={i} className="aspect-square rounded-lg overflow-hidden relative group border border-white/10">
-                    <img src={toSecureUrl(url)} className="w-full h-full object-cover" alt="" />
-                    <button onClick={() => handleRemoveImage(i)} className="absolute top-1 right-1 p-1 bg-red-500/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-                {referImages.length < 5 && (
-                  <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors">
-                    <Plus size={20} className="text-white/30" />
-                    <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} />
-                  </label>
-                )}
-              </div>
-              <p className="text-[10px] text-white/30">{lang === 'zh' ? '无图片=文生图 | 有图片=图生图/多参考图' : 'No image=Text2Img | With images=Img2Img'}</p>
-            </div>
-          </div>
-
-          {/* 生成按钮 */}
-          <div className="p-4 border-t border-white/5">
-            <button
-              onClick={handleGenerate}
-              disabled={!isValid || !isLoggedIn}
-              className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all
-                ${isValid && isLoggedIn
-                  ? 'bg-gradient-to-r from-[#10B981] to-[#059669] hover:opacity-90 text-white shadow-lg shadow-emerald-500/20'
-                  : 'bg-white/10 text-white/30 cursor-not-allowed'}`}
-            >
-              <><Sparkles size={18} /> {lang === 'zh' ? '开始创作' : 'Create'}</>
-            </button>
-          </div>
-        </div>
-
-        {/* Center: Result */}
-        <div className="flex-1 bg-[#050505] p-6 flex flex-col">
-          <div className="flex-1 rounded-2xl bg-[#0a0a0a] border border-white/5 relative overflow-hidden flex items-center justify-center group">
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-
-            {activeHistoryId && (() => {
-              const activeTask = history.find(h => h.id === activeHistoryId);
-              if (activeTask && (activeTask.status === 'pending' || activeTask.status === 'running')) {
-                return (
-                  <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
-                    <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden mb-4">
-                      <div className="h-full bg-[#10B981] transition-all duration-300" style={{ width: `${activeTask.progress}%` }}></div>
+            {/* Tags and Actions Row */}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                {/* 模式选择 (Mode) */}
+                <div className="relative z-50">
+                  <button 
+                    ref={modeBtnRef}
+                    onClick={() => setShowMode(!showMode)}
+                    className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-all text-[14px] font-medium ${showMode ? 'bg-[#2a2a2e] text-white' : 'bg-transparent text-[#00C4B6] hover:bg-white/5'}`}
+                  >
+                    <ImageIcon size={16} className={showMode ? "text-white" : "text-[#00C4B6]"} />
+                    <span className={showMode ? "text-white" : "text-[#00C4B6]"}>图片生成</span>
+                    <ChevronDown size={14} className={`ml-0.5 transition-transform ${showMode ? 'rotate-180 text-white/60' : 'text-[#00C4B6]/60'}`} />
+                  </button>
+                  {showMode && (
+                    <div ref={modeRef} className="absolute bottom-[calc(100%+8px)] left-0 w-[170px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                      <button onClick={() => setShowMode(false)} className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-white bg-white/5 rounded-lg">
+                        <span className="text-[#00C4B6]">图片生成</span><Check size={14} className="text-[#00C4B6]" />
+                      </button>
+                      <button className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-white/40 hover:bg-white/5 rounded-lg cursor-not-allowed">
+                        <span>视频生成</span><span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-white/60">敬请期待</span>
+                      </button>
                     </div>
-                    <div className="text-[#10B981] font-mono text-2xl animate-pulse">{Math.round(activeTask.progress)}%</div>
-                    <div className="text-white/40 text-xs mt-2">{lang === 'zh' ? '正在创作中...' : 'Creating...'}</div>
-                  </div>
-                );
-              }
-              // 修复：如果任务失败，显示错误信息
-              if (activeTask && activeTask.status === 'error') {
-                return (
-                  <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
-                    <AlertCircle size={48} className="text-red-500 mb-4" />
-                    <div className="text-red-400 text-sm">{activeTask.error || 'Creation Failed'}</div>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-
-            <div className="relative w-full h-full p-8 flex items-center justify-center">
-              {currentImage ? (
-                <img src={toSecureUrl(currentImage)} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" alt="Result" />
-              ) : (
-                <div className="text-center opacity-20 flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-2xl border border-dashed border-white/30 flex items-center justify-center">
-                    <Edit3 size={32} />
-                  </div>
-                  <p className="text-sm font-medium">{lang === 'zh' ? '基础创作就绪' : 'Basic Create Ready'}</p>
+                  )}
                 </div>
-              )}
-            </div>
 
-            {currentImage && (
-              <div className="absolute bottom-8 flex items-center gap-3 p-2 rounded-full bg-[#1e1e1e]/80 border border-white/10 shadow-2xl backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
-                <ActionBtn icon={<Download size={18} />} onClick={handleDownload} tooltip={t.actions.download} />
-                <ActionBtn icon={<Maximize2 size={18} />} onClick={() => setShowFullscreen(true)} tooltip={t.actions.fullscreen} />
-                <div className="w-[1px] h-4 bg-white/10"></div>
-                <ActionBtn icon={<Copy size={18} />} onClick={handleCopy} tooltip={t.actions.copy} />
+                {/* 参数设置 (Params) */}
+                <div className="relative z-50">
+                  <button 
+                    ref={paramsBtnRef}
+                    onClick={() => setShowParams(!showParams)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[10px] transition-all text-[12px] font-medium border
+                      ${showParams ? 'bg-[#2a2a2e] border-white/20 text-white' : 'bg-[#222225] border-white/10 text-white/70 hover:bg-white/5'}`}
+                  >
+                    <span className="opacity-70">{aspectRatio === 'auto' ? '1:1' : aspectRatio}</span>
+                    <span className="opacity-40 mx-0.5">|</span>
+                    <span>{RES_LEVELS.find(r => r.id === resLevel)?.label[lang] || resLevel}</span>
+                    <span className="opacity-40 mx-0.5">|</span>
+                    <span className="opacity-70">{QUALITIES.find(q => q.id === quality)?.label[lang] || quality}</span>
+                    <span className="opacity-40 mx-0.5">|</span>
+                    <span className="text-[#00C4B6]">x{numImages || 1}</span>
+                  </button>
+
+                  {/* Invisible bridge to prevent hover/click loss if needed */}
+                  <div className={`absolute bottom-full left-0 w-full h-2 ${showParams ? 'block' : 'hidden'}`}></div>
+                  
+                  {/* Popover (Left Aligned with the button) */}
+                  {showParams && (
+                    <div ref={paramsRef} className="absolute bottom-[calc(100%+8px)] left-0 w-[380px] bg-[#1c1c1e] border border-white/5 rounded-[20px] shadow-2xl p-5 z-50 animate-in slide-in-from-bottom-2 fade-in duration-200 cursor-default" onClick={e => e.stopPropagation()}>
+                      {/* 比例 */}
+                      <div className="space-y-3 mb-6">
+                        <label className="text-[11px] text-white/40">{lang === 'zh' ? '选择比例' : 'Aspect Ratio'}</label>
+                        <div className="flex justify-between gap-1">
+                          {RATIOS.map(r => (
+                            <button key={r} onClick={(e) => { e.stopPropagation(); setAspectRatio(r); }} className={`flex flex-col items-center justify-center gap-1.5 w-11 h-[52px] rounded-lg transition-all ${aspectRatio === r ? 'bg-white/10 text-white shadow-sm' : 'bg-transparent hover:bg-white/5 text-white/40 hover:text-white'}`}>
+                              <div className="h-4 flex items-center justify-center opacity-90 scale-90">{getRatioBox(r, false)}</div>
+                              <span className="text-[10px]">{r === 'auto' ? (lang === 'zh' ? '智能' : 'Auto') : r}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 分辨率 */}
+                      <div className="space-y-3 mb-6">
+                        <label className="text-[11px] text-white/40">{lang === 'zh' ? '选择分辨率' : 'Resolution'}</label>
+                        <div className="flex gap-2">
+                          {RES_LEVELS.map(res => (
+                            <button key={res.id} onClick={(e) => { e.stopPropagation(); setResLevel(res.id); }} className={`flex-1 py-2.5 rounded-xl text-[13px] transition-all flex items-center justify-center gap-1 ${resLevel === res.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'bg-transparent text-white/40 border border-white/5 hover:bg-white/5 hover:text-white'}`}>
+                              {res.label[lang]}
+                              {res.premium && <Sparkles size={12} className={resLevel === res.id ? "text-[#00C4B6]" : "text-[#00C4B6]/50"} />}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 尺寸预览 */}
+                      <div className="space-y-3 mb-6">
+                        <label className="text-[11px] text-white/40">{lang === 'zh' ? '尺寸' : 'Size'}</label>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 bg-[#121212] rounded-lg px-3 py-2 flex items-center justify-between">
+                            <span className="text-white/30 text-xs">W</span>
+                            <span className="text-xs font-mono text-white/80">{currentDimensions.w || 'Auto'}</span>
+                          </div>
+                          <div className="text-white/20 shrink-0"><X size={12}/></div>
+                          <div className="flex-1 bg-[#121212] rounded-lg px-3 py-2 flex items-center justify-between">
+                            <span className="text-white/30 text-xs">H</span>
+                            <span className="text-xs font-mono text-white/80">{currentDimensions.h || 'Auto'}</span>
+                          </div>
+                          <span className="text-white/30 text-[10px] font-bold shrink-0 ml-1">PX</span>
+                        </div>
+                      </div>
+
+                      {/* 质量 & 数量 */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                          <label className="text-[11px] text-white/40 block h-[16px] leading-[16px]">{lang === 'zh' ? '生成质量' : 'Quality'}</label>
+                          <div className="flex bg-[#121212] rounded-lg p-1 h-[32px]">
+                            {QUALITIES.map(q => (
+                              <button key={q.id} onClick={(e) => { e.stopPropagation(); setQuality(q.id); }} className={`flex-1 rounded-md text-[11px] transition-colors ${quality === q.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'text-white/40 hover:text-white'}`}>
+                                {q.label[lang]}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-3">
+                          <label className="text-[11px] text-white/40 block h-[16px] leading-[16px]">{lang === 'zh' ? '生成数量' : 'Count'}</label>
+                          <div className="flex items-center justify-between bg-[#121212] rounded-lg p-1 h-[32px]">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setNumImages(Math.max(1, (numImages || 1) - 1)); }}
+                              className="w-8 h-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 rounded-md transition-colors"
+                            >
+                              <Minus size={14} />
+                            </button>
+                            <input
+                              type="text"
+                              value={numImages}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/\D/g, '');
+                                if (val === '') { setNumImages(''); return; }
+                                setNumImages(Math.min(10, Math.max(1, parseInt(val))));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={() => { if (!numImages) setNumImages(1); }}
+                              className="w-8 text-[13px] font-mono text-white bg-transparent text-center outline-none"
+                            />
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setNumImages(Math.min(10, (numImages || 1) + 1)); }}
+                              className="w-8 h-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 rounded-md transition-colors"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
-            )}
+
+              <div className="flex items-center gap-3">
+                {/* 模型选择 (Model) 移到了右侧 */}
+                <div className="relative z-50">
+                  <button 
+                    ref={modelBtnRef}
+                    onClick={() => setShowModel(!showModel)}
+                    className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${showModel ? 'bg-[#2a2a2e] text-white shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+                  >
+                    <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} style={{ filter: 'brightness(0) invert(1)' }} />
+                  </button>
+                  {showModel && (
+                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[180px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                      <button onClick={() => setShowModel(false)} className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-white bg-[#2a2a2e] rounded-lg">
+                        <div className="flex items-center gap-2">
+                          <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
+                          <span className="text-[#00C4B6]">GPT-Image-2</span>
+                        </div>
+                        <Check size={14} className="text-[#00C4B6]" />
+                      </button>
+                      <button className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-white/40 hover:bg-white/5 rounded-lg cursor-not-allowed">
+                        <div className="flex items-center gap-2">
+                          <BoxSelect size={14} className="text-white/40" />
+                          <span>Nano Banana 2</span>
+                        </div>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <button 
+                  onClick={handleGenerate}
+                  disabled={!isValid || !isLoggedIn}
+                  className={`shrink-0 h-8 px-3 rounded-full flex items-center gap-1.5 transition-all shadow-md
+                    ${isValid && isLoggedIn ? 'bg-white text-black hover:bg-white/90' : 'bg-white/10 text-white/30 cursor-not-allowed'}`}
+                >
+                  <Sparkles size={14} className={isValid && isLoggedIn ? "text-black" : "text-white/30"} />
+                  <span className="text-[13px] font-medium">{totalPoints}</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
-
-        <FullscreenViewer isOpen={showFullscreen} image={currentImage} onClose={() => setShowFullscreen(false)} />
-
-        {/* Right History Panel */}
-        <div className="hidden lg:flex w-[200px] bg-[#0a0a0a] border-l border-white/5 flex-col">
-          <div className="p-4 border-b border-white/5">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-              <History size={14} /> {t.gallery.title}
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {history.map(item => (
-              <div
-                key={item.id}
-                onClick={() => setActiveHistoryId(item.id)}
-                className={`aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all relative
-                  ${activeHistoryId === item.id ? 'border-[#10B981] ring-2 ring-[#10B981]/30' : 'border-white/5 hover:border-white/20'}`}
-              >
-                {item.image && <img src={toSecureUrl(item.image)} className={`w-full h-full object-cover transition-opacity ${item.status === 'done' ? 'opacity-100' : 'opacity-40'}`} alt="" />}
-
-                {/* 进度覆盖层 */}
-                {(item.status === 'pending' || item.status === 'running') && (
-                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
-                    <Loader2 size={16} className="text-[#10B981] animate-spin mb-1" />
-                    <span className="text-[10px] text-[#10B981] font-mono">{Math.round(item.progress || 0)}%</span>
-                  </div>
-                )}
-
-                {/* 失败覆盖层 */}
-                {item.status === 'error' && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <AlertCircle size={16} className="text-red-500" />
-                  </div>
-                )}
-              </div>
-            ))}
-            {history.length === 0 && (
-              <div className="text-center text-white/20 text-xs py-8">{t.gallery.empty}</div>
-            )}
-          </div>
-        </div>
-      </main>
+      </div>
     </div>
   );
 };
@@ -1858,6 +2414,12 @@ const AIRetouchStudio = ({ onBack, lang, setLang }) => {
     if (!sourceImage?.url) { showToast('请先上传图片', 'error'); return; }
     if (quota <= 0) { showToast('配额不足', 'error'); return; }
 
+    // 乐观扣分：立即显示积分减少
+    const optimisticQuota = Math.max(0, quota - 1);
+    setQuota(optimisticQuota);
+    localStorage.setItem('quota', optimisticQuota.toString());
+    window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
+
     // 创建任务并立即添加到历史记录（显示"生成中"）
     const taskId = taskManager.createTask('retouch', `${modes.find(m => m.id === mode)?.name[lang] || mode}`, {
       sourceImage: sourceImage.url,
@@ -1937,6 +2499,8 @@ const AIRetouchStudio = ({ onBack, lang, setLang }) => {
         // 更新配额
         setQuota(data.data.remaining_quota);
         localStorage.setItem('quota', data.data.remaining_quota.toString());
+        // 通知顶层 App 立即刷新 Header 积分显示
+        window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
 
         // 如果当前选中的是这个任务，更新结果
         if (activeHistoryId === taskId) {
@@ -2268,13 +2832,123 @@ const AIRetouchStudio = ({ onBack, lang, setLang }) => {
   );
 };
 
+// ==========================================
+// 🔒 滑块验证组件
+// ==========================================
+const SliderCaptcha = ({ onVerified, t }) => {
+  const trackRef = useRef(null);
+  const [dragging, setDragging] = useState(false);
+  const [offsetX, setOffsetX] = useState(0);
+  const [verified, setVerified] = useState(false);
+  const startX = useRef(0);
+
+  const THRESHOLD = 0.85; // 拖到85%即算通过
+
+  const handleStart = (clientX) => {
+    if (verified) return;
+    setDragging(true);
+    startX.current = clientX - offsetX;
+  };
+
+  const handleMove = (clientX) => {
+    if (!dragging || verified) return;
+    const track = trackRef.current;
+    if (!track) return;
+    const maxX = track.offsetWidth - 44;
+    const x = Math.min(Math.max(0, clientX - startX.current), maxX);
+    setOffsetX(x);
+  };
+
+  const handleEnd = async () => {
+    if (!dragging || verified) return;
+    setDragging(false);
+    const track = trackRef.current;
+    if (!track) return;
+    const maxX = track.offsetWidth - 44;
+    if (offsetX / maxX >= THRESHOLD) {
+      setVerified(true);
+      setOffsetX(maxX);
+      // 从后端获取验证token
+      try {
+        const res = await fetch(`${API_BASE_URL}/auth/captcha-config`);
+        const data = await res.json();
+        onVerified?.(data.captcha_token);
+      } catch {
+        onVerified?.('client-verified');
+      }
+    } else {
+      setOffsetX(0);
+    }
+  };
+
+  React.useEffect(() => {
+    const onMouseMove = (e) => handleMove(e.clientX);
+    const onMouseUp = () => handleEnd();
+    const onTouchMove = (e) => handleMove(e.touches[0].clientX);
+    const onTouchEnd = () => handleEnd();
+    if (dragging) {
+      window.addEventListener('mousemove', onMouseMove);
+      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener('touchmove', onTouchMove);
+      window.addEventListener('touchend', onTouchEnd);
+    }
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  });
+
+  const reset = () => { setVerified(false); setOffsetX(0); };
+
+  return (
+    <div className="mb-1">
+      <div
+        ref={trackRef}
+        className={`relative h-11 rounded-lg overflow-hidden select-none ${verified ? 'bg-green-500/10 border border-green-500/30' : 'bg-[#0a0a0a] border border-white/10'}`}
+      >
+        {/* 填充进度 */}
+        <div
+          className={`absolute inset-y-0 left-0 transition-colors ${verified ? 'bg-green-500/20' : 'bg-[#FF8A3D]/10'}`}
+          style={{ width: offsetX + 44 }}
+        />
+        {/* 提示文字 */}
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          {verified ? (
+            <span className="text-xs text-green-400 font-medium flex items-center gap-1">
+              <Check size={14} /> {t.auth.verified}
+            </span>
+          ) : (
+            <span className="text-xs text-white/30">{t.auth.slideToVerify}</span>
+          )}
+        </div>
+        {/* 滑块 */}
+        <div
+          className={`absolute top-0.5 bottom-0.5 w-10 rounded-md flex items-center justify-center cursor-grab active:cursor-grabbing transition-shadow ${verified ? 'bg-green-500 shadow-lg shadow-green-500/30' : 'bg-[#FF8A3D] shadow-lg shadow-orange-500/20 hover:shadow-orange-500/40'}`}
+          style={{ left: offsetX, transition: dragging ? 'none' : 'left 0.3s ease' }}
+          onMouseDown={(e) => handleStart(e.clientX)}
+          onTouchStart={(e) => handleStart(e.touches[0].clientX)}
+        >
+          {verified ? <Check size={16} className="text-white" /> : <ArrowRight size={16} className="text-white" />}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
+  const [activeTab, setActiveTab] = useState('password'); // 'password' | 'phone'
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPwd, setShowPwd] = useState(false);
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [countdown, setCountdown] = useState(0);
   const [error, setError] = useState('');
+  const [captchaToken, setCaptchaToken] = useState('');
 
   // 倒计时效果
   React.useEffect(() => {
@@ -2287,48 +2961,60 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
   // 关闭时清空表单
   React.useEffect(() => {
     if (!isOpen) {
-      setPhone('');
-      setCode('');
-      setError('');
-      setCountdown(0);
+      setUsername(''); setPassword(''); setPhone(''); setCode('');
+      setError(''); setCountdown(0); setCaptchaToken('');
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  // 发送验证码
+  // 账号密码登录
+  const handlePasswordLogin = async (e) => {
+    e.preventDefault();
+    if (!username || !password) { setError('请输入用户名和密码'); return; }
+    setLoading(true); setError('');
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', username);
+      formData.append('password', password);
+      const res = await fetch(`${API_BASE_URL}/auth/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: formData.toString()
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || '登录失败');
+      // 保存 role 到 localStorage
+      if (data.role) localStorage.setItem('role', data.role);
+      onLogin(data.access_token, data.username, data.quota);
+      onClose();
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+
+  // 发送验证码（需要滑块验证）
   const handleSendCode = async () => {
-    if (!phone || phone.length !== 11) {
-      setError('请输入正确的11位手机号');
-      return;
-    }
-    setSending(true);
-    setError('');
+    if (!phone || phone.length !== 11) { setError('请输入正确的11位手机号'); return; }
+    if (!captchaToken) { setError('请先完成滑块验证'); return; }
+    setSending(true); setError('');
     try {
       const res = await fetch(`${API_BASE_URL}/auth/send-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone })
+        body: JSON.stringify({ phone, captcha_token: captchaToken })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || '发送失败');
       setCountdown(60);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setSending(false);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setSending(false); }
   };
 
   // 验证码登录
-  const handleSubmit = async (e) => {
+  const handlePhoneLogin = async (e) => {
     e.preventDefault();
-    if (!phone || !code) {
-      setError('请输入手机号和验证码');
-      return;
-    }
-    setLoading(true);
-    setError('');
+    if (!phone || !code) { setError('请输入手机号和验证码'); return; }
+    setLoading(true); setError('');
     try {
       const res = await fetch(`${API_BASE_URL}/auth/verify-code`, {
         method: 'POST',
@@ -2337,56 +3023,113 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || '验证失败');
+      if (data.role) localStorage.setItem('role', data.role);
       onLogin(data.access_token, data.username, data.quota);
       onClose();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
   };
 
   return (
     <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/80 backdrop-blur-md animate-in fade-in duration-300">
-      <div className="w-[380px] bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-8 relative">
-        <button onClick={onClose} className="absolute top-4 right-4 text-white/40 hover:text-white"><X size={18} /></button>
-        <div className="flex flex-col items-center gap-4 mb-8"><OGLogo /><div className="text-center"><h2 className="text-xl font-bold text-white tracking-tight">{t.auth.productName}</h2><p className="text-xs text-white/40 mt-1">{t.auth.subtitle}</p></div></div>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-          {/* 手机号输入 */}
-          <div>
-            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.phone}</label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-              className="w-full h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
-              placeholder={t.auth.placeholderPhone}
-            />
+      <div className="w-[400px] bg-[#141414] border border-white/10 rounded-2xl shadow-2xl p-8 relative">
+        <button onClick={onClose} className="absolute top-4 right-4 text-white/40 hover:text-white transition-colors"><X size={18} /></button>
+        
+        {/* Logo */}
+        <div className="flex flex-col items-center gap-3 mb-6">
+          <OGLogo />
+          <div className="text-center">
+            <h2 className="text-xl font-bold text-white tracking-tight">{t.auth.productName}</h2>
+            <p className="text-xs text-white/40 mt-1">{t.auth.subtitle}</p>
           </div>
-          {/* 验证码输入 + 发送按钮 */}
-          <div>
-            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.code}</label>
-            <div className="flex gap-3">
+        </div>
+
+        {/* Tab 切换 */}
+        <div className="flex bg-[#0a0a0a] rounded-lg p-1 mb-6">
+          <button
+            onClick={() => { setActiveTab('password'); setError(''); }}
+            className={`flex-1 py-2 rounded-md text-xs font-bold transition-all ${activeTab === 'password' ? 'bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
+          >{t.auth.tabPassword}</button>
+          <button
+            onClick={() => { setActiveTab('phone'); setError(''); }}
+            className={`flex-1 py-2 rounded-md text-xs font-bold transition-all ${activeTab === 'phone' ? 'bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white shadow-lg' : 'text-white/40 hover:text-white/60'}`}
+          >{t.auth.tabPhone}</button>
+        </div>
+
+        {/* 账号密码登录表单 */}
+        {activeTab === 'password' && (
+          <form onSubmit={handlePasswordLogin} className="flex flex-col gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.username}</label>
               <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="flex-1 h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
-                placeholder={t.auth.placeholderCode}
+                type="text" value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
+                placeholder={t.auth.placeholderUsername}
+                autoComplete="username"
               />
-              <button
-                type="button"
-                onClick={handleSendCode}
-                disabled={sending || countdown > 0}
-                className={`w-28 h-11 rounded-lg text-xs font-bold transition-all ${countdown > 0 ? 'bg-white/5 text-white/30 cursor-not-allowed' : 'bg-[#FF8A3D]/20 text-[#FF8A3D] hover:bg-[#FF8A3D]/30'}`}
-              >
-                {sending ? t.auth.sending : countdown > 0 ? `${countdown}s` : t.auth.sendCode}
-              </button>
             </div>
-          </div>
-          {error && <div className="text-red-400 text-xs flex items-center gap-1 bg-red-500/10 p-2 rounded"><AlertCircle size={12} />{error}</div>}
-          <button type="submit" disabled={loading} className="w-full h-11 mt-2 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] hover:opacity-90 text-white font-bold rounded-lg text-sm transition-all shadow-lg flex items-center justify-center gap-2">{loading ? <Loader2 size={18} className="animate-spin" /> : t.auth.submit}</button>
-        </form>
+            <div>
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.password}</label>
+              <div className="relative">
+                <input
+                  type={showPwd ? 'text' : 'password'} value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 pr-10 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
+                  placeholder={t.auth.placeholderPassword}
+                  autoComplete="current-password"
+                />
+                <button type="button" onClick={() => setShowPwd(!showPwd)} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 hover:text-white/60 transition-colors">
+                  {showPwd ? <Lock size={16} /> : <Lock size={16} />}
+                </button>
+              </div>
+            </div>
+            {error && <div className="text-red-400 text-xs flex items-center gap-1 bg-red-500/10 p-2 rounded"><AlertCircle size={12} />{error}</div>}
+            <button type="submit" disabled={loading} className="w-full h-11 mt-1 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] hover:opacity-90 text-white font-bold rounded-lg text-sm transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : t.auth.submit}
+            </button>
+          </form>
+        )}
+
+        {/* 手机验证码登录表单 */}
+        {activeTab === 'phone' && (
+          <form onSubmit={handlePhoneLogin} className="flex flex-col gap-4">
+            <div>
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.phone}</label>
+              <input
+                type="tel" value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                className="w-full h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
+                placeholder={t.auth.placeholderPhone}
+              />
+            </div>
+            {/* 滑块验证 */}
+            <SliderCaptcha onVerified={(token) => setCaptchaToken(token)} t={t} />
+            {/* 验证码 */}
+            <div>
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.code}</label>
+              <div className="flex gap-3">
+                <input
+                  type="text" value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="flex-1 h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
+                  placeholder={t.auth.placeholderCode}
+                />
+                <button
+                  type="button" onClick={handleSendCode}
+                  disabled={sending || countdown > 0 || !captchaToken}
+                  className={`w-28 h-11 rounded-lg text-xs font-bold transition-all ${(countdown > 0 || !captchaToken) ? 'bg-white/5 text-white/30 cursor-not-allowed' : 'bg-[#FF8A3D]/20 text-[#FF8A3D] hover:bg-[#FF8A3D]/30'}`}
+                >
+                  {sending ? t.auth.sending : countdown > 0 ? `${countdown}s` : t.auth.sendCode}
+                </button>
+              </div>
+            </div>
+            {error && <div className="text-red-400 text-xs flex items-center gap-1 bg-red-500/10 p-2 rounded"><AlertCircle size={12} />{error}</div>}
+            <button type="submit" disabled={loading} className="w-full h-11 mt-1 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] hover:opacity-90 text-white font-bold rounded-lg text-sm transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2">
+              {loading ? <Loader2 size={18} className="animate-spin" /> : t.auth.submit}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
@@ -2398,6 +3141,7 @@ const InputGroup = ({ label, type, value, onChange, placeholder }) => (
     <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="w-full h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20" placeholder={placeholder} />
   </div>
 );
+
 
 const AIPhotoStudio = ({ onBack, lang, setLang }) => {
   const t = TRANSLATIONS[lang];
@@ -2610,6 +3354,12 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
     if (quota <= 0) { showToast(t.generate.quotaEmpty, 'error'); return; }
     if (!isValid) return;
 
+    // 乐观扣分：立即显示积分减少
+    const optimisticQuota = Math.max(0, quota - 1);
+    setQuota(optimisticQuota);
+    localStorage.setItem('quota', optimisticQuota.toString());
+    window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
+
     const validUrls = sourceImages.filter(img => !img.uploading && img.url).map(img => img.url);
     const taskId = taskManager.createTask('product', prompt, {
       sourceImages: validUrls,
@@ -2672,6 +3422,8 @@ const AIPhotoStudio = ({ onBack, lang, setLang }) => {
         ));
         setQuota(data.data.remaining_quota);
         localStorage.setItem('quota', data.data.remaining_quota.toString());
+        // 通知顶层 App 立即刷新 Header 积分显示
+        window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
       } else {
         throw new Error('API Error');
       }
@@ -3010,6 +3762,9 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState('home');
   const [lang, setLang] = useState('zh');
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [isImmersive, setIsImmersive] = useState(false);
+
+  const toggleImmersive = () => setIsImmersive(prev => !prev);
 
   // 全局用户状态
   const [token, setToken] = useState(() => localStorage.getItem('token'));
@@ -3018,6 +3773,7 @@ const App = () => {
     const saved = localStorage.getItem('quota');
     return saved ? parseInt(saved, 10) : 0;
   });
+  const [role, setRole] = useState(() => localStorage.getItem('role') || 'user');
 
   // 从后端实时获取配额
   useEffect(() => {
@@ -3034,6 +3790,10 @@ const App = () => {
             setQuota(data.quota);
             localStorage.setItem('quota', data.quota.toString());
           }
+          if (data.role && data.role !== role) {
+            setRole(data.role);
+            localStorage.setItem('role', data.role);
+          }
         }
       } catch (err) {
         console.error('获取配额失败:', err);
@@ -3048,6 +3808,19 @@ const App = () => {
 
     return () => clearInterval(interval);
   }, [token]);
+
+  // 监听子组件的积分更新事件，立即同步到 Header
+  useEffect(() => {
+    const handleQuotaUpdate = (e) => {
+      const newQuota = e.detail?.quota;
+      if (typeof newQuota === 'number') {
+        setQuota(newQuota);
+        localStorage.setItem('quota', newQuota.toString());
+      }
+    };
+    window.addEventListener('quota-updated', handleQuotaUpdate);
+    return () => window.removeEventListener('quota-updated', handleQuotaUpdate);
+  }, []);
 
   // 动态更新浏览器标签标题
   useEffect(() => {
@@ -3066,15 +3839,18 @@ const App = () => {
     setUsername(newUser);
     setQuota(newQuota);
     setShowLoginModal(false);
+    // role 由 fetchQuota 自动同步
   };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     localStorage.removeItem('quota');
+    localStorage.removeItem('role');
     setToken(null);
     setUsername('Guest');
     setQuota(0);
+    setRole('user');
     setCurrentPage('home');
   };
 
@@ -3096,7 +3872,15 @@ const App = () => {
       case 'video':
         return <VideoStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'create':
-        return <BasicCreateStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
+        return <BasicCreateStudioContent 
+          lang={lang} 
+          token={token} 
+          onNavigate={handleNavigate} 
+          isImmersive={isImmersive}
+          onToggleImmersive={toggleImmersive}
+        />;
+      case 'admin':
+        return role === 'admin' ? <AdminPanel token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
       case 'product':
       default:
         return <AIPhotoStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
@@ -3121,6 +3905,8 @@ const App = () => {
         isLoggedIn={!!token}
         onLogin={() => setShowLoginModal(true)}
         onLogout={handleLogout}
+        role={role}
+        isImmersive={isImmersive}
       >
         {renderPage()}
       </Layout>
@@ -3145,7 +3931,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
     { id: 'retouch', label: { zh: '智能修图', en: 'Retouch' } },
     { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } },
     { id: 'video', label: { zh: '视频生成', en: 'Video' } },
-    { id: 'create', label: { zh: '基础创作', en: 'Create' } }
+    { id: 'create', label: { zh: '自由创作', en: 'Create' } }
   ];
 
   const fetchAllHistory = async () => {
@@ -3240,7 +4026,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
                 <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent" onClick={() => setSelectedImage(item)}>
                   <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
                   <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                    ${item.type === 'retouch' ? 'bg-purple-500/30 text-purple-300' :
+                    ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
                       item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
                         item.type === 'create' ? 'bg-green-500/30 text-green-300' :
                           'bg-orange-500/30 text-orange-300'}`}>
@@ -3810,8 +4596,14 @@ const VideoStudioContent = ({ lang, token, onNavigate }) => (
   <VideoStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
 );
 
-const BasicCreateStudioContent = ({ lang, token, onNavigate }) => (
-  <BasicCreateStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
+const BasicCreateStudioContent = ({ lang, token, onNavigate, isImmersive, onToggleImmersive }) => (
+  <BasicCreateStudio
+    onBack={() => onNavigate('home')}
+    lang={lang}
+    setLang={() => { }}
+    isImmersive={isImmersive}
+    onToggleImmersive={onToggleImmersive}
+  />
 );
 
 // 用 TaskProvider 包裹整个应用

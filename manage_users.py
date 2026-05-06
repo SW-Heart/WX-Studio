@@ -75,6 +75,18 @@ def list_users():
             print(f"{user:<15} | {data['quota']:<10} | {role}")
     print("-" * 35 + "\n")
 
+def set_role(username, role):
+    db = load_db()
+    if username not in db["users"]:
+        print(f"❌ 用户 '{username}' 不存在")
+        return
+    if role not in ("admin", "user"):
+        print(f"❌ 角色只能是 admin 或 user")
+        return
+    db["users"][username]["role"] = role
+    save_db(db)
+    print(f"✅ 用户 {username} 角色已设置为: {role}")
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("\n🛠️  WX Studio 用户管理工具")
@@ -83,6 +95,8 @@ if __name__ == "__main__":
         print("  python3 manage_users.py add <用户名> <密码> <次数>")
         print("  python3 manage_users.py quota <用户名> <新次数>")
         print("  python3 manage_users.py passwd <用户名> <新密码>  <-- 重置密码用这个")
+        print("  python3 manage_users.py role <用户名> admin      <-- 设为管理员")
+        print("  python3 manage_users.py role <用户名> user       <-- 降为普通用户")
         sys.exit(1)
 
     action = sys.argv[1]
@@ -93,6 +107,8 @@ if __name__ == "__main__":
         update_quota(sys.argv[2], sys.argv[3])
     elif action == "passwd" and len(sys.argv) == 4:
         reset_password(sys.argv[2], sys.argv[3])
+    elif action == "role" and len(sys.argv) == 4:
+        set_role(sys.argv[2], sys.argv[3])
     elif action == "list":
         list_users()
     else:
