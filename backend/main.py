@@ -1300,19 +1300,19 @@ async def admin_dashboard(admin: str = Depends(get_admin_user)):
     history = db.get("history", {})
     
     total_users = len(users)
-    total_quota = sum(u.get("quota", 0) for u in users.values())
-    total_creations = sum(len(h) for h in history.values())
+    total_quota = sum((u.get("quota") or 0) for u in users.values() if isinstance(u, dict))
+    total_creations = sum(len(h or []) for h in history.values())
     
     # 今日新增用户
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
-    new_users_today = sum(1 for u in users.values() if u.get("created_at", 0) >= today_start)
+    new_users_today = sum(1 for u in users.values() if isinstance(u, dict) and (u.get("created_at") or 0) >= today_start)
     
     # 用户角色分布
-    admin_count = sum(1 for u in users.values() if u.get("role") == "admin")
+    admin_count = sum(1 for u in users.values() if isinstance(u, dict) and u.get("role") == "admin")
     user_count = total_users - admin_count
     
     # 有密码的用户数
-    users_with_password = sum(1 for u in users.values() if u.get("hash"))
+    users_with_password = sum(1 for u in users.values() if isinstance(u, dict) and u.get("hash"))
     
     # 近7天积分消耗（从 quota_logs 统计）
     week_ago = time.time() - 7 * 24 * 3600
@@ -1346,23 +1346,31 @@ async def admin_list_users(
     
     user_list = []
     for uname, udata in users.items():
+        if not isinstance(udata, dict):
+            continue
+            
+        phone = udata.get("phone") or ""
+        display_name = udata.get("display_name") or ""
+        created_at = udata.get("created_at") or 0
+        quota = udata.get("quota") or 0
+        
         # 搜索过滤
-        if search and search.lower() not in uname.lower() and search not in udata.get("phone", ""):
+        if search and search.lower() not in uname.lower() and search not in phone:
             continue
         user_list.append({
             "username": uname,
-            "phone": udata.get("phone", ""),
-            "display_name": udata.get("display_name", ""),
+            "phone": phone,
+            "display_name": display_name,
             "role": udata.get("role", "user"),
-            "quota": udata.get("quota", 0),
+            "quota": quota,
             "has_password": bool(udata.get("hash")),
             "disabled": udata.get("disabled", False),
-            "created_at": udata.get("created_at", 0),
-            "creation_count": len(history.get(uname, []))
+            "created_at": created_at,
+            "creation_count": len(history.get(uname) or [])
         })
     
     # 按创建时间倒序
-    user_list.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    user_list.sort(key=lambda x: x.get("created_at") or 0, reverse=True)
     
     total = len(user_list)
     start = (page - 1) * page_size
