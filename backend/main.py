@@ -1292,7 +1292,7 @@ async def user_set_password(request: UserSetPasswordRequest, u: str = Depends(ge
 # 🛡️ 管理后台 API
 # ==========================================
 
-@app.get("/admin/dashboard")
+@app.get("/api/admin/dashboard")
 async def admin_dashboard(admin: str = Depends(get_admin_user)):
     """管理后台仪表盘数据"""
     db = load_db()
@@ -1332,7 +1332,7 @@ async def admin_dashboard(admin: str = Depends(get_admin_user)):
         "recent_quota_added": recent_quota_added
     }
 
-@app.get("/admin/users")
+@app.get("/api/admin/users")
 async def admin_list_users(
     search: str = "",
     page: int = 1,
@@ -1383,7 +1383,7 @@ async def admin_list_users(
         "users": user_list[start:end]
     }
 
-@app.post("/admin/users/create")
+@app.post("/api/admin/users/create")
 async def admin_create_user(request: AdminCreateUserRequest, admin: str = Depends(get_admin_user)):
     """管理后台创建用户（随机生成账号密码）"""
     with db_lock:
@@ -1428,7 +1428,7 @@ async def admin_create_user(request: AdminCreateUserRequest, admin: str = Depend
         "message": "用户创建成功"
     }
 
-@app.post("/admin/users/{username}/quota")
+@app.post("/api/admin/users/{username}/quota")
 async def admin_update_quota(username: str, request: AdminQuotaRequest, admin: str = Depends(get_admin_user)):
     """管理后台发放/扣除积分"""
     with db_lock:
@@ -1467,7 +1467,7 @@ async def admin_update_quota(username: str, request: AdminQuotaRequest, admin: s
         "message": "积分更新成功"
     }
 
-@app.post("/admin/users/{username}/password")
+@app.post("/api/admin/users/{username}/password")
 async def admin_reset_password(username: str, request: AdminPasswordRequest, admin: str = Depends(get_admin_user)):
     """管理后台重置用户密码"""
     with db_lock:
@@ -1481,7 +1481,7 @@ async def admin_reset_password(username: str, request: AdminPasswordRequest, adm
     
     return {"message": f"用户 {username} 密码已重置"}
 
-@app.post("/admin/users/{username}/status")
+@app.post("/api/admin/users/{username}/status")
 async def admin_toggle_status(username: str, admin: str = Depends(get_admin_user)):
     """管理后台禁用/启用用户"""
     with db_lock:

@@ -28,7 +28,7 @@ const CreateUserModal = ({ isOpen, onClose, token, lang, onCreated }) => {
   const handleCreate = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/create`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ initial_quota: quota })
@@ -106,7 +106,7 @@ const QuotaModal = ({ isOpen, onClose, token, lang, targetUser, onDone }) => {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${targetUser}/quota`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/${targetUser}/quota`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ amount, reason })
@@ -165,7 +165,7 @@ const AdminPanel = ({ token, lang }) => {
 
   const fetchDashboard = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/dashboard`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE_URL}/api/admin/dashboard`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) setDashboard(await res.json());
     } catch (err) { console.error(err); }
   };
@@ -174,7 +174,7 @@ const AdminPanel = ({ token, lang }) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ search, page: page.toString(), page_size: pageSize.toString() });
-      const res = await fetch(`${API_BASE_URL}/admin/users?${params}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      const res = await fetch(`${API_BASE_URL}/api/admin/users?${params}`, { headers: { 'Authorization': `Bearer ${token}` } });
       if (res.ok) {
         const data = await res.json();
         setUsers(data.users);
@@ -193,7 +193,7 @@ const AdminPanel = ({ token, lang }) => {
     const pwd = prompt(lang === 'zh' ? `为 ${username} 设置新密码：` : `Set new password for ${username}:`);
     if (!pwd) return;
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${username}/password`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/${username}/password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ new_password: pwd })
@@ -205,7 +205,7 @@ const AdminPanel = ({ token, lang }) => {
 
   const handleToggleStatus = async (username) => {
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/users/${username}/status`, {
+      const res = await fetch(`${API_BASE_URL}/api/admin/users/${username}/status`, {
         method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) fetchUsers();
