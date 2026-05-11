@@ -11,6 +11,7 @@ import hashlib
 import random
 import string
 import socket
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3.connection import HTTPConnection
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,52 +53,6 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 
 TT_API_KEY = os.getenv("TT_API_KEY")
 TUZI_API_KEY = os.getenv("TUZI_API_KEY")
-TT_ENDPOINT = "https://api.ttapi.io/openai/gpt/generations"
-TT_FETCH_ENDPOINT = "https://api.ttapi.io/openai/gpt/fetch"
-TUZI_VIDEO_ENDPOINT = "https://api.tu-zi.com/v1/videos"
-
-def poll_tuzi_video_result(job_id: str, headers: dict, timeout: int = 600) -> str:
-    start_time = time.time()
-    while True:
-        if time.time() - start_time > timeout:
-            raise Exception("Timeout waiting for video generation")
-        try:
-            resp = requests.get(f"{TUZI_VIDEO_ENDPOINT}/{job_id}", headers=headers, timeout=10, proxies={"http": None, "https": None})
-            if resp.status_code == 200:
-                res_json = resp.json()
-                status = res_json.get("status")
-                if status == "completed":
-                    return res_json.get("video_url")
-                elif status in ["failed", "error"]:
-                    print(f"Video generation failed: {res_json}")
-                    raise RuntimeError("视频生成失败，请稍后再试")
-        except RuntimeError:
-            raise
-        except Exception:
-            pass
-        time.sleep(5)
-
-def poll_ttapi_result(job_id: str, headers: dict, timeout: int = 300) -> str:
-    start_time = time.time()
-    while True:
-        if time.time() - start_time > timeout:
-            raise Exception("Timeout waiting for image generation")
-        try:
-            resp = requests.get(f"{TT_FETCH_ENDPOINT}?jobId={job_id}", headers=headers, timeout=10, proxies={"http": None, "https": None})
-            if resp.status_code == 200:
-                res_json = resp.json()
-                status_code = res_json.get("status")
-                if status_code == "SUCCESS":
-                    return res_json.get("data", {}).get("imageUrl")
-                elif status_code == "FAILED":
-                    print(f"Generation failed: {res_json.get('message', 'Unknown error')}")
-                    raise RuntimeError("图片生成失败，请稍后再试")
-            # ON_QUEUE or others -> continue polling
-        except RuntimeError:
-            raise # 确保生成失败的异常直接抛出
-        except Exception:
-            pass # 忽略网络抖动或 JSON 解析错误，继续轮询
-        time.sleep(3)
 
 # 使用脚本所在目录的绝对路径，确保无论从哪里启动都能找到数据文件
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -205,31 +160,6 @@ def load_db():
 def save_db(data):
     if os.path.exists(DB_FILE): shutil.copy(DB_FILE, f"{DB_FILE}.bak")
     with open(DB_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
-
-def load_ai_config():
-    config_path = os.path.join(BACKEND_DIR, "ai_config.json")
-    try:
-        with open(config_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except:
-        return {
-            "models": {
-                "gpt-image-2": {"cost": 1},
-                "veo3.1-4k": {"cost": 5}
-            },
-            "endpoints": {
-                "generate": {"model": "gpt-image-2", "cost": 1},
-                "retouch": {"model": "gpt-image-2", "cost": 1},
-                "portrait": {"model": "gpt-image-2", "cost": 1},
-                "create": {
-                    "default_model": "gpt-image-2", 
-                    "cost_per_image": 1, 
-                    "4k_pixel_threshold": 4500000, 
-                    "4k_cost": 2
-                },
-                "video": {"model": "veo3.1-4k", "cost": 5}
-            }
-        }
 
 def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
 def create_access_token(data):
@@ -482,9 +412,15 @@ def generate_image(
     image_urls_json: str = Form(...), 
     username: str = Depends(get_current_user)
 ):
-    ai_config = load_ai_config()
-    model = ai_config.get("endpoints", {}).get("generate", {}).get("model", "gpt-image-2")
-    cost = ai_config.get("endpoints", {}).get("generate", {}).get("cost", 1)
+    try:
+        from backend.api_gateway.pricing import resolve_model_cost
+        from backend.api_gateway.service import run_model_raw, ServiceError
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost
+        from api_gateway.service import run_model_raw, ServiceError
+
+    model = "gpt-image-2"
+    cost = resolve_model_cost(model, default=1)
 
     # 预扣分（原子操作，防止并发超用）
     remaining_quota = deduct_quota_atomic(username, cost)
@@ -495,54 +431,40 @@ def generate_image(
         refund_quota(username, cost)  # 参数错误，回滚
         raise HTTPException(400, "图片列表格式错误")
 
-    headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
-    payload = {
-        "prompt": f"{prompt}, {style} style, 8k",
-        "model": model,
-        "referImages": image_list
-    }
-
+    # 通过 API Gateway 调用（handler 已扣分，这里用 run_model_raw 不重复扣）
     try:
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
-        
-        if resp.status_code != 200:
-            print(f"API Error: {resp.text}")
-            refund_quota(username, cost)  # API调用失败，回滚
-            raise HTTPException(500, "AI生成服务暂时不可用，请稍后再试")
+        full_prompt = f"{prompt}, {style} style, 8k"
+        result = run_model_raw(
+            model_id=model,
+            prompt=full_prompt,
+            image=image_list,
+            username=username,
+            source="product:/api/generate",
+            mirror_to_oss=True,
+        )
+        result_url = (result.get("images") or [None])[0]
+        if not result_url:
+            raise RuntimeError("未获取到生成图片")
 
-        res_json = resp.json()
-        if res_json.get("status") != "SUCCESS":
-            refund_quota(username, cost)  # AI返回失败，回滚
-            print(f"API Failed: {res_json.get('message')}")
-            raise HTTPException(500, "AI生成失败，请调整提示词或稍后再试")
-
-        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
-        result_url = poll_ttapi_result(job_id, headers)
-        
-        # 转存 OSS
-        try:
-            r_gen = requests.get(result_url, timeout=60)
-            if r_gen.status_code == 200:
-                result_url = upload_bytes_to_oss(r_gen.content, ".png")
-        except Exception as e:
-            print(f"Warning: OSS Save Failed: {e}")
-
-        # 保存历史记录（配额已在开头扣除，无需再扣）
-        record = {"id": str(uuid.uuid4()), "image": result_url, "prompt": prompt, "timestamp": datetime.now().timestamp(), "type": "product"}
-        
+        record = {"id": str(uuid.uuid4()), "image": result_url, "prompt": prompt,
+                  "timestamp": datetime.now().timestamp(), "type": "product"}
         with db_lock:
             db = load_db()
-            if username not in db["history"]: db["history"][username] = []
+            if username not in db["history"]:
+                db["history"][username] = []
             db["history"][username].append(record)
             save_db(db)
 
-        return {"status": "SUCCESS", "data": {"image_url": result_url, "history_item": record, "remaining_quota": remaining_quota}}
-
+        return {"status": "SUCCESS", "data": {"image_url": result_url, "history_item": record,
+                                              "remaining_quota": remaining_quota}}
+    except ServiceError as se:
+        refund_quota(username, cost)
+        raise HTTPException(se.status_code, str(se))
     except HTTPException:
-        raise  # 已处理的异常直接抛出
+        raise
     except Exception as e:
         print(f"Gen Exception: {str(e)}")
-        refund_quota(username, cost)  # 未知错误，回滚
+        refund_quota(username, cost)
         raise HTTPException(500, "生成过程发生未知错误，请稍后再试")
 
 # --- 智能修图提示词模版 ---
@@ -608,9 +530,15 @@ async def retouch_image(
     # 扣除配额 (每张图扣1点)
     # 若 deduct_quota_atomic 定义为 def deduct_quota_atomic(username, amount=1), 则传2个参或1个均可
     # 这里假设它接受 amount 参数
-    ai_config = load_ai_config()
-    model = ai_config.get("endpoints", {}).get("retouch", {}).get("model", "gpt-image-2")
-    cost = ai_config.get("endpoints", {}).get("retouch", {}).get("cost", 1)
+    try:
+        from backend.api_gateway.pricing import resolve_model_cost
+        from backend.api_gateway.service import run_model_raw, ServiceError
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost
+        from api_gateway.service import run_model_raw, ServiceError
+
+    model = "gpt-image-2"
+    cost = resolve_model_cost(model, default=1)
 
     try:
         remaining_quota = deduct_quota_atomic(username, cost)
@@ -625,71 +553,53 @@ async def retouch_image(
     full_prompt = f"{base_prompt} {strength_prompt} {user_suggestion}"
 
     image_list = [image_url]
-    
-    # 限制图片大小
-    image_size = "1K"  # 固定大小以加快速度
 
-    headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
-    payload = {
-        "prompt": full_prompt,
-        "model": model,
-        "referImages": image_list
-    }
-
+    # 通过 API Gateway 调用
     try:
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
-        
-        if resp.status_code != 200:
-            print(f"API Error: {resp.text}")
-            refund_quota(username, cost)
-            raise HTTPException(500, "AI修图服务暂时不可用，请稍后再试")
+        result = run_model_raw(
+            model_id=model,
+            prompt=full_prompt,
+            image=image_list,
+            username=username,
+            source="product:/api/retouch",
+            mirror_to_oss=False,  # 保留原逻辑：异步后台转存
+        )
+        result_url = (result.get("images") or [None])[0]
+        if not result_url:
+            raise RuntimeError("未获取到生成图片")
 
-        res_json = resp.json()
-        if res_json.get("status") != "SUCCESS":
-            refund_quota(username, cost)
-            print(f"API Failed: {res_json.get('message')}")
-            raise HTTPException(500, "AI修图失败，请稍后再试")
-
-        # 获取临时 URL
-        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
-        result_url = poll_ttapi_result(job_id, headers)
         record_id = str(uuid.uuid4())
-        
-        # 记录历史 (先存临时 URL)
         record = {
-            "id": record_id, 
-            "image": result_url, 
-            "prompt": f"[{STRENGTH_MAPPING[strength]}] {mode}", 
-            "timestamp": datetime.now().timestamp(), 
+            "id": record_id,
+            "image": result_url,
+            "prompt": f"[{STRENGTH_MAPPING[strength]}] {mode}",
+            "timestamp": datetime.now().timestamp(),
             "type": "retouch"
         }
-        
         with db_lock:
             db = load_db()
-            if username not in db["history"]: db["history"][username] = []
-            db["history"][username].insert(0, record) # 插到最前
+            if username not in db["history"]:
+                db["history"][username] = []
+            db["history"][username].insert(0, record)
             save_db(db)
 
-        # 添加后台任务：转存到 OSS 并更新 DB
         background_tasks.add_task(background_save_to_oss, username, record_id, result_url)
 
-        # 立即返回结果，无需等待 OSS 上传
         return {
-            "status": "SUCCESS", 
+            "status": "SUCCESS",
             "data": {
-                "image_url": result_url, 
-                "history_item": record, 
+                "image_url": result_url,
+                "history_item": record,
                 "remaining_quota": remaining_quota
             }
         }
-
+    except ServiceError as se:
+        refund_quota(username, cost)
+        raise HTTPException(se.status_code, str(se))
     except HTTPException:
         raise
     except Exception as e:
         print(f"Gen Exception: {str(e)}")
-        # refund_quota(username) # 配额已扣除，若生成失败可退还，此处保留之前的逻辑
-        # 注意：如果是 OSS 上传失败，这里不会捕获，因为那是后台任务
-        # 如果是请求 API 失败，会捕获并退还
         refund_quota(username, cost)
         raise HTTPException(500, "修图过程发生未知错误，请稍后再试")
     
@@ -705,61 +615,46 @@ def portrait_generate(
     username: str = Depends(get_current_user)
 ):
     """人像写真接口"""
-    ai_config = load_ai_config()
-    model = ai_config.get("endpoints", {}).get("portrait", {}).get("model", "gpt-image-2")
-    cost = ai_config.get("endpoints", {}).get("portrait", {}).get("cost", 1)
-
-    # 预扣分（原子操作，防止并发超用）
-    remaining_quota = deduct_quota_atomic(username, cost)
-    
-    headers = { "TT-API-KEY": TT_API_KEY, "Content-Type": "application/json" }
-    payload = {
-        "prompt": PORTRAIT_PROMPT,
-        "model": model,
-        "referImages": [subject_url, target_url]
-    }
-    
     try:
-        resp = requests.post(TT_ENDPOINT, headers=headers, json=payload, timeout=30, proxies={"http": None, "https": None})
-        
-        if resp.status_code != 200:
-            print(f"Portrait API Error: {resp.text}")
-            refund_quota(username, cost)
-            raise HTTPException(500, "人像写真服务暂时不可用，请稍后再试")
-        
-        res_json = resp.json()
-        if res_json.get("status") != "SUCCESS":
-            refund_quota(username, cost)
-            print(f"Portrait API Failed: {res_json.get('message')}")
-            raise HTTPException(500, "人像写真生成失败，请稍后再试")
-        
-        job_id = res_json.get("data", {}).get("jobId") or res_json.get("data", {}).get("job_id")
-        result_url = poll_ttapi_result(job_id, headers)
-        
-        # 转存 OSS
-        try:
-            r_gen = requests.get(result_url, timeout=60)
-            if r_gen.status_code == 200:
-                result_url = upload_bytes_to_oss(r_gen.content, ".png")
-        except Exception as e:
-            print(f"Warning: OSS Save Failed: {e}")
-        
-        # 保存历史记录
+        from backend.api_gateway.pricing import resolve_model_cost
+        from backend.api_gateway.service import run_model_raw, ServiceError
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost
+        from api_gateway.service import run_model_raw, ServiceError
+
+    model = "gpt-image-2"
+    cost = resolve_model_cost(model, default=1)
+
+    # 预扣分
+    remaining_quota = deduct_quota_atomic(username, cost)
+
+    try:
+        result = run_model_raw(
+            model_id=model,
+            prompt=PORTRAIT_PROMPT,
+            image=[subject_url, target_url],
+            username=username,
+            source="product:/api/portrait",
+            mirror_to_oss=True,
+        )
+        result_url = (result.get("images") or [None])[0]
+        if not result_url:
+            raise RuntimeError("未获取到生成图片")
+
         record = {
             "id": str(uuid.uuid4()),
             "image": result_url,
-            "prompt": f"[人像写真] {quality}",
+            "prompt": "[人像写真]",
             "timestamp": datetime.now().timestamp(),
             "type": "portrait"
         }
-        
         with db_lock:
             db = load_db()
             if username not in db["history"]:
                 db["history"][username] = []
             db["history"][username].append(record)
             save_db(db)
-        
+
         return {
             "status": "SUCCESS",
             "data": {
@@ -768,7 +663,9 @@ def portrait_generate(
                 "remaining_quota": remaining_quota
             }
         }
-    
+    except ServiceError as se:
+        refund_quota(username, cost)
+        raise HTTPException(se.status_code, str(se))
     except HTTPException:
         raise
     except Exception as e:
@@ -800,30 +697,23 @@ def basic_create(
             image_list = []
     except:
         image_list = []
-        
-    ai_config = load_ai_config()
-    
-    # 默认模型基础价格
-    model_config = ai_config.get("models", {}).get(model, {})
-    cost_per_item = model_config.get("cost", ai_config.get("endpoints", {}).get("create", {}).get("cost_per_image", 1))
-    
-    # 检查尺寸是否达到 4K 级别（根据像素数）
-    if size and "x" in size:
-        try:
-            w, h = map(int, size.split("x"))
-            pixels = w * h
-            threshold = ai_config.get("endpoints", {}).get("create", {}).get("4k_pixel_threshold", 4500000)
-            if pixels > threshold:
-                cost_per_item = ai_config.get("endpoints", {}).get("create", {}).get("4k_cost", 2)
-        except Exception:
-            pass
-    
+
+    # 计费：走 registry 的 "gpt-image-2-via-tuzi" 定价（tiered_pixels）
+    try:
+        from backend.api_gateway.pricing import resolve_model_cost
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost
+
+    # resolve 会按 tiered_pixels 规则根据 size 选 1 或 2 积分
+    cost_per_item = resolve_model_cost("gpt-image-2-via-tuzi", n=1, size=size, default=1)
     total_cost = cost_per_item * n
     
     # 预扣分 (按照生成张数扣除积分)
     remaining_quota = deduct_quota_atomic(username, amount=total_cost)
     
     task_id = str(uuid.uuid4())
+    # batch_id: 同一批次 N 张共享的逻辑 ID，供前端把 N 个占位 task 与服务端返回的 N 张对齐
+    batch_id = str(uuid.uuid4())
     create_type = "text2img" if len(image_list) == 0 else f"img2img({len(image_list)})"
     
     # 立即写入历史记录（状态为 ON_QUEUE）
@@ -838,7 +728,9 @@ def basic_create(
             "prompt": f"[{create_type}] {prompt[:50]}{'...' if len(prompt) > 50 else ''}",
             "timestamp": datetime.now().timestamp(),
             "type": "create",
-            "status": "ON_QUEUE"
+            "status": "ON_QUEUE",
+            "batch_id": batch_id,
+            "batch_total": n,
         })
         save_db(db)
     
@@ -854,12 +746,14 @@ def basic_create(
         quality=quality,
         size=size,
         amount=total_cost,
+        batch_id=batch_id,
     )
     
     return {
         "status": "SUCCESS",
         "data": {
             "taskId": task_id,
+            "batchId": batch_id,
             "remaining_quota": remaining_quota
         }
     }
@@ -874,148 +768,113 @@ def background_generate_image(
     quality: str,
     size: str,
     amount: int,
+    batch_id: str = "",
 ):
-    """后台线程执行图片生成，不受 HTTP 超时限制
-    
-    API 仅支持以下参数（参考官方文档）：
-    - model: 必需 (gpt-image-2, gpt-image-1.5, gpt-image-1, gpt-4o-image-vip, gpt-4o-image)
-    - prompt: 必需，最大5000字符
-    - image: 可选，支持 url 和 base64 传图
-    - size: 可选，支持任意分辨率 (如 "2048x2048") 或比例枚举 (如 "1:1")
-    
-    注意：API 不支持 n 参数，多图生成通过循环多次请求实现。
+    """后台线程执行图片生成（Tuzi 同步通道）。
+
+    走 API Gateway 的 run_model_raw：每次产一张，失败的按数量退款。
+    这里 model 参数是前端传入的 upstream_model；我们固定使用注册表中的
+    "gpt-image-2-via-tuzi" adapter 条目，用 config_override 切换 upstream_model。
     """
-    result_urls = None
-    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
-    headers = { "Authorization": f"Bearer {key}", "Content-Type": "application/json" }
-    
-    # 构造符合官方文档的 payload（仅包含 model, prompt, image, size）
-    payload = {
-        "prompt": prompt,
-        "model": model
-    }
-
-    if size:
-        payload["size"] = size
-    if image_list:
-        payload["image"] = image_list
-
     try:
-        actual_n = max(1, n or 1)
-        print(f"🎨 后台图片生成开始... 任务 ID: {task_id}, 用户: {username}, 需生成 {actual_n} 张, payload={payload}")
-        
-        raw_urls = []
-        failed_count = 0
-        
-        for i in range(actual_n):
-            try:
-                if i > 0:
-                    print(f"  📸 正在生成第 {i+1}/{actual_n} 张...")
-                
-                print(f"  ⏳ 第 {i+1} 张请求已发出，等待 API 返回...")
-                start_time = time.time()
-                
-                resp = requests.post(
-                    "https://api.tu-zi.com/v1/images/generations",
-                    headers=headers,
-                    json=payload,
-                    timeout=600,
-                    proxies={"http": None, "https": None}
-                )
-                
-                elapsed = time.time() - start_time
-                print(f"  📡 第 {i+1} 张 API 响应耗时: {elapsed:.1f}s, HTTP {resp.status_code}")
-                
-                if resp.status_code != 200:
-                    print(f"  ❌ 第 {i+1} 张生成失败 (HTTP {resp.status_code}): {resp.text}")
-                    failed_count += 1
-                    continue
-                
-                res_json = resp.json()
-                data_list = res_json.get("data", [])
-                if not data_list or not isinstance(data_list, list) or not data_list[0].get("url"):
-                    print(f"  ❌ 第 {i+1} 张响应异常: {res_json}")
-                    failed_count += 1
-                    continue
-                
-                url = data_list[0].get("url")
-                if url:
-                    raw_urls.append(url)
-                    print(f"  ✅ 第 {i+1} 张生成成功 ({elapsed:.1f}s)")
-                else:
-                    failed_count += 1
-                    
-            except Exception as req_err:
-                print(f"  ❌ 第 {i+1} 张请求异常: {str(req_err)}")
-                failed_count += 1
-        
-        if not raw_urls:
-            raise RuntimeError(f"所有 {actual_n} 张图片均生成失败")
-        
-        # 转存 OSS
-        final_urls = []
-        for url in raw_urls:
-            try:
-                r_gen = requests.get(url, timeout=60)
-                if r_gen.status_code == 200:
-                    final_urls.append(upload_bytes_to_oss(r_gen.content, ".png"))
-                else:
-                    final_urls.append(url)
-            except Exception as e:
-                print(f"Warning: OSS Save Failed: {e}")
-                final_urls.append(url)
-        
-        result_urls = final_urls
-        
-        # 部分失败时退还对应积分
-        if failed_count > 0 and amount > 0:
-            refund_per_image = amount // actual_n
-            refund_amount = refund_per_image * failed_count
-            if refund_amount > 0:
-                refund_quota(username, amount=refund_amount)
-                print(f"  💰 {failed_count} 张失败，已退还 {refund_amount} 积分")
-        
-        print(f"✅ 图片生成完成，任务 ID: {task_id}，成功 {len(result_urls)}/{actual_n} 张")
-            
-    except Exception as e:
-        print(f"❌ 图片生成出错 (任务 {task_id}): {str(e)}")
-        import traceback
-        traceback.print_exc()
+        try:
+            from backend.api_gateway.service import run_model_raw, ServiceError
+        except ImportError:
+            from api_gateway.service import run_model_raw, ServiceError
+    except Exception as imp_err:
+        print(f"❌ 导入 API Gateway 失败: {imp_err}")
         refund_quota(username, amount=amount)
-    finally:
-        # 更新数据库中的任务状态
-        with db_lock:
-            db = load_db()
-            if username in db.get("history", {}):
-                # 找到原始任务
-                original_item = None
-                for item in db["history"][username]:
-                    if item["id"] == task_id:
-                        original_item = item
-                        break
-                
-                if original_item:
-                    if result_urls:
-                        # 第一张图更新到原任务
-                        original_item["status"] = "SUCCESS"
-                        original_item["image"] = result_urls[0]
-                        original_item["image_urls"] = result_urls
-                        
-                        # 如果有更多图，创建新的记录
-                        if len(result_urls) > 1:
-                            for extra_url in result_urls[1:]:
-                                extra_record = original_item.copy()
-                                extra_record["id"] = str(uuid.uuid4())
-                                extra_record["image"] = extra_url
-                                extra_record["image_urls"] = [extra_url]
-                                # 稍微偏移一下时间戳，保证排序
-                                extra_record["timestamp"] += 0.001 
-                                db["history"][username].append(extra_record)
-                    else:
-                        # 只有在没有 result_urls 的情况下才标记失败
-                        # 如果是 catch 到异常 result_urls 会是 None
-                        original_item["status"] = "FAILED"
-            save_db(db)
+        return
+
+    # nano-banana-2 系列的特殊映射（Tuzi 上游接 gemini-3.1 + quality）
+    upstream_model = model
+    upstream_quality = None
+    if (model or "").startswith("nano-banana-2"):
+        upstream_quality = "1k"
+        if model == "nano-banana-2-2k":
+            upstream_quality = "2k"
+        elif model == "nano-banana-2-4k":
+            upstream_quality = "4k"
+        upstream_model = "gemini-3.1-flash-image-preview"
+
+    actual_n = max(1, min(10, int(n or 1)))
+    cost_per = amount // actual_n if actual_n else amount
+    print(f"🎨 [/api/create] 任务 {task_id[:8]} user={username} n={actual_n} "
+          f"upstream_model={upstream_model} size={size}")
+
+    def _one(i: int) -> str:
+        if i > 0:
+            time.sleep(random.uniform(1.0, 2.0) * i)
+        res = run_model_raw(
+            model_id="gpt-image-2-via-tuzi",
+            prompt=prompt,
+            image=image_list or [],
+            size=size if size else None,
+            n=1,
+            quality=upstream_quality or quality,
+            username=username,
+            source="product:/api/create",
+            mirror_to_oss=True,
+            config_override={"upstream_model": upstream_model, "concurrent_n": False},
+        )
+        return (res.get("images") or [None])[0]
+
+    result_urls: list = []
+    failed = 0
+    with ThreadPoolExecutor(max_workers=actual_n) as pool:
+        futures = [pool.submit(_one, i) for i in range(actual_n)]
+        for fut in as_completed(futures):
+            try:
+                url = fut.result()
+                if url:
+                    result_urls.append(url)
+                else:
+                    failed += 1
+            except Exception as e:
+                print(f"  ❌ single gen failed: {e}")
+                failed += 1
+
+    # 部分失败按比例退
+    if failed > 0 and actual_n:
+        refund_amount = cost_per * failed
+        if refund_amount > 0:
+            refund_quota(username, amount=refund_amount)
+            print(f"  💰 {failed}/{actual_n} 张失败，退回 {refund_amount} 积分")
+
+    if not result_urls and failed == actual_n:
+        # 全失败：剩余款额也退（实际上已经按张数退完，此处无剩余）
+        pass
+
+    # 写回 DB
+    with db_lock:
+        db = load_db()
+        if username in db.get("history", {}):
+            original_item = None
+            for item in db["history"][username]:
+                if item["id"] == task_id:
+                    original_item = item
+                    break
+            if original_item:
+                if result_urls:
+                    original_item["status"] = "SUCCESS"
+                    original_item["image"] = result_urls[0]
+                    original_item["image_urls"] = result_urls
+                    original_item["batch_id"] = batch_id
+                    original_item["batch_index"] = 0
+                    original_item["batch_total"] = max(1, actual_n)
+
+                    for idx, extra_url in enumerate(result_urls[1:], start=1):
+                        extra_record = original_item.copy()
+                        extra_record["id"] = str(uuid.uuid4())
+                        extra_record["image"] = extra_url
+                        extra_record["image_urls"] = [extra_url]
+                        extra_record["batch_index"] = idx
+                        extra_record["timestamp"] += 0.001 * idx
+                        db["history"][username].append(extra_record)
+                else:
+                    original_item["status"] = "FAILED"
+                    original_item["batch_id"] = batch_id
+        save_db(db)
 
 @app.get("/api/create/status/{task_id}")
 def create_task_status(task_id: str, username: str = Depends(get_current_user)):
@@ -1034,6 +893,629 @@ def create_task_status(task_id: str, username: str = Depends(get_current_user)):
     raise HTTPException(404, "任务不存在")
 
 # ==========================================
+# 🎨 GPT Image 2 Pro（TTAPI 非官转异步通道，upstream: gpt-image-2-plus）
+# ------------------------------------------
+# 独立路径 /api/create/pro，与现有 /api/create（Tuzi）完全隔离：
+# - Endpoint: https://api.ttapi.io/openai/gpt/generations（同 TT_ENDPOINT，异步 jobId + fetch 轮询）
+# - Auth:     TT-API-KEY
+# - 计费:     从 registry 读（默认 per_image 2 积分）
+# - n 支持 1-10，后端并发下发 n 次单张请求（非官转通道不支持原生 n）
+# ==========================================
+
+
+def _pro_upstream_model() -> str:
+    """从 registry 读取 gpt-image-2-pro 的上游模型名"""
+    try:
+        from backend.api_gateway.pricing import resolve_model_config
+    except ImportError:
+        from api_gateway.pricing import resolve_model_config
+    cfg = resolve_model_config("gpt-image-2-pro") or {}
+    return cfg.get("upstream_model") or "gpt-image-2-plus"
+
+
+def _map_pro_error_to_user_message(raw_msg: str) -> tuple:
+    """
+    把 TT-API 上游错误映射为用户友好中文文案。
+    返回 (http_status, user_message)。对外绝不暴露 provider 名 / req_id / 英文原文。
+    """
+    import re
+    msg = raw_msg or ""
+    low = msg.lower()
+
+    # 1) 内容安全拦截
+    if "safety system" in low or "safety_violations" in low or "content_policy" in low or "moderation" in low:
+        cat_map = {
+            "sexual": "涉性敏感",
+            "violence": "暴力",
+            "hate": "仇恨",
+            "self-harm": "自残",
+            "self_harm": "自残",
+            "minor": "未成年人相关",
+            "minors": "未成年人相关",
+            "illicit": "违法",
+            "harassment": "骚扰",
+        }
+        m = re.search(r"safety_violations=\[([^\]]+)\]", msg)
+        if m:
+            cats = [c.strip() for c in m.group(1).split(",") if c.strip()]
+            readable = "、".join(cat_map.get(c, "敏感") for c in cats) or "敏感"
+            return 400, f"描述含 {readable} 内容，已被安全系统拦截，请调整描述后再试"
+        return 400, "描述包含敏感内容，已被安全系统拦截，请调整描述后再试"
+
+    # 2) 参数相关
+    if "size" in low and ("invalid" in low or "not supported" in low or "unsupported" in low):
+        return 400, "所选尺寸不支持，请调整宽高后再试"
+    if "unknown parameter" in low or "invalid parameter" in low:
+        return 400, "生成参数不合法，请换一组设置后再试"
+    if "prompt" in low and ("too long" in low or "exceed" in low or "maximum" in low):
+        return 400, "描述过长，请精简后再试"
+    if "image" in low and ("too large" in low or "exceeds" in low):
+        return 400, "参考图过大或无效，请更换图片后再试"
+
+    # 3) 网关 / 超时
+    if "504" in low or "gateway time-out" in low or "gateway timeout" in low:
+        return 504, "图像生成服务繁忙，请稍后再试"
+    if "502" in low or "bad gateway" in low:
+        return 502, "图像生成服务暂时不稳定，请稍后再试"
+    if "503" in low or "service unavailable" in low:
+        return 503, "图像生成服务暂时不可用，请稍后再试"
+
+    # 4) 认证 / 配额
+    if "unauthorized" in low or "invalid api key" in low or "401" in low:
+        return 503, "图像服务暂时不可用，请稍后再试"
+    if "insufficient" in low and "quota" in low:
+        return 503, "图像服务额度不足，请稍后再试"
+
+    # 5) 限流
+    if "rate limit" in low or "too many requests" in low or "429" in low:
+        return 429, "请求过于频繁，请稍后再试"
+
+    # 6) 超时 / 网络抖动
+    if "timeout" in low or "timed out" in low:
+        return 504, "生成超时，请稍后再试"
+    if "remotedisconnected" in low or ("connection" in low and "closed" in low):
+        return 502, "网络波动导致生成失败，请稍后再试"
+
+    # 7) 非 JSON / 兜底 5xx
+    if "非 JSON" in msg or "returned http" in low or re.search(r"http\s*5\d\d", low):
+        return 502, "图像服务响应异常，请稍后再试"
+
+    return 500, "生成失败，请稍后再试"
+
+
+def _pro_call_single(prompt: str, image_list: list, size: str, upstream_model: str) -> str:
+    """
+    发一次 gpt-image-2-plus 生图（通过 API Gateway 的 ttapi-image adapter）。
+    成功返回 image url；失败抛 RuntimeError。
+    """
+    try:
+        from backend.api_gateway.service import run_model_raw, ServiceError
+    except ImportError:
+        from api_gateway.service import run_model_raw, ServiceError
+    try:
+        res = run_model_raw(
+            model_id="gpt-image-2-pro",
+            prompt=prompt,
+            image=list(image_list)[:16] if image_list else [],
+            size=size if size and size != "auto" else None,
+            n=1,
+            source="product:/api/create/pro",
+            mirror_to_oss=False,  # handler 自己转存（保持原有逻辑）
+            config_override={"upstream_model": upstream_model},
+        )
+    except ServiceError as se:
+        raise RuntimeError(str(se))
+    url = (res.get("images") or [None])[0]
+    if not url:
+        raise RuntimeError("未获取到生成图片")
+    return url
+
+
+@app.post("/api/create/pro")
+def basic_create_pro(
+    background_tasks: BackgroundTasks,
+    prompt: str = Form(...),
+    image_urls_json: str = Form("[]"),
+    size: str = Form("auto"),
+    n: int = Form(1),
+    username: str = Depends(get_current_user),
+):
+    """
+    GPT Image 2 Pro（TTAPI 非官转异步 gpt-image-2-plus）
+    - 固定 2 积分/张，总扣 n * 2
+    - n 支持 1-10，后台并发 n 次 TTAPI submit+poll
+    - 入口立即返回 taskId/batchId，前端走 /api/create/status 轮询，和 /api/create 对齐
+    """
+    if not (1 <= n <= 10):
+        raise HTTPException(400, "生成数量 n 必须介于 1 和 10 之间")
+
+    try:
+        image_list = json.loads(image_urls_json) if image_urls_json else []
+        if not isinstance(image_list, list):
+            image_list = []
+    except Exception:
+        image_list = []
+
+    if size and size != "auto" and "x" not in size:
+        size = "auto"
+
+    try:
+        from backend.api_gateway.pricing import resolve_model_cost
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost
+
+    upstream_model = _pro_upstream_model()
+    cost_per = resolve_model_cost("gpt-image-2-pro", n=1, default=2)
+    min_quota = cost_per  # 单张所需积分作为入口门槛
+    total_cost = cost_per * n
+
+    # 入口门槛
+    with db_lock:
+        db = load_db()
+        user = db["users"].get(username)
+        if not user:
+            raise HTTPException(401, "用户异常")
+        if user.get("quota", 0) < max(min_quota, total_cost):
+            raise HTTPException(403, f"积分不足，本次需要 {total_cost} 积分")
+
+    # 预扣总积分
+    remaining_after = deduct_quota_atomic(username, amount=total_cost)
+
+    task_id = str(uuid.uuid4())
+    batch_id = str(uuid.uuid4())
+    create_type = "text2img-pro" if not image_list else f"img2img-pro({len(image_list)})"
+
+    # 立即写 ON_QUEUE 占位记录（和 /api/create 对齐）
+    with db_lock:
+        db = load_db()
+        if username not in db["history"]:
+            db["history"][username] = []
+        db["history"][username].append({
+            "id": task_id,
+            "image": None,
+            "image_urls": [],
+            "prompt": f"[{create_type}] {prompt[:50]}{'...' if len(prompt) > 50 else ''}",
+            "timestamp": datetime.now().timestamp(),
+            "type": "create",
+            "status": "ON_QUEUE",
+            "model": "gpt-image-2-pro",
+            "batch_id": batch_id,
+            "batch_total": n,
+        })
+        save_db(db)
+
+    # 提交后台任务：并发 n 次 submit+poll，写回 SUCCESS/FAILED
+    background_tasks.add_task(
+        background_generate_pro,
+        task_id=task_id,
+        username=username,
+        prompt=prompt,
+        image_list=image_list,
+        upstream_model=upstream_model,
+        size=size,
+        n=n,
+        amount=total_cost,
+        cost_per=cost_per,
+        batch_id=batch_id,
+    )
+
+    # 立即返回（不等生成），前端拿 taskId/batchId 去 /api/create/status 轮询
+    return {
+        "status": "SUCCESS",
+        "data": {
+            "taskId": task_id,
+            "batchId": batch_id,
+            "remaining_quota": remaining_after,
+        },
+    }
+
+
+def background_generate_pro(
+    task_id: str,
+    username: str,
+    prompt: str,
+    image_list: list,
+    upstream_model: str,
+    size: str,
+    n: int,
+    amount: int,
+    cost_per: int,
+    batch_id: str,
+):
+    """
+    后台并发跑 n 次 TTAPI gpt-image-2-plus（submit + poll）。
+    完成后按 /api/create 的 batch 规范写回 DB：
+    - 第 0 张写到原 task_id 记录上（SUCCESS）
+    - 第 1..N-1 张作为 extra 记录追加，batch_index 分别 1,2,...
+    - 全部失败：原记录标 FAILED
+    - 部分失败：按失败张数退款
+    """
+    result_urls: list = []
+    failed_count = 0
+    first_error_msg = ""
+
+    try:
+        def _run(i: int) -> tuple:
+            if i > 0:
+                time.sleep(random.uniform(0.5, 1.2) * i)
+            try:
+                url = _pro_call_single(prompt, image_list, size, upstream_model)
+                return i, url, None
+            except Exception as ex:
+                return i, None, str(ex)
+
+        # 按 batch_index 保序：用 dict 暂存，避免 as_completed 乱序
+        idx_url_map: dict = {}
+        with ThreadPoolExecutor(max_workers=n) as pool:
+            futures = [pool.submit(_run, i) for i in range(n)]
+            for fut in as_completed(futures):
+                i, url, err = fut.result()
+                if url:
+                    idx_url_map[i] = url
+                else:
+                    failed_count += 1
+                    if err and not first_error_msg:
+                        first_error_msg = err
+
+        # 按顺序收集（索引 0..n-1），失败的位置用空串占位方便后面跳过
+        ordered = [(i, idx_url_map.get(i)) for i in range(n)]
+        ok_ordered = [(i, u) for (i, u) in ordered if u]
+
+        if not ok_ordered:
+            raise RuntimeError(first_error_msg or "全部生成失败")
+
+        # 部分失败：按比例退款
+        if failed_count > 0:
+            refund_amount = cost_per * failed_count
+            refund_quota(username, amount=refund_amount)
+            print(f"[Pro] {failed_count}/{n} 张失败，退回 {refund_amount} 积分")
+
+        # OSS 转存
+        final_pairs = []  # [(batch_index, oss_url), ...]
+        for i, url in ok_ordered:
+            if OSS_DOMAIN and OSS_DOMAIN in url:
+                final_pairs.append((i, url)); continue
+            if OSS_BUCKET_NAME and OSS_BUCKET_NAME in url:
+                final_pairs.append((i, url)); continue
+            try:
+                r_gen = requests.get(url, timeout=60)
+                if r_gen.status_code == 200:
+                    final_pairs.append((i, upload_bytes_to_oss(r_gen.content, ".png")))
+                else:
+                    final_pairs.append((i, url))
+            except Exception as e:
+                print(f"[Pro] OSS 转存失败: {e}")
+                final_pairs.append((i, url))
+
+        result_urls = [u for _, u in final_pairs]
+        print(f"✅ [Pro] 图片生成完成，任务 {task_id}，成功 {len(result_urls)}/{n}")
+
+    except Exception as e:
+        print(f"❌ [Pro] 生成出错 (任务 {task_id}): {e}")
+        import traceback
+        traceback.print_exc()
+        # 全失败：全额退款
+        refund_quota(username, amount=amount)
+    finally:
+        # 写回 DB（对齐 background_generate_image 的 batch 展开规则）
+        with db_lock:
+            db = load_db()
+            if username in db.get("history", {}):
+                original_item = None
+                for item in db["history"][username]:
+                    if item["id"] == task_id:
+                        original_item = item
+                        break
+
+                if original_item:
+                    if result_urls:
+                        # 第一张填到原任务
+                        first_idx, first_url = final_pairs[0]
+                        original_item["status"] = "SUCCESS"
+                        original_item["image"] = first_url
+                        original_item["image_urls"] = result_urls
+                        original_item["batch_id"] = batch_id
+                        original_item["batch_index"] = first_idx
+                        original_item["batch_total"] = n
+
+                        # 其余张作为新记录
+                        for idx, extra_url in final_pairs[1:]:
+                            extra_record = {
+                                **{k: v for k, v in original_item.items()
+                                   if k not in ("id", "image", "image_urls", "timestamp", "batch_index")},
+                                "id": str(uuid.uuid4()),
+                                "image": extra_url,
+                                "image_urls": [extra_url],
+                                "timestamp": original_item["timestamp"] + 0.001 * idx,
+                                "batch_index": idx,
+                            }
+                            db["history"][username].append(extra_record)
+                    else:
+                        original_item["status"] = "FAILED"
+                        original_item["batch_id"] = batch_id
+            save_db(db)
+
+
+# ==========================================
+# 🎨 Midjourney（TTAPI 异步通道）
+# ------------------------------------------
+# - Endpoint: POST /midjourney/v1/imagine → 提交；GET /midjourney/v1/fetch → 轮询
+# - 一次任务返回 4 张子图（data.images[0..3]），另外还有合成的 cdnImage 网格图
+# - 速度模式: relax / fast / turbo，对应不同积分
+# - 比例通过 --ar 写进 prompt 尾巴（MJ 原生参数格式）
+# - image prompt: 把图片 URL 放在 prompt 最前面（空格分隔）
+# ==========================================
+
+def _build_mj_prompt(prompt: str, image_list: list, aspect_ratio: str, mj_version: str = "v8.1") -> str:
+    """
+    拼装 MJ prompt：
+    - image_list 放最前：图片 URL 作为 image prompt，空格分隔
+    - 用户 prompt 紧随其后（先清洗掉 MJ 已废弃/不支持的 flag）
+    - 追加 --ar W:H（auto 或 prompt 里已含 --ar 时跳过）
+    - 追加 --v X 或 --niji X（prompt 里已含 --v / --niji 则跳过）
+    """
+    import re as _re
+
+    def _sanitize(text: str) -> str:
+        if not text:
+            return ""
+        banned_flags = [
+            r"--hd\b",
+            r"--uplight\b",
+            r"--upbeta\b",
+            r"--upanime\b",
+            r"--test\b",
+            r"--testp\b",
+            r"--creative\b",
+        ]
+        cleaned = text
+        for pat in banned_flags:
+            cleaned = _re.sub(pat, "", cleaned, flags=_re.IGNORECASE)
+        cleaned = _re.sub(r"\s+", " ", cleaned).strip(" ,;")
+        return cleaned
+
+    parts = []
+    if image_list:
+        parts.extend(str(u).strip() for u in image_list if u)
+    if prompt:
+        parts.append(_sanitize(prompt))
+    text = " ".join(p for p in parts if p).strip()
+
+    # 追加 --ar（去重）
+    has_ar = bool(_re.search(r"--ar\s+\d+\s*:\s*\d+", text, flags=_re.IGNORECASE))
+    if not has_ar and aspect_ratio and aspect_ratio != "auto" and ":" in aspect_ratio:
+        try:
+            w, h = aspect_ratio.split(":", 1)
+            int(w); int(h)
+            text = f"{text} --ar {aspect_ratio}"
+        except Exception:
+            pass
+
+    # 追加版本 flag（prompt 已含 --v 或 --niji 时跳过）
+    has_version = bool(_re.search(r"--(v|niji)\s+[\d.]+", text, flags=_re.IGNORECASE))
+    if not has_version and mj_version:
+        v = mj_version.strip().lower()
+        # niji 系列
+        if v.startswith("niji"):
+            num = _re.sub(r"\D", "", v) or "6"
+            text = f"{text} --niji {num}"
+        else:
+            # 去掉 v 前缀，保留数字和小数点
+            num = _re.sub(r"[^\d.]", "", v)
+            if num:
+                text = f"{text} --v {num}"
+
+    return text
+
+
+@app.post("/api/create/mj")
+def basic_create_mj(
+    background_tasks: BackgroundTasks,
+    prompt: str = Form(""),
+    image_urls_json: str = Form("[]"),
+    aspect_ratio: str = Form("auto"),
+    mj_mode: str = Form("fast"),
+    mj_version: str = Form("v8.1"),
+    username: str = Depends(get_current_user),
+):
+    """
+    Midjourney 图像生成（每次出 4 张子图）
+    - 按 mode 计费：relax 2 / fast 3 / turbo 5
+    - n 由前端控制批量次数（前端多次调此端点），此接口一次请求 = 一次 imagine = 4 张
+    """
+    try:
+        from backend.api_gateway.pricing import resolve_model_cost, resolve_model_config
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost, resolve_model_config
+
+    mode = (mj_mode or "fast").lower()
+    if mode not in ("relax", "fast", "turbo"):
+        raise HTTPException(400, "无效的 Midjourney 速度模式")
+    cost = resolve_model_cost("midjourney", n=1, mode=mode, default=3)
+    mj_cfg = resolve_model_config("midjourney") or {}
+    images_per_task = int(mj_cfg.get("max_images") or 4)
+
+    # 解析参考图列表
+    try:
+        image_list = json.loads(image_urls_json) if image_urls_json else []
+        if not isinstance(image_list, list):
+            image_list = []
+    except Exception:
+        image_list = []
+
+    # prompt 必填（允许纯图生图时仅图 + 默认提示；但至少要有文字或参考图）
+    if not (prompt and prompt.strip()) and not image_list:
+        raise HTTPException(400, "请输入描述或上传参考图")
+
+    # 入口门槛 + 预扣
+    with db_lock:
+        db = load_db()
+        user = db["users"].get(username)
+        if not user:
+            raise HTTPException(401, "用户异常")
+        if user.get("quota", 0) < cost:
+            raise HTTPException(403, f"积分不足，本次需要 {cost} 积分")
+    remaining_after = deduct_quota_atomic(username, amount=cost)
+
+    task_id = str(uuid.uuid4())
+    batch_id = str(uuid.uuid4())
+    create_type = f"mj-{mode}"
+
+    # 写 ON_QUEUE 占位记录（batch_total=4）
+    with db_lock:
+        db = load_db()
+        if username not in db["history"]:
+            db["history"][username] = []
+        db["history"][username].append({
+            "id": task_id,
+            "image": None,
+            "image_urls": [],
+            "prompt": f"[{create_type}] {(prompt or '')[:50]}{'...' if len(prompt or '') > 50 else ''}",
+            "timestamp": datetime.now().timestamp(),
+            "type": "create",
+            "status": "ON_QUEUE",
+            "model": "midjourney",
+            "batch_id": batch_id,
+            "batch_total": images_per_task,
+        })
+        save_db(db)
+
+    background_tasks.add_task(
+        background_generate_mj,
+        task_id=task_id,
+        username=username,
+        prompt=prompt or "",
+        image_list=image_list,
+        aspect_ratio=aspect_ratio,
+        mode=mode,
+        amount=cost,
+        batch_id=batch_id,
+        mj_version=mj_version,
+    )
+
+    return {
+        "status": "SUCCESS",
+        "data": {
+            "taskId": task_id,
+            "batchId": batch_id,
+            "remaining_quota": remaining_after,
+            "mode": mode,
+            "cost": cost,
+            "batch_total": images_per_task,
+        },
+    }
+
+
+def background_generate_mj(
+    task_id: str,
+    username: str,
+    prompt: str,
+    image_list: list,
+    aspect_ratio: str,
+    mode: str,
+    amount: int,
+    batch_id: str,
+    mj_version: str = "v8.1",
+):
+    """后台执行 MJ imagine：拼 prompt → submit → poll → OSS 转存 → 展开写 DB"""
+    final_pairs: list = []  # [(batch_index, oss_url), ...]
+    try:
+        from backend.api_gateway.pricing import resolve_model_config
+    except ImportError:
+        from api_gateway.pricing import resolve_model_config
+    mj_cfg = resolve_model_config("midjourney") or {}
+    poll_timeout = int(mj_cfg.get("poll_timeout") or 1200)
+    images_per_task = int(mj_cfg.get("max_images") or 4)
+
+    try:
+        full_prompt = _build_mj_prompt(prompt, image_list, aspect_ratio, mj_version)
+        print(f"🎨 [MJ] task {task_id[:8]} mode={mode} ver={mj_version} prompt={full_prompt[:200]}")
+
+        try:
+            from backend.api_gateway.service import run_model_raw, ServiceError
+        except ImportError:
+            from api_gateway.service import run_model_raw, ServiceError
+
+        res = run_model_raw(
+            model_id="midjourney",
+            prompt=full_prompt,
+            mode=mode,
+            username=username,
+            source="product:/api/create/mj",
+            mirror_to_oss=False,  # handler 自己转存
+            config_override={
+                "poll_timeout": poll_timeout,
+                "max_images": images_per_task,
+            },
+        )
+        raw_urls = res.get("images") or []
+        if not raw_urls:
+            raise RuntimeError("MJ 未返回任何图片")
+
+        # OSS 转存（最多 images_per_task 张）
+        for i, url in enumerate(raw_urls[:images_per_task]):
+            if OSS_DOMAIN and OSS_DOMAIN in url:
+                final_pairs.append((i, url)); continue
+            if OSS_BUCKET_NAME and OSS_BUCKET_NAME in url:
+                final_pairs.append((i, url)); continue
+            try:
+                r_gen = requests.get(url, timeout=60)
+                if r_gen.status_code == 200:
+                    final_pairs.append((i, upload_bytes_to_oss(r_gen.content, ".png")))
+                else:
+                    final_pairs.append((i, url))
+            except Exception as e:
+                print(f"[MJ] OSS 转存失败: {e}")
+                final_pairs.append((i, url))
+
+        print(f"✅ [MJ] 生成完成 task {task_id[:8]} 共 {len(final_pairs)} 张")
+
+    except Exception as e:
+        print(f"❌ [MJ] 生成失败 task {task_id[:8]}: {e}")
+        import traceback
+        traceback.print_exc()
+        # 全额退款
+        refund_quota(username, amount=amount)
+    finally:
+        # 写回 DB：和 Pro 同样的 batch 展开规则
+        with db_lock:
+            db = load_db()
+            if username in db.get("history", {}):
+                original_item = None
+                for item in db["history"][username]:
+                    if item["id"] == task_id:
+                        original_item = item
+                        break
+
+                if original_item:
+                    if final_pairs:
+                        first_idx, first_url = final_pairs[0]
+                        all_urls = [u for _, u in final_pairs]
+                        original_item["status"] = "SUCCESS"
+                        original_item["image"] = first_url
+                        original_item["image_urls"] = all_urls
+                        original_item["batch_id"] = batch_id
+                        original_item["batch_index"] = first_idx
+                        original_item["batch_total"] = images_per_task
+
+                        for idx, extra_url in final_pairs[1:]:
+                            extra_record = {
+                                **{k: v for k, v in original_item.items()
+                                   if k not in ("id", "image", "image_urls", "timestamp", "batch_index")},
+                                "id": str(uuid.uuid4()),
+                                "image": extra_url,
+                                "image_urls": [extra_url],
+                                "timestamp": original_item["timestamp"] + 0.001 * idx,
+                                "batch_index": idx,
+                            }
+                            db["history"][username].append(extra_record)
+                    else:
+                        original_item["status"] = "FAILED"
+                        original_item["batch_id"] = batch_id
+            save_db(db)
+
+
+# ==========================================
 # 🎬 视频生成接口
 # ==========================================
 
@@ -1045,51 +1527,27 @@ def background_generate_video(
     model: str,
     amount: int
 ):
+    """后台执行视频生成（通过 API Gateway 的 tuzi-video adapter）"""
     result_url = None
-    key = TUZI_API_KEY if TUZI_API_KEY else TT_API_KEY
-    headers = {"Authorization": f"Bearer {key}"} # 移除 Content-Type，由 requests 自动处理 multipart/form-data boundary
     try:
+        try:
+            from backend.api_gateway.service import run_model_raw, ServiceError
+        except ImportError:
+            from api_gateway.service import run_model_raw, ServiceError
         print(f"🎬 正在后台为您生成视频... 任务 ID: {task_id}")
-        
-        # 强制使用 multipart/form-data 传递基础参数
-        files = {
-            "model": (None, model),
-            "prompt": (None, prompt)
-        }
-        
-        # 视频接口支持首帧图：需下载后作为文件上传
-        if image_list and len(image_list) > 0:
-            try:
-                img_url = image_list[0]
-                print(f"📥 正在下载首帧参考图: {img_url}")
-                img_resp = requests.get(img_url, timeout=10)
-                if img_resp.status_code == 200:
-                    files["image"] = ("image.png", img_resp.content, "image/png")
-                    print("✅ 成功下载并附加首帧参考图")
-                else:
-                    print(f"⚠️ 下载参考图失败: HTTP {img_resp.status_code}")
-            except Exception as e:
-                print(f"⚠️ 下载参考图异常: {str(e)}")
-            
-        resp = requests.post(TUZI_VIDEO_ENDPOINT, headers=headers, files=files, timeout=30, proxies={"http": None, "https": None})
-        if resp.status_code != 200:
-            print(f"Video API Error: {resp.text}")
-            raise RuntimeError("视频服务暂时不可用")
-            
-        job_data = resp.json()
-        job_id = job_data.get("id")
-        
-        if not job_id:
-            print(f"Video API failed to return job ID: {resp.text}")
-            raise RuntimeError("视频任务提交失败")
-            
-        print(f"🔍 视频任务已提交，获取到后端作业 ID: {job_id}，开始轮询结果...")
-        video_url = poll_tuzi_video_result(job_id, headers=headers)
-        
-        if video_url:
-            print(f"✅ 视频生成成功，URL: {video_url}")
-            result_url = video_url
-            
+        try:
+            res = run_model_raw(
+                model_id=model,
+                prompt=prompt,
+                image=image_list or [],
+                username=username,
+                source="product:/api/video",
+                mirror_to_oss=False,  # 视频文件通常较大，保留上游 CDN 链接
+            )
+            result_url = (res.get("images") or [None])[0]
+        except ServiceError as se:
+            print(f"Video service error: {se}")
+            refund_quota(username, amount)
     except Exception as e:
         print(f"❌ 视频生成出错: {str(e)}")
         refund_quota(username, amount)
@@ -1098,12 +1556,10 @@ def background_generate_video(
             db = load_db()
             if username not in db["history"]:
                 db["history"][username] = []
-            
-            # 更新状态
             for item in db["history"][username]:
                 if item["id"] == task_id:
                     item["status"] = "SUCCESS" if result_url else "FAILED"
-                    item["image"] = result_url  # 为了兼容前端，我们复用 image 字段存储视频URL，前端通过 type="video" 判断
+                    item["image"] = result_url  # 复用 image 字段存储视频 URL
                     break
             save_db(db)
 
@@ -1114,9 +1570,13 @@ def video_generate(
     image_urls_json: str = Form("[]"),
     username: str = Depends(get_current_user)
 ):
-    ai_config = load_ai_config()
-    model = ai_config.get("endpoints", {}).get("video", {}).get("model", "veo3.1-4k")
-    cost = ai_config.get("endpoints", {}).get("video", {}).get("cost", 5)
+    try:
+        from backend.api_gateway.pricing import resolve_model_cost
+    except ImportError:
+        from api_gateway.pricing import resolve_model_cost
+
+    model = "veo3.1-4k"
+    cost = resolve_model_cost(model, default=5)
 
     deduct_quota_atomic(username, cost)
 
@@ -1557,6 +2017,73 @@ def refund_quota_with_log(username: str, amount: int = 1):
 # 替换原函数
 deduct_quota_atomic = deduct_quota_atomic_with_log
 refund_quota = refund_quota_with_log
+
+# ==========================================
+# 🔌 API Gateway 接入（sk-xxx 对外 API + 模型注册表）
+# ------------------------------------------
+# 新端点：
+#   POST /v1/images/generations   /v1/images/edits   /v1/videos   (sk-xxx 认证)
+#   POST /api/keys  GET /api/keys  PATCH/DELETE /api/keys/{id}    (JWT 认证)
+#   GET  /api/keys/logs                                            (JWT)
+#   GET  /api/models/public                                        (JWT)
+#   GET/POST/PATCH/DELETE /api/admin/models/...                    (admin)
+#   GET  /api/admin/adapter-types                                  (admin)
+#   GET  /api/admin/api-keys  /api/admin/api-logs                  (admin)
+# ==========================================
+try:
+    # 先把 IO 函数注入 api_gateway.storage
+    try:
+        from backend.api_gateway import storage as _gw_storage
+        from backend.api_gateway import deps as _gw_deps
+        from backend.api_gateway.router_public import router as _gw_public_router
+        from backend.api_gateway.router_management import build_router as _gw_build_mgmt_router
+    except ImportError:
+        from api_gateway import storage as _gw_storage
+        from api_gateway import deps as _gw_deps
+        from api_gateway.router_public import router as _gw_public_router
+        from api_gateway.router_management import build_router as _gw_build_mgmt_router
+
+    _gw_storage.set_db_io(db_lock, load_db, save_db)
+
+    def _gw_get_user_quota(username: str) -> int:
+        db = load_db()
+        return int(((db.get("users") or {}).get(username) or {}).get("quota", 0))
+
+    _gw_deps.set_deps(
+        deduct_quota=deduct_quota_atomic,       # 已 monkeypatch 为带日志版本
+        refund_quota=refund_quota,               # 已 monkeypatch 为带日志版本
+        upload_bytes_to_oss=upload_bytes_to_oss,
+        get_user_quota=_gw_get_user_quota,
+        get_current_user_dep=get_current_user,
+        get_admin_user_dep=get_admin_user,
+    )
+
+    _gw_mgmt_router = _gw_build_mgmt_router(
+        get_current_user=get_current_user,
+        get_admin_user=get_admin_user,
+    )
+
+    app.include_router(_gw_public_router)
+    app.include_router(_gw_mgmt_router)
+
+    # 自举：将内置默认模型迁入 registry（幂等）
+    try:
+        try:
+            from backend.api_gateway.bootstrap import seed_defaults
+        except ImportError:
+            from api_gateway.bootstrap import seed_defaults
+        _seeded = seed_defaults(tt_api_key=TT_API_KEY or "",
+                                tuzi_api_key=TUZI_API_KEY or "")
+        if _seeded:
+            print(f"✅ API Gateway 已自举模型: {_seeded}")
+    except Exception as _seed_err:
+        print(f"⚠️ API Gateway 自举失败（不影响运行）: {_seed_err}")
+
+    print("✅ API Gateway 模块已挂载（/v1/* 对外 API + /api/keys + /api/admin/models）")
+except Exception as _gw_err:
+    print(f"❌ API Gateway 挂载失败: {_gw_err}")
+    import traceback as _tb
+    _tb.print_exc()
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -12,6 +12,13 @@
     background-clip: text;
     -webkit-text-fill-color: transparent;
   }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 /* 添加一些基础样式确保背景不白屏 */

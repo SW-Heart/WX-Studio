@@ -6,13 +6,19 @@ import {
   Monitor, BoxSelect, Copy, Camera, User, Edit3, Globe,
   LogOut, X, Loader2, Check, Lock, AlertCircle, RefreshCw, Zap, Plus, Minus, Trash2, CheckCircle,
   Home, ArrowRight, Wand2, ArrowLeft, FolderOpen, Filter,
-  Video, PlayCircle, Film, ChevronDown, ArrowUp
+  Video, PlayCircle, Film, ChevronDown, ArrowUp, Cpu, Square, Link, Layout as LayoutIcon,
+  Hash
 } from 'lucide-react';
 import { Layout } from './components/layout/Layout';
 import { TaskProvider, useTaskManager, TASK_STATUS } from './context/TaskContext';
 import AdminPanel from './pages/AdminPanel';
+import ApiKeysPage from './pages/ApiKeysPage';
+import AdminModelsPage from './pages/AdminModelsPage';
+import ModelsPlazaPage from './pages/ModelsPlazaPage';
 import InfiniteCanvas, { getNewNodePositions, NODE_DEFAULT_W, NODE_DEFAULT_H } from './components/InfiniteCanvas';
 import ChatGptIcon from './assets/ChatGPT.svg';
+import MidjourneyIcon from './assets/midjourney.svg';
+import { storage } from './utils/storage';
 
 //t [重要配置] 开发环境从 .env.development 读取, 生产环境留空让 Nginx 转发
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
@@ -43,6 +49,19 @@ const toSecureUrl = (url) => {
     secureUrl = secureUrl.replace("http:", "https:");
   }
   return secureUrl;
+};
+
+// 判定一条 /api/history 记录是否为「已成功完成」的可展示作品。
+// - 同步 record（product/retouch/portrait）没有 status 字段，但 image 一定有效 → 视为完成。
+// - 异步 record（create/video）初始 status == "ON_QUEUE"、image == null → 视为未完成。
+// - 异步完成后 status == "SUCCESS"、image 为 URL → 视为完成。
+// - 任何 status != "SUCCESS"、或 image 为空/非字符串的项均视为未完成。
+// 仅用于首页「最近创作」与「我的图库」两个展示入口；工作室内部的 fetchHistory 仍需全量。
+const isCompletedHistoryItem = (item) => {
+  if (!item) return false;
+  if (item.status !== undefined && item.status !== 'SUCCESS') return false;
+  const img = item.image;
+  return typeof img === 'string' && img.trim() !== '';
 };
 
 // ==========================================
@@ -261,7 +280,8 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
     { id: 'product', label: { zh: '商品摄影', en: 'Product' } },
     { id: 'retouch', label: { zh: '智能修图', en: 'Retouch' } },
     { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } },
-    { id: 'video', label: { zh: '视频生成', en: 'Video' } }
+    { id: 'video', label: { zh: '视频生成', en: 'Video' } },
+    { id: 'create', label: { zh: '自由创作', en: 'Create' } }
   ];
 
   const fetchAllHistory = async () => {
@@ -299,6 +319,7 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
   }, [isOpen, token]);
 
   const filteredHistory = history.filter(item => {
+    if (!isCompletedHistoryItem(item)) return false;
     if (filter === 'all') return true;
     if (filter === 'product') return !item.type || item.type === 'product';
     return item.type === filter;
@@ -371,8 +392,9 @@ const GalleryModal = ({ isOpen, onClose, token, lang }) => {
                   <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
                     ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
                       item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
-                        'bg-orange-500/30 text-orange-300'}`}>
-                    {item.type === 'retouch' ? '修图' : item.type === 'portrait' ? '人像' : '商品'}
+                        item.type === 'create' ? 'bg-green-500/30 text-green-300' :
+                          'bg-orange-500/30 text-orange-300'}`}>
+                    {item.type === 'retouch' ? '修图' : item.type === 'portrait' ? '人像' : item.type === 'create' ? '创作' : '商品'}
                   </span>
                 </div>
               </div>
@@ -491,7 +513,7 @@ const HomePage = ({ onNavigate, token, lang }) => {
         if (res.ok) {
           const serverData = await res.json();
           // 只显示已完成的服务器历史记录，不显示进行中的任务
-          setRecentHistory(serverData.slice(0, 8));
+          setRecentHistory(serverData.filter(isCompletedHistoryItem).slice(0, 8));
         }
       } catch (err) { console.error(err); }
       finally { setLoadingHistory(false); }
@@ -1445,6 +1467,12 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   const [resLevel, setResLevel] = useState('2K');
   const [quality, setQuality] = useState('auto');
   const [numImages, setNumImages] = useState(1);
+
+  // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K
+  const lockedTo1K = model === 'gpt-image-2';
+  useEffect(() => {
+    if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
+  }, [lockedTo1K, resLevel]);
   
   const currentDimensions = calculateSize(aspectRatio, resLevel);
   const pointsPerImage = resLevel === '4K' ? 2 : 1;
@@ -1453,35 +1481,46 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   const [result, setResult] = useState(null);
   const [progress, setProgress] = useState(0);
 
-  // 画布节点状态（替代原来的 history 列表）
-  const [canvasNodes, setCanvasNodes] = useState(() => {
-    // 从 localStorage 恢复画布状态
-    try {
-      const saved = localStorage.getItem('wx_canvas_nodes');
-      if (saved) return JSON.parse(saved);
-    } catch {}
-    // fallback: 从运行中的任务恢复
-    const runningTasks = taskManager.getTasksByType('create')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map((t, i) => ({
-        id: t.id,
-        x: 100 + (i % 3) * 380,
-        y: 100 + Math.floor(i / 3) * 380,
-        w: NODE_DEFAULT_W,
-        h: NODE_DEFAULT_H,
-        image: null,
-        prompt: t.prompt,
-        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
-        progress: t.progress || 0,
-        zIndex: 1,
-      }));
-    return runningTasks;
-  });
+  const [isStorageLoaded, setIsStorageLoaded] = useState(false);
 
-  // 保存画布状态到 localStorage
+  // 画布节点状态
+  const [canvasNodes, setCanvasNodes] = useState([]);
+
+  // 从 IndexedDB 异步加载历史节点
   useEffect(() => {
-    localStorage.setItem('wx_canvas_nodes', JSON.stringify(canvasNodes));
-  }, [canvasNodes]);
+    const loadSavedNodes = async () => {
+      const savedNodes = await storage.loadNodes();
+      if (savedNodes && savedNodes.length > 0) {
+        setCanvasNodes(savedNodes);
+      } else {
+        // 如果数据库没东西，则从运行中的任务尝试恢复
+        const runningTasks = taskManager.getTasksByType('create')
+          .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
+          .map((t, i) => ({
+            id: t.id,
+            x: 100 + (i % 3) * 380,
+            y: 100 + Math.floor(i / 3) * 380,
+            w: NODE_DEFAULT_W,
+            h: NODE_DEFAULT_H,
+            image: null,
+            prompt: t.prompt,
+            status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
+            progress: t.progress || 0,
+            zIndex: 1,
+          }));
+        if (runningTasks.length > 0) setCanvasNodes(runningTasks);
+      }
+      setIsStorageLoaded(true);
+    };
+    loadSavedNodes();
+  }, []);
+
+  // 异步保存画布状态到 IndexedDB
+  useEffect(() => {
+    if (isStorageLoaded) {
+      storage.saveNodes(canvasNodes);
+    }
+  }, [canvasNodes, isStorageLoaded]);
 
   // 为了兼容原有逻辑，history 作为 canvasNodes 的别名
   const history = canvasNodes;
@@ -1531,16 +1570,21 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     const runningTasks = taskManagerRef.current.getTasksByType('create')
       .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING);
 
-    const matchedServerIds = new Set();
+    const ignoredServerIds = new Set();
     runningTasks.forEach(localTask => {
-      const match = createHistory.find(serverItem => {
+      const matches = createHistory.filter(serverItem => {
         const timeMatch = serverItem.timestamp >= (localTask.startTime / 1000) - 600;
-        return serverItem.prompt === localTask.prompt && timeMatch;
+        const cleanPrompt = serverItem.prompt ? serverItem.prompt.replace(/^\[.*?\]\s*/, '') : '';
+        const localP = localTask.prompt ? localTask.prompt.substring(0, 50).trim() : '';
+        return timeMatch && (cleanPrompt.startsWith(localP) || localP === '');
       });
 
-      if (match) {
-        matchedServerIds.add(match.id);
-        taskManagerRef.current.completeTask(localTask.id, match.image);
+      if (matches.length > 0) {
+        matches.forEach(m => ignoredServerIds.add(m.id));
+        const completedMatch = matches.find(m => m.image);
+        if (completedMatch) {
+          taskManagerRef.current.completeTask(localTask.id, completedMatch.image);
+        }
       } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
         taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
       }
@@ -1549,16 +1593,22 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     // 将服务器历史合并到画布节点（只添加尚未存在的）
     setCanvasNodes(prev => {
       const existingTaskIds = new Set(prev.map(n => n.taskId).filter(Boolean));
+      const existingServerTaskIds = new Set(prev.map(n => n.serverTaskId).filter(Boolean));
       const existingIds = new Set(prev.map(n => n.id));
-      const existingUrls = new Set(prev.map(n => n.image).filter(Boolean));
-      // 过滤：1. 必须有真实 image 2. 不能和现有的 id 重复 3. 不能和本地任务的 taskId 重复 4. 不能是被本地任务刚刚匹配认领走的 5. 不能和现有的 url 重复
-      const newFromServerItems = createHistory.filter(item => 
-        item.image && 
-        !existingIds.has(item.id) && 
-        !existingTaskIds.has(item.id) && 
-        !matchedServerIds.has(item.id) &&
-        !existingUrls.has(item.image)
-      );
+      // 规范化 URL 集合，用于去重
+      const normalize = (url) => url ? url.split('?')[0].replace('http:', 'https:').replace('8.149.136.249', 'aigcog.com') : '';
+      const existingUrls = new Set(prev.map(n => normalize(n.image)).filter(Boolean));
+      
+      // 过滤：1. 必须有真实 image 2. 不能和现有的 id/taskId 重复 3. 不能是被本地任务匹配认领走的 4. 不能和现有的 url 重复
+      const newFromServerItems = createHistory.filter(item => {
+        if (!item.image) return false;
+        const normUrl = normalize(item.image);
+        return !existingIds.has(item.id) && 
+               !existingTaskIds.has(item.id) && 
+               !existingServerTaskIds.has(item.id) &&
+               !ignoredServerIds.has(item.id) &&
+               !existingUrls.has(normUrl);
+      });
       if (newFromServerItems.length === 0) return prev;
 
       // 动态计算位置
@@ -1661,9 +1711,16 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     localStorage.setItem('quota', optimisticQuota.toString());
     window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
 
-    const taskName = lang === 'zh' ? '自由创作' : 'Basic Create';
+    let finalModel = model;
+    if (model === 'nano-banana') {
+      if (resLevel === '1K') finalModel = 'nano-banana-2';
+      else if (resLevel === '2K') finalModel = 'nano-banana-2-2k';
+      else if (resLevel === '4K') finalModel = 'nano-banana-2-4k';
+      else finalModel = 'nano-banana-2';
+    }
+
     const taskId = taskManager.createTask('create', prompt, {
-      referImages, model, size: currentDimensions.str, quality, n: numImages
+      referImages, model: finalModel, size: currentDimensions.str, quality, n: numImages
     });
 
     // 在画布上创建 N 个加载占位节点
@@ -1725,6 +1782,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       if (params.size) formData.append('size', params.size);
       if (params.quality) formData.append('quality', params.quality);
       if (params.n) formData.append('n', params.n.toString());
+      formData.append('type', 'create'); // 显式标记为自由创作类型
 
       const res = await fetch(`${API_BASE_URL}/api/create`, {
         method: 'POST',
@@ -1745,6 +1803,11 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
 
       const submitData = await res.json();
       const serverTaskId = submitData.data.taskId;
+
+      // 保存 serverTaskId 到画布节点，以便 fetchHistory 时能通过 ID 过滤重复项
+      setCanvasNodes(prev => prev.map(node =>
+        node.taskId === taskId ? { ...node, serverTaskId } : node
+      ));
 
       // 更新积分（预扣分已在后端完成）
       if (submitData.data.remaining_quota !== undefined) {
@@ -2079,18 +2142,20 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                         </div>
                       </div>
 
-                      {/* 分辨率 */}
-                      <div className="space-y-3 mb-6">
-                        <label className="text-[11px] text-white/40">{lang === 'zh' ? '选择分辨率' : 'Resolution'}</label>
-                        <div className="flex gap-2">
-                          {RES_LEVELS.map(res => (
-                            <button key={res.id} onClick={(e) => { e.stopPropagation(); setResLevel(res.id); }} className={`flex-1 py-2.5 rounded-xl text-[13px] transition-all flex items-center justify-center gap-1 ${resLevel === res.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'bg-transparent text-white/40 border border-white/5 hover:bg-white/5 hover:text-white'}`}>
-                              {res.label[lang]}
-                              {res.premium && <Sparkles size={12} className={resLevel === res.id ? "text-[#00C4B6]" : "text-[#00C4B6]/50"} />}
-                            </button>
-                          ))}
+                      {/* 分辨率 - gpt-image-2 仅支持 1K，该模型下隐藏 */}
+                      {!lockedTo1K && (
+                        <div className="space-y-3 mb-6">
+                          <label className="text-[11px] text-white/40">{lang === 'zh' ? '选择分辨率' : 'Resolution'}</label>
+                          <div className="flex gap-2">
+                            {RES_LEVELS.map(res => (
+                              <button key={res.id} onClick={(e) => { e.stopPropagation(); setResLevel(res.id); }} className={`flex-1 py-2.5 rounded-xl text-[13px] transition-all flex items-center justify-center gap-1 ${resLevel === res.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'bg-transparent text-white/40 border border-white/5 hover:bg-white/5 hover:text-white'}`}>
+                                {res.label[lang]}
+                                {res.premium && <Sparkles size={12} className={resLevel === res.id ? "text-[#00C4B6]" : "text-[#00C4B6]/50"} />}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       {/* 尺寸预览 */}
                       <div className="space-y-3 mb-6">
@@ -2165,22 +2230,34 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                     onClick={() => setShowModel(!showModel)}
                     className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${showModel ? 'bg-[#2a2a2e] text-white shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
                   >
-                    <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} style={{ filter: 'brightness(0) invert(1)' }} />
+                    {model === 'nano-banana' ? (
+                      <span className={`text-[16px] ${showModel ? 'opacity-100' : 'opacity-70'}`}>🍌</span>
+                    ) : (
+                      <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} style={{ filter: 'brightness(0) invert(1)' }} />
+                    )}
                   </button>
                   {showModel && (
-                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[180px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
-                      <button onClick={() => setShowModel(false)} className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-white bg-[#2a2a2e] rounded-lg">
+                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[200px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                      <button onClick={() => { setModel('gpt-image-2'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
                         <div className="flex items-center gap-2">
                           <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
-                          <span className="text-[#00C4B6]">GPT-Image-2</span>
+                          <span className={model === 'gpt-image-2' ? "text-[#00C4B6]" : ""}>GPT Image 2</span>
                         </div>
-                        <Check size={14} className="text-[#00C4B6]" />
+                        {model === 'gpt-image-2' && <Check size={14} className="text-[#00C4B6]" />}
                       </button>
-                      <button className="w-full flex items-center justify-between px-3 py-2 text-[13px] text-white/40 hover:bg-white/5 rounded-lg cursor-not-allowed">
+                      <button onClick={() => { setModel('gpt-image-2-vip'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2-vip' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
                         <div className="flex items-center gap-2">
-                          <BoxSelect size={14} className="text-white/40" />
-                          <span>Nano Banana 2</span>
+                          <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
+                          <span className={model === 'gpt-image-2-vip' ? "text-[#00C4B6]" : ""}>GPT Image 2 High</span>
                         </div>
+                        {model === 'gpt-image-2-vip' && <Check size={14} className="text-[#00C4B6]" />}
+                      </button>
+                      <button onClick={() => { setModel('nano-banana'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'nano-banana' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[14px]">🍌</span>
+                          <span className={model === 'nano-banana' ? "text-[#00C4B6]" : ""}>Nano Banana 2</span>
+                        </div>
+                        {model === 'nano-banana' && <Check size={14} className="text-[#00C4B6]" />}
                       </button>
                     </div>
                   )}
@@ -3143,508 +3220,1352 @@ const InputGroup = ({ label, type, value, onChange, placeholder }) => (
 );
 
 
-const AIPhotoStudio = ({ onBack, lang, setLang }) => {
+// ==========================================
+// 🚀 快速创作组件 (整合商品、修图、人像)
+// ==========================================
+const QuickCreateStudio = ({ onBack, lang, token }) => {
   const t = TRANSLATIONS[lang];
   const taskManager = useTaskManager();
-  const taskManagerRef = useRef(taskManager);
-  taskManagerRef.current = taskManager; // 保持最新引用
+  
 
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
-  const [username, setUsername] = useState(() => localStorage.getItem('username') || 'Guest');
-  const [quota, setQuota] = useState(() => {
-    const saved = localStorage.getItem('quota');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-
+  const [quota, setQuota] = useState(() => parseInt(localStorage.getItem('quota') || '0'));
+  
+  const [mode, setMode] = useState('image'); 
+  const [isLoggedIn] = useState(!!token && token !== 'null');
   const [showLogin, setShowLogin] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showFullscreen, setShowFullscreen] = useState(false);
-
-  const [activeTab, setActiveTab] = useState('product');
-  // const [isGenerating, setIsGenerating] = useState(false); // Removed
-  const [isImproving, setIsImproving] = useState(false);
-
-  const [sourceImages, setSourceImages] = useState([]);
-  const fileInputRef = useRef(null); // 修复 fileInputRef
-
-  const [prompt, setPrompt] = useState("");
-  const [activeHistoryId, setActiveHistoryId] = useState(null);
-
-  const [config, setConfig] = useState({ style: 'Luxurious' });
-  // 初始化时立即从 TaskManager 读取运行中的任务，避免页面切换时数据消失
-  const [history, setHistory] = useState(() => {
-    const runningTasks = taskManager.getTasksByType('product')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map(t => ({
-        id: t.id,
-        image: t.metadata?.sourceImages?.[0] || '',
-        prompt: t.prompt,
-        timestamp: t.startTime / 1000,
-        type: 'product',
-        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
-        progress: t.progress || 0
-      }));
-    return runningTasks;
-  });
-  const activeHistoryIdRef = useRef(activeHistoryId);
-  activeHistoryIdRef.current = activeHistoryId; // 保持最新值，避免闭包问题
-
-  // Toast 通知状态
   const [toast, setToast] = useState(null);
   const showToast = (message, type = 'success') => setToast({ message, type });
 
-  const isLoggedIn = !!token;
-  const isValid = sourceImages.length > 0 && sourceImages.some(img => !img.uploading) && prompt.trim().length > 0;
+  const [prompt, setPrompt] = useState('');
+  const [referImages, setReferImages] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const [model, setModel] = useState('gpt-image-2');
+  const [aspectRatio, setAspectRatio] = useState('auto');
+  const [resLevel, setResLevel] = useState('1K');
+  const [quality, setQuality] = useState('auto');
 
-  // 返回时检测任务状态
-  // 返回时检测任务状态
-  const handleBack = () => {
-    if (isImproving) {
-      if (confirm(lang === 'zh' ? '正在生成中，确定要退出吗？当前任务将被取消。' : 'Generation in progress. Are you sure you want to exit? Current task will be cancelled.')) {
-        onBack?.();
-      }
-    } else {
-      onBack?.();
-    }
-  };
+  // GPT Image 2 Pro：固定 2 积分/张
+  const PRO_COST_PER_IMAGE = 2;
+  const isProModel = model === 'gpt-image-2-pro';
 
-  const activeTask = history.find(item => item.id === activeHistoryId);
+  // Midjourney：按模式计费，每次生成 4 张子图
+  const MJ_COST_BY_MODE = { relax: 2, fast: 3, turbo: 5 };
+  const MJ_IMAGES_PER_TASK = 4;
+  const MJ_VERSIONS = [
+    { id: 'v8.1', label: 'V8.1', sub: '最新' },
+    { id: 'v7',   label: 'V7',   sub: '稳定' },
+    { id: 'v6.1', label: 'V6.1', sub: '经典' },
+    { id: 'v5.2', label: 'V5.2', sub: '写实' },
+    { id: 'niji 6', label: 'Niji 6', sub: '动漫' },
+  ];
+  const isMjModel = model === 'midjourney';
+  const [mjMode, setMjMode] = useState('fast'); // relax / fast / turbo
+  const [mjVersion, setMjVersion] = useState('v8.1');
+  const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 3;
 
-  const ratioOptions = ['1:1', '2:3', '3:2', '3:4', '4:3', '4:5', '5:4', '9:16', '16:9', '21:9'];
-
-  // 模版状态
-  const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [hoverTemplate, setHoverTemplate] = useState(null);
-
-  // 选择模版时填充prompt
-  const handleSelectTemplate = (templateId) => {
-    if (selectedTemplate === templateId) {
-      // 取消选择
-      setSelectedTemplate(null);
-      return;
-    }
-    const template = TEMPLATES.find(t => t.id === templateId);
-    if (template) {
-      setSelectedTemplate(templateId);
-      setPrompt(template.prompt);
-      setHoverTemplate(null); // 选中后取消hover预览
-    }
-  };
-
+  // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K，同时在 UI 隐藏分辨率切换
+  // Pro / MJ 不锁 1K：Pro 支持任意 WxH；MJ 根本没分辨率选项（后面会整块隐藏）
+  const lockedTo1K = model === 'gpt-image-2';
   useEffect(() => {
-    if (token) { fetchHistory(); fetchUserInfo(); }
-    else { setHistory([]); setQuota(0); }
-  }, [token]);
+    if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
+  }, [lockedTo1K, resLevel]);
 
-  const fetchHistory = async () => {
-    if (!token) return;
-    const productHistory = [];
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const serverHistory = data.filter(item => !item.type || item.type === 'product').map(item => ({ ...item, status: 'done', progress: 100 }));
-        productHistory.push(...serverHistory);
-      }
-    } catch (err) { console.error('Fetch history failed:', err); }
+  // 积分不足时如果曾选中 Pro，自动回退到基础模型，避免卡住
+  useEffect(() => {
+    if (isProModel && quota < PRO_COST_PER_IMAGE) {
+      setModel('gpt-image-2');
+    }
+  }, [isProModel, quota]);
 
-    // 智能对账 (Smart Reconciliation)
-    const runningTasks = taskManagerRef.current.getTasksByType('product')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING);
+  // MJ 积分不足最低档（relax=2）时回退
+  useEffect(() => {
+    const minMj = Math.min(...Object.values(MJ_COST_BY_MODE));
+    if (isMjModel && quota < minMj) {
+      setModel('gpt-image-2');
+    }
+  }, [isMjModel, quota]);
+  
+  const [retouchMode, setRetouchMode] = useState('general');
+  const [strength, setStrength] = useState('medium');
+  const [suggestion, setSuggestion] = useState('');
+  const [productStyle, setProductStyle] = useState('Luxurious');
 
-    runningTasks.forEach(localTask => {
-      const match = productHistory.find(serverItem => {
-        const timeMatch = serverItem.timestamp >= (localTask.startTime / 1000) - 600;
-        return serverItem.prompt === localTask.prompt && timeMatch;
-      });
+  // 批量生成数量 (1 - 50)
+  const [count, setCount] = useState(1);
+  const MAX_COUNT = 50;
+  const PRO_MAX_COUNT = 10; // Pro 模型原生 n 上限
+  const MJ_MAX_COUNT = 5;   // MJ 一次出 4 张，count 代表批次数，限制 5（最多 20 张）
+  const effectiveMax = model === 'gpt-image-2-pro' ? PRO_MAX_COUNT
+                     : model === 'midjourney' ? MJ_MAX_COUNT
+                     : MAX_COUNT;
+  const clampCount = (n) => Math.max(1, Math.min(effectiveMax, Math.floor(Number(n) || 1)));
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
 
-      if (match) {
-        taskManagerRef.current.completeTask(localTask.id, match.image);
-      } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
-        taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
-      }
+  // 切到 Pro 时如果当前 count 超过 10，自动夹到 10；MJ 类似
+  useEffect(() => {
+    if (model === 'gpt-image-2-pro' && Number(count) > PRO_MAX_COUNT) {
+      setCount(PRO_MAX_COUNT);
+    } else if (model === 'midjourney' && Number(count) > MJ_MAX_COUNT) {
+      setCount(MJ_MAX_COUNT);
+    }
+  }, [model, count]);
+
+  const [history, setHistory] = useState([]);
+  const [activeHistoryId, setActiveHistoryId] = useState(null);
+  const activeHistoryIdRef = useRef(activeHistoryId);
+  activeHistoryIdRef.current = activeHistoryId; // 保持最新值，避免闭包问题
+  const [showFullscreen, setShowFullscreen] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState(null);
+
+  const [showModelMenu, setShowModelMenu] = useState(false);
+  const activeTask = history.find(h => h.id === activeHistoryId);
+
+  // 删除二次确认：存待删除的任务项；null 时隐藏弹窗
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // 挂载时清理僵尸任务：页面重载后，仍停留在 pending/running 且超过 3 分钟的本地任务
+  // 大概率是上次会话被用户关闭前已在服务端完成的任务，直接从任务管理器里删掉
+  useEffect(() => {
+    const STALE_MS = 3 * 60 * 1000;
+    const now = Date.now();
+    const stale = taskManager.getTasksByType('quick-create').filter(t => {
+      if (t.status !== TASK_STATUS.PENDING && t.status !== TASK_STATUS.RUNNING) return false;
+      return now - t.startTime > STALE_MS;
     });
+    stale.forEach(t => taskManager.removeTask(t.id));
+    // 只在挂载时执行一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    // 合并正在进行中的任务 (使用 ref 获取最新状态)
-    const activeRunningTasks = taskManagerRef.current.getTasksByType('product')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map(t => ({
-        id: t.id,
-        image: t.metadata?.sourceImages?.[0] || '', // 显示第一张原图作为预览
-        prompt: t.prompt,
-        timestamp: t.startTime / 1000,
-        type: 'product',
-        status: 'generating', // 保持组件内部使用 'generating' 状态
-        progress: t.progress || 0
-      }));
+  // 模拟进度动画：running/pending 任务按 ease-out 曲线逼近 99%（各任务独立的 expectedMs 50~60s），
+  // 真实 API 返回 (completeTask) 时直接跳到 100%
+  // 注意：progress 直接对齐按 startedAt 计算出的 target，而不是每 tick +1 逐步爬升，
+  // 否则页面切换导致组件重挂载时，本地 progress 被重置为 0，会出现"进度从 0 重新爬"的观感
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setHistory(prev => {
+        if (!prev.some(h => h.status === 'pending' || h.status === 'running')) return prev;
+        let changed = false;
+        const next = prev.map(h => {
+          if (h.status !== 'pending' && h.status !== 'running') return h;
+          const started = h.startedAt || (h.timestamp ? h.timestamp * 1000 : Date.now());
+          const elapsed = Math.max(0, Date.now() - started);
+          const expected = h.expectedMs || 45000;
+          const t = Math.min(elapsed / expected, 1);
+          // ease-out: 前期快后期慢，上限 99
+          const target = Math.min(99, Math.round(100 * (1 - Math.pow(1 - t, 1.8))));
+          const cur = h.progress || 0;
+          if (target > cur) {
+            changed = true;
+            return { ...h, progress: target };
+          }
+          return h;
+        });
+        return changed ? next : prev;
+      });
+    }, 400);
+    return () => clearInterval(interval);
+  }, []);
 
-    const finalHistory = [...activeRunningTasks, ...productHistory];
-    setHistory(finalHistory);
-    if ((activeRunningTasks.length > 0 || finalHistory.length > 0) && !activeHistoryIdRef.current) {
-      setActiveHistoryId(finalHistory[0]?.id);
-    }
-  };
+  // 对齐 BasicCreateStudio：按 aspectRatio + resLevel 计算合法 size（auto 则由后端处理）
+  const currentDimensions = calculateSize(aspectRatio, resLevel);
+  const dispW = currentDimensions.w || 1024;
+  const dispH = currentDimensions.h || 1024;
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || token === 'null') return;
+    const fetchHistory = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+          const data = await res.json();
+          // 只把服务端确认完成的记录当作 done；ON_QUEUE 不展示（由本地 running 任务驱动）
+          // FAILED 的条目需要保留做对账，把本地占位任务同步为 error
+          const filtered = data
+            .filter(item => ['product', 'retouch', 'portrait', 'create'].includes(item.type || 'create'))
+            .filter(item => {
+              const st = item.status;
+              if (!st) return !!item.image;
+              return st === 'SUCCESS' || st === 'DONE';
+            })
+            .map(item => ({ ...item, status: 'done', progress: 100 }));
+
+          // 服务端显式标 FAILED 的条目（仅用于对账，不进入展示列表）
+          const failedRecords = data.filter(item => item.status === 'FAILED');
+
+          // 进行中任务（源自任务管理器，带 batchId / startedAt）
+          const running = taskManager.getTasksByType('quick-create').map(t => ({
+            id: t.id, image: t.result || '', prompt: t.prompt,
+            status: t.status === TASK_STATUS.PENDING ? 'pending'
+                  : t.status === TASK_STATUS.SUCCESS ? 'done'
+                  : t.status === TASK_STATUS.ERROR ? 'error'
+                  : 'running',
+            progress: t.progress || 0,
+            type: t.metadata?.mode, timestamp: t.startTime / 1000,
+            startedAt: t.startTime,
+            batchId: t.metadata?.batchId, batchIndex: t.metadata?.batchIndex, batchTotal: t.metadata?.batchTotal,
+            error: t.error,
+            result: t.result,
+            serverTaskId: t.metadata?.serverTaskId,
+            serverBatchId: t.metadata?.serverBatchId
+          }));
+
+          // batch 对账：同一 serverBatchId 下，服务端若返 N 张，按 batch_index 对齐到占位任务
+          // 命中的占位任务转为 done 并填入图片；被消费掉的 filtered 条目不再单独展示
+          const consumedFilteredIds = new Set();
+          running.forEach(r => {
+            if (!r.serverBatchId) return;
+            if (r.status !== 'pending' && r.status !== 'running') return;
+            const matched = filtered.find(f =>
+              f.batch_id === r.serverBatchId &&
+              f.batch_index === r.batchIndex &&
+              !consumedFilteredIds.has(f.id)
+            );
+            if (matched) {
+              consumedFilteredIds.add(matched.id);
+              // 同步任务管理器与本地视图
+              taskManager.completeTask(r.id, matched.image);
+              r.status = 'done';
+              r.progress = 100;
+              r.image = matched.image;
+              // 保留服务端记录 id 以便 handleDeleteImage 调 DELETE
+              r.serverRecordId = matched.id;
+            }
+          });
+
+          // FAILED 对账：同 batch_id 的占位任务全部标为 error
+          failedRecords.forEach(fr => {
+            if (!fr.batch_id) return;
+            running.forEach(r => {
+              if (r.serverBatchId === fr.batch_id && (r.status === 'pending' || r.status === 'running')) {
+                taskManager.failTask(r.id, '生成失败，请重试');
+                r.status = 'error';
+                r.error = '生成失败，请重试';
+              }
+            });
+          });
+
+          // 去重：如果服务端记录 id 等于我们已有的 serverTaskId，则过滤掉，保留本地 task 展示
+          const localServerIds = new Set(running.map(r => r.serverTaskId).filter(Boolean));
+          const filteredDedup = filtered.filter(f =>
+            !localServerIds.has(f.id) && !consumedFilteredIds.has(f.id)
+          );
+
+          // 兜底和解：本地 running 任务若超过 2 分钟且至少有一条服务端 record 的时间戳落在它启动后的窗口内且类型匹配，
+          // 认为它实际已完成，从任务管理器中移除（避免僵尸转圈）
+          const RECONCILE_MIN_AGE_MS = 2 * 60 * 1000;
+          const nowMs = Date.now();
+          running.forEach(r => {
+            if (r.status !== 'pending' && r.status !== 'running') return;
+            const age = nowMs - (r.startedAt || nowMs);
+            if (age < RECONCILE_MIN_AGE_MS) return;
+
+            // batch 专属：已拿到 serverBatchId 说明后端已开始处理；若同 batch 所有返图已被其他占位任务对齐消费，
+            // 而当前占位任务仍然没 match，说明服务端这一张确实失败（n 部分成功场景）
+            if (r.serverBatchId && age > 3 * 60 * 1000) {
+              const batchReturned = filtered.filter(f => f.batch_id === r.serverBatchId).length;
+              const batchPlaceholders = running.filter(x => x.serverBatchId === r.serverBatchId).length;
+              if (batchReturned > 0 && batchReturned < batchPlaceholders) {
+                // 有其他占位任务成功了，但这个没对齐到 → 确认失败
+                taskManager.failTask(r.id, '此张未生成成功');
+                r.status = 'error';
+                r.error = '此张未生成成功';
+                return;
+              }
+            }
+
+            const match = filtered.find(f => {
+              if (r.type && f.type !== r.type && !(r.type === 'image' && f.type === 'create')) return false;
+              const dt = (f.timestamp || 0) * 1000 - (r.startedAt || 0);
+              return dt >= -5000 && dt <= age + 5000;
+            });
+            if (match) {
+              taskManager.removeTask(r.id);
+            } else if (age > 10 * 60 * 1000) {
+              // 超过 10 分钟仍无匹配，视为异常
+              taskManager.failTask(r.id, '任务超时');
+            }
+          });
+
+          // 保留本地已有的进度/状态，不被 running 重建覆盖
+          setHistory(prev => {
+            const prevById = new Map(prev.map(h => [h.id, h]));
+            const runningMerged = running.map(r => {
+              const old = prevById.get(r.id);
+              if (!old) return r;
+              return {
+                ...r,
+                // 对账命中后 r.status=done / r.image 有值：优先使用 r 的值
+                status: r.status,
+                progress: r.status === 'done' ? 100 : Math.max(old.progress || 0, r.progress || 0),
+                image: r.image || old.image,
+                startedAt: old.startedAt || r.startedAt,
+                serverTaskId: r.serverTaskId || old.serverTaskId,
+                serverBatchId: r.serverBatchId || old.serverBatchId,
+                serverRecordId: r.serverRecordId || old.serverRecordId,
+                expectedMs: old.expectedMs // 保留本地首次计算的期望时长
+              };
+            });
+
+            const ids = new Set([...runningMerged.map(r => r.id), ...filteredDedup.map(f => f.id)]);
+            const combined = [...runningMerged, ...filteredDedup]
+              .reduce((acc, cur) => {
+                if (!acc.find(x => x.id === cur.id)) acc.push(cur);
+                return acc;
+              }, [])
+              .sort((a, b) => b.timestamp - a.timestamp);
+
+            if (combined.length > 0 && !activeHistoryIdRef.current) {
+              setActiveHistoryId(combined[0].id);
+            } else if (activeHistoryIdRef.current && !ids.has(activeHistoryIdRef.current)) {
+              setActiveHistoryId(combined[0]?.id || null);
+            }
+            return combined;
+          });
+        }
+      } catch (err) { console.error(err); }
+    };
     fetchHistory();
     const interval = setInterval(fetchHistory, 5000);
     return () => clearInterval(interval);
-  }, [token]);
+  }, [token, taskManager]);
 
-  const fetchUserInfo = async () => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/user/me`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        setQuota(data.quota);
-        localStorage.setItem('quota', data.quota.toString());
-      } else if (res.status === 401) {
-        handleLogout();
-      }
-    } catch (err) { console.error(err); }
-  };
-
-  const handleLogin = (newToken, newUser, newQuota) => {
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('username', newUser);
-    localStorage.setItem('quota', newQuota.toString());
-    setToken(newToken); setUsername(newUser); setQuota(newQuota);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('quota');
-    setToken(null); setUsername('Guest'); setQuota(0);
-    setSourceImages([]); setPrompt(""); setActiveHistoryId(null); setShowUserMenu(false);
-  };
-
-  // 同步任务进度
-  useEffect(() => {
-    const syncTaskProgress = () => {
-      const runningTasks = taskManager.getTasksByType('product');
-      if (runningTasks.length === 0) return;
-
-      setHistory(prev => prev.map(h => {
-        const task = runningTasks.find(t => t.id === h.id);
-        if (task) {
-          let newStatus = h.status;
-          if (task.status === TASK_STATUS.SUCCESS) newStatus = 'done';
-          else if (task.status === TASK_STATUS.ERROR) newStatus = 'failed';
-          else newStatus = 'generating'; // pending or running
-
-          return {
-            ...h,
-            progress: task.progress || h.progress,
-            status: newStatus,
-            image: task.result || h.image,
-            // error: task.error
-          };
-        }
-        return h;
-      }));
-    };
-    const interval = setInterval(syncTaskProgress, 500);
-    return () => clearInterval(interval);
-  }, [taskManager]);
-
-  const handleGenerate = async () => {
-    if (!checkAuth(() => { })) return;
-    if (quota <= 0) { showToast(t.generate.quotaEmpty, 'error'); return; }
-    if (!isValid) return;
-
-    // 乐观扣分：立即显示积分减少
-    const optimisticQuota = Math.max(0, quota - 1);
-    setQuota(optimisticQuota);
-    localStorage.setItem('quota', optimisticQuota.toString());
-    window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
-
-    const validUrls = sourceImages.filter(img => !img.uploading && img.url).map(img => img.url);
-    const taskId = taskManager.createTask('product', prompt, {
-      sourceImages: validUrls,
-      style: config.style
-    });
-
-    const newTask = {
-      id: taskId,
-      status: 'generating',
-      progress: 0,
-      image: validUrls[0] || null, // 预览图
-      prompt: prompt,
-      timestamp: Date.now() / 1000
-    };
-
-    setHistory(prev => [newTask, ...prev]);
-    setActiveHistoryId(taskId);
-
-    executeProductTask(taskId, prompt, validUrls, config);
-  };
-
-  const executeProductTask = async (taskId, p, urls, cfg) => {
-    taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
-
-    let currentProgress = 0;
-    const progressInterval = setInterval(() => {
-      currentProgress = Math.min(currentProgress + 1 + Math.random() * 2, 95);
-      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, progress: currentProgress } : h));
-      taskManager.updateProgress(taskId, currentProgress);
-    }, 500);
-
+  const handleFileUpload = async (e) => {
+    if (!isLoggedIn) { setShowLogin(true); return; }
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
     try {
       const formData = new FormData();
-      formData.append('prompt', p);
-      formData.append('style', cfg.style);
-      formData.append('image_urls_json', JSON.stringify(urls));
-
-      const res = await fetch(`${API_BASE_URL}/api/generate`, {
+      formData.append('file', file);
+      const res = await fetch(`${API_BASE_URL}/api/upload`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
+      if (!res.ok) throw new Error('Upload failed');
+      const data = await res.json();
+      setReferImages(prev => mode === 'retouch' || mode === 'portrait' ? [data.url] : [...prev, data.url].slice(-4));
+    } catch (err) { showToast('上传失败', 'error'); }
+    finally { setIsUploading(false); e.target.value = ''; }
+  };
 
-      clearInterval(progressInterval);
+  const handleGenerate = async () => {
+    if (!isLoggedIn) { setShowLogin(true); return; }
+    if (isBatchRunning) { showToast('正在批量生成中，请稍候', 'error'); return; }
 
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Failed');
+    const total = clampCount(count);
+    // 按模型算总积分：
+    // - Pro: 2/张；n 张
+    // - MJ:  按 mode 2/3/5 积分每"次"（每次出 4 张），共 total 次
+    // - 其他: 4K=2/张，否则 1/张
+    if (mode === 'image' && model === 'gpt-image-2-pro') {
+      const totalCost = total * PRO_COST_PER_IMAGE;
+      if (quota < totalCost) {
+        showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error');
+        return;
+      }
+    } else if (mode === 'image' && model === 'midjourney') {
+      const totalCost = total * mjCostPerTask;
+      if (quota < totalCost) {
+        showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error');
+        return;
+      }
+    } else {
+      const pointsPerImage = mode === 'image' && resLevel === '4K' ? 2 : 1;
+      const totalCost = total * pointsPerImage;
+      if (quota < totalCost) { showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error'); return; }
+    }
+
+    if ((mode === 'retouch' || mode === 'portrait' || mode === 'product') && referImages.length === 0) {
+      showToast('请先上传参考图片', 'error'); return;
+    }
+    if (mode === 'image' && !prompt.trim()) {
+      showToast('请输入提示词', 'error'); return;
+    }
+
+    // 捕获当前参数快照，避免批量过程中用户修改状态导致串台
+    const snapshot = {
+      mode, referImages: [...referImages], model, aspectRatio, resLevel, quality,
+      retouchMode: mode === 'portrait' ? 'portrait' : retouchMode,
+      strength, suggestion, productStyle, prompt, mjMode, mjVersion
+    };
+
+    // 生成一个批次 ID，方便后续按 batchId 筛选（但 UI 不再做批量聚合视图，只是单张切换）
+    const batchId = `batch_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    // ---------- Midjourney 专属分支 ----------
+    // MJ 一次调用产出 4 张，total 表示"批次数"。前端为每个批次创建 4 个占位任务，
+    // 共享一个 serverBatchId，让 fetchHistory 按 batch_index 0..3 对齐返图。
+    if (mode === 'image' && snapshot.model === 'midjourney') {
+      const baseTs = Date.now();
+      const allTaskIds = [];
+      const batchTaskMap = []; // [{localBatchId, taskIds[4]}]
+      for (let b = 0; b < total; b++) {
+        const localBatchId = `batch_${Date.now()}_${b}_${Math.random().toString(36).slice(2, 6)}`;
+        const group = [];
+        for (let sub = 0; sub < MJ_IMAGES_PER_TASK; sub++) {
+          const taskId = taskManager.createTask('quick-create', prompt, {
+            ...snapshot, batchId: localBatchId, batchIndex: sub, batchTotal: MJ_IMAGES_PER_TASK
+          });
+          group.push(taskId);
+          allTaskIds.push(taskId);
+          const expectedMs = 120000 + Math.floor(Math.random() * 30000); // MJ 慢，期望 2-2.5 分钟
+          const newItem = {
+            id: taskId, image: '', prompt, status: 'pending', progress: 0,
+            type: mode, timestamp: (baseTs + b * 10 + sub) / 1000,
+            startedAt: baseTs,
+            batchId: localBatchId, batchIndex: sub, batchTotal: MJ_IMAGES_PER_TASK,
+            expectedMs
+          };
+          setHistory(prev => [newItem, ...prev]);
+        }
+        batchTaskMap.push({ localBatchId, taskIds: group });
+      }
+      setActiveHistoryId(allTaskIds[0]);
+      if (total > 1) {
+        setIsBatchRunning(true);
+        showToast(`已提交 ${total} 次 · 共 ${total * MJ_IMAGES_PER_TASK} 张`);
       }
 
-      const data = await res.json();
+      // 串行发起 N 次 MJ 请求（MJ 账号并发度有限，不并发）
+      (async () => {
+        for (const { taskIds: group } of batchTaskMap) {
+          await executeMjBatch(group, snapshot);
+        }
+        if (total > 1) {
+          setIsBatchRunning(false);
+          showToast(`批量生成完成（${total} 次 · ${total * MJ_IMAGES_PER_TASK} 张）`);
+        }
+      })();
+      return;
+    }
 
-      if (data.status === 'SUCCESS') {
-        taskManager.completeTask(taskId, data.data.image_url);
-        // 更新历史
-        setHistory(prev => prev.map(item =>
-          item.id === taskId
-            ? { ...item, image: data.data.image_url, ...data.data.history_item, status: 'done', progress: 100 }
-            : item
-        ));
+    // 先把所有任务入队（pending 态），然后并发下发
+    const taskIds = [];
+    const baseTs = Date.now();
+    for (let i = 0; i < total; i++) {
+      const taskId = taskManager.createTask('quick-create', prompt, { ...snapshot, batchId, batchIndex: i, batchTotal: total });
+      taskIds.push(taskId);
+      // 每张的期望时长 50~60s 随机，制造更真实的分阶段完成感
+      const expectedMs = 50000 + Math.floor(Math.random() * 10000);
+      const newItem = {
+        id: taskId, image: '', prompt, status: 'pending', progress: 0,
+        type: mode, timestamp: (baseTs + i) / 1000,  // 越靠后的索引时间戳越大（排在前面）
+        startedAt: baseTs,
+        batchId, batchIndex: i, batchTotal: total,
+        expectedMs
+      };
+      setHistory(prev => [newItem, ...prev]);
+    }
+    // 默认选中第一张（批次中的第 1/N），用户可点击缩略图切换
+    setActiveHistoryId(taskIds[0]);
+
+    // image 模式：一次 /api/create 请求带 n=total，服务端返回 N 张，由本地按 batchIndex 分发
+    if (mode === 'image') {
+      if (total > 1) {
+        setIsBatchRunning(true);
+        showToast(`已提交 ${total} 张`);
+      }
+      executeBatchCreate(taskIds, snapshot, total).finally(() => {
+        if (total > 1) {
+          setIsBatchRunning(false);
+          showToast(`批量生成完成（${total} 张）`);
+        }
+      });
+      return;
+    }
+
+    if (total === 1) {
+      executeTask(taskIds[0], snapshot);
+      return;
+    }
+
+    // 其他模式（retouch/portrait/product）服务端接口不支持 n 参数，仍走前端并发下发，
+    // 每张一次请求；这些接口同步返回图片，等待时间较短，影响有限
+    setIsBatchRunning(true);
+    showToast(`已提交 ${total} 个任务`);
+
+    const CONCURRENCY = 3;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < taskIds.length) {
+        const i = cursor++;
+        try {
+          await executeTask(taskIds[i], snapshot);
+        } catch (e) {
+          console.error('batch task error', e);
+        }
+      }
+    };
+    const workers = Array.from({ length: Math.min(CONCURRENCY, taskIds.length) }, () => worker());
+    Promise.all(workers).then(() => {
+      setIsBatchRunning(false);
+      showToast(`批量生成完成（${total} 张）`);
+    });
+  };
+
+  // MJ 批次：一次 /api/create/mj 调用对应 4 个占位任务，同步 serverBatchId 让 fetchHistory 对齐
+  const executeMjBatch = async (taskIds, snapshot) => {
+    const runStartedAt = Date.now();
+    taskIds.forEach(tid => taskManager.updateTask(tid, { status: TASK_STATUS.RUNNING }));
+    setHistory(prev => prev.map(h => taskIds.includes(h.id)
+      ? { ...h, status: 'running', startedAt: runStartedAt, progress: 0 } : h
+    ));
+
+    try {
+      const formData = new FormData();
+      formData.append('prompt', snapshot.prompt || '');
+      formData.append('image_urls_json', JSON.stringify(snapshot.referImages || []));
+      formData.append('aspect_ratio', snapshot.aspectRatio || 'auto');
+      formData.append('mj_mode', snapshot.mjMode || 'fast');
+      formData.append('mj_version', snapshot.mjVersion || 'v8.1');
+
+      const res = await fetch(`${API_BASE_URL}/api/create/mj`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+        keepalive: true
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.detail || '生成失败');
+
+      if (data.data?.remaining_quota !== undefined) {
         setQuota(data.data.remaining_quota);
         localStorage.setItem('quota', data.data.remaining_quota.toString());
-        // 通知顶层 App 立即刷新 Header 积分显示
         window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
-      } else {
-        throw new Error('API Error');
       }
 
-    } catch (err) {
-      clearInterval(progressInterval);
-      taskManager.failTask(taskId, err.message);
-      setHistory(prev => prev.map(item =>
-        item.id === taskId ? { ...item, status: 'failed', progress: 0 } : item
+      const serverTaskId = data.data?.taskId;
+      const serverBatchId = data.data?.batchId;
+      if (!serverTaskId) throw new Error('生成失败');
+
+      setHistory(prev => prev.map(h => taskIds.includes(h.id)
+        ? { ...h, serverTaskId, serverBatchId } : h
       ));
-      showToast(`生成失败: ${err.message}`, 'error');
-    }
-  };
-
-  // --- 下载/复制 ---
-  const handleDownload = async () => {
-    if (!activeTask?.image) return;
-    const secureUrl = toSecureUrl(activeTask.image);
-    try {
-      const response = await fetch(secureUrl, { mode: 'cors' });
-      if (!response.ok) throw new Error('Fetch failed');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `OG_AI_${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      showToast(t.toast.downloadSuccess, 'success');
-    } catch (error) {
-      // CORS 失败时，直接在新标签页打开让用户右键保存
-      window.open(secureUrl, '_blank');
-      showToast(lang === 'zh' ? '已在新标签页打开，请右键保存图片' : 'Opened in new tab, right-click to save', 'info');
-    }
-  };
-
-  const handleCopy = async () => {
-    if (!activeTask?.image) return;
-    const secureUrl = toSecureUrl(activeTask.image);
-    try {
-      const response = await fetch(secureUrl, { mode: 'cors' });
-      if (!response.ok) throw new Error('Fetch failed');
-      const blob = await response.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      showToast(t.toast.copySuccess, 'success');
+      taskIds.forEach(tid => {
+        taskManager.updateTask(tid, {
+          metadata: {
+            ...(taskManager.tasks.find(t => t.id === tid)?.metadata || {}),
+            serverTaskId, serverBatchId
+          }
+        });
+      });
     } catch (err) {
-      // 降级方案：复制图片URL到剪贴板
-      try {
-        await navigator.clipboard.writeText(secureUrl);
-        showToast(lang === 'zh' ? '已复制图片链接' : 'Image URL copied', 'success');
-      } catch {
-        showToast(t.toast.copyFail, 'error');
-      }
+      taskIds.forEach(tid => taskManager.failTask(tid, err.message));
+      setHistory(prev => prev.map(h => taskIds.includes(h.id)
+        ? { ...h, status: 'error', error: err.message } : h
+      ));
+      showToast(err.message || '生成失败', 'error');
     }
   };
 
-  const checkAuth = (action) => { if (!isLoggedIn) { setShowLogin(true); return false; } action(); return true; };
+  // image 模式：单次请求 n=total，服务端把同 batch 的 N 张以 batch_index 展开写入 history，
+  // 本地占位任务按 batch_index 对齐；轮询命中就把图片填入各自占位条目
+  const executeBatchCreate = async (taskIds, snapshot, total) => {
+    const runStartedAt = Date.now();
+    taskIds.forEach(tid => {
+      taskManager.updateTask(tid, { status: TASK_STATUS.RUNNING });
+    });
+    setHistory(prev => prev.map(h => taskIds.includes(h.id)
+      ? { ...h, status: 'running', startedAt: runStartedAt, progress: 0 }
+      : h
+    ));
 
-  const handleFileChange = async (e) => {
-    if (!checkAuth(() => { })) return;
-    const file = e.target.files[0]; if (!file) return;
-    const tempId = Date.now();
-    setSourceImages(prev => [...prev, { id: tempId, preview: URL.createObjectURL(file), url: null, uploading: true }]);
+    // Pro 模型：走独立路由 /api/create/pro（TTAPI 异步通道 gpt-image-2-plus），固定 2 积分/张
+    // 服务端立即返回 taskId/batchId，真实生成在后台跑；前端由 fetchHistory 按 batchId/batchIndex 对齐返图
+    if (snapshot.model === 'gpt-image-2-pro') {
+      try {
+        const formData = new FormData();
+        formData.append('prompt', snapshot.prompt);
+        formData.append('image_urls_json', JSON.stringify(snapshot.referImages));
+        // size 复用通用比例 + 分辨率（gpt-image-2-plus 支持任意 WxH，宽高可被 16 整除，比例 1:3~3:1）
+        formData.append('size', calculateSize(snapshot.aspectRatio, snapshot.resLevel).str);
+        formData.append('n', String(Math.min(10, total)));
+
+        const res = await fetch(`${API_BASE_URL}/api/create/pro`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+          keepalive: true
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          const msg = data?.detail || '生成失败';
+          throw new Error(msg);
+        }
+
+        if (data.data?.remaining_quota !== undefined) {
+          setQuota(data.data.remaining_quota);
+          localStorage.setItem('quota', data.data.remaining_quota.toString());
+          window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
+        }
+
+        const serverTaskId = data.data?.taskId;
+        const serverBatchId = data.data?.batchId;
+        if (!serverTaskId) throw new Error(data.message || '生成失败');
+
+        // 记录 serverTaskId/serverBatchId 到所有占位任务，供 fetchHistory 对账用
+        setHistory(prev => prev.map(h => taskIds.includes(h.id)
+          ? { ...h, serverTaskId, serverBatchId }
+          : h
+        ));
+        taskIds.forEach(tid => {
+          taskManager.updateTask(tid, {
+            metadata: {
+              ...(taskManager.tasks.find(t => t.id === tid)?.metadata || {}),
+              serverTaskId,
+              serverBatchId
+            }
+          });
+        });
+        // 真实 image 由 fetchHistory 轮询命中后填入各占位 task（按 batch_index 对齐）
+      } catch (err) {
+        taskIds.forEach(tid => taskManager.failTask(tid, err.message));
+        setHistory(prev => prev.map(h => taskIds.includes(h.id)
+          ? { ...h, status: 'error', error: err.message }
+          : h
+        ));
+        showToast(err.message || '生成失败', 'error');
+      }
+      return;
+    }
+
     try {
-      const formData = new FormData(); formData.append('file', file);
-      const res = await fetch(`${API_BASE_URL}/api/upload`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` }, body: formData });
-      if (!res.ok) throw new Error('Upload Failed');
+      const formData = new FormData();
+      formData.append('prompt', snapshot.prompt);
+      formData.append('image_urls_json', JSON.stringify(snapshot.referImages));
+      formData.append('model', snapshot.model);
+      formData.append('aspect_ratio', snapshot.aspectRatio);
+      formData.append('quality', snapshot.quality);
+      // 用 calculateSize 基于 aspectRatio + resLevel 算出合法 size；auto 比例下传 'auto'
+      formData.append('size', calculateSize(snapshot.aspectRatio, snapshot.resLevel).str);
+      formData.append('n', String(total));
+
+      const res = await fetch(`${API_BASE_URL}/api/create`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+        keepalive: true
+      });
+
+      if (!res.ok) throw new Error('API failed');
       const data = await res.json();
-      setSourceImages(prev => prev.map(img => img.id === tempId ? { ...img, url: data.url, uploading: false } : img));
-    } catch (err) { showToast("上传失败", 'error'); setSourceImages(prev => prev.filter(img => img.id !== tempId)); }
-    e.target.value = '';
+
+      if (data.data?.remaining_quota !== undefined) {
+        setQuota(data.data.remaining_quota);
+        localStorage.setItem('quota', data.data.remaining_quota.toString());
+        window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
+      }
+
+      const serverTaskId = data.data?.taskId;
+      const serverBatchId = data.data?.batchId;
+      if (!serverTaskId) throw new Error(data.message || '生成失败');
+
+      // 记录 serverTaskId/serverBatchId 到所有占位任务，供 fetchHistory 对账用
+      setHistory(prev => prev.map(h => taskIds.includes(h.id)
+        ? { ...h, serverTaskId, serverBatchId }
+        : h
+      ));
+      taskIds.forEach(tid => {
+        taskManager.updateTask(tid, {
+          metadata: {
+            ...(taskManager.tasks.find(t => t.id === tid)?.metadata || {}),
+            serverTaskId,
+            serverBatchId
+          }
+        });
+      });
+      // 实际 image 由 fetchHistory 轮询命中后填入各占位 task（按 batch_index 对齐）
+    } catch (err) {
+      // 整批失败：全部占位任务标记 error
+      taskIds.forEach(tid => taskManager.failTask(tid, err.message));
+      setHistory(prev => prev.map(h => taskIds.includes(h.id)
+        ? { ...h, status: 'error', error: err.message }
+        : h
+      ));
+    }
   };
 
-  const handleRemoveImage = (id) => { setSourceImages(prev => prev.filter(img => img.id !== id)); };
+  const executeTask = async (taskId, snapshot) => {
+    // snapshot 为批量任务快照；未传入时使用当前状态（重试按钮）
+    const s = snapshot || {
+      mode, referImages, model, aspectRatio, resLevel, quality,
+      retouchMode: mode === 'portrait' ? 'portrait' : retouchMode,
+      strength, suggestion, productStyle, prompt
+    };
+    const runStartedAt = Date.now();
+    taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
+    setHistory(prev => prev.map(h => h.id === taskId ? { ...h, status: 'running', startedAt: runStartedAt, progress: 0 } : h));
+    try {
+      let endpoint = '/api/create';
+      const formData = new FormData();
 
-  const handleImprovePrompt = () => {
-    if (!prompt.trim()) return; setIsImproving(true);
-    setTimeout(() => { setIsImproving(false); setPrompt(prompt + " (Professional Studio Lighting, 8k Resolution)"); }, 1200);
+      if (s.mode === 'retouch' || s.mode === 'portrait') {
+        endpoint = '/api/retouch';
+        formData.append('image_url', s.referImages[0]);
+        formData.append('mode', s.mode === 'portrait' ? 'portrait' : s.retouchMode);
+        formData.append('strength', s.strength);
+        formData.append('suggestion', s.suggestion);
+      } else if (s.mode === 'product') {
+        endpoint = '/api/generate';
+        formData.append('image_urls_json', JSON.stringify(s.referImages));
+        formData.append('prompt', s.prompt);
+        formData.append('style', s.productStyle);
+      } else {
+        formData.append('prompt', s.prompt);
+        formData.append('image_urls_json', JSON.stringify(s.referImages));
+        formData.append('model', s.model);
+        formData.append('aspect_ratio', s.aspectRatio);
+        formData.append('quality', s.quality);
+        formData.append('size', calculateSize(s.aspectRatio, s.resLevel).str);
+      }
+
+      // keepalive 让请求在用户关闭标签页后依然能送达服务端；用户侧主动断开不会触发退分
+      // 注意：keepalive 请求体大小上限约 64KB，当前 formData 字段均为短文本/URL，不超限
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+        keepalive: true
+      });
+
+      if (!res.ok) throw new Error('API failed');
+      const data = await res.json();
+
+      // 同步积分（预扣分已在服务端完成）
+      if (data.data?.remaining_quota !== undefined) {
+        setQuota(data.data.remaining_quota);
+        localStorage.setItem('quota', data.data.remaining_quota.toString());
+        window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: data.data.remaining_quota } }));
+      }
+
+      // /api/retouch, /api/generate, /api/portrait 直接同步返回图片
+      const immediateImage = data.data?.image_url || data.image;
+      if (immediateImage) {
+        taskManager.completeTask(taskId, immediateImage);
+        setHistory(prev => prev.map(h => h.id === taskId ? { ...h, image: immediateImage, status: 'done', progress: 100 } : h));
+        return;
+      }
+
+      // /api/create 返回服务端 taskId，需要轮询最终状态
+      const serverTaskId = data.data?.taskId;
+      if (!serverTaskId) {
+        throw new Error(data.message || '生成失败');
+      }
+
+      // 保存 serverTaskId 到 history 与任务管理器元数据，方便 fetchHistory 去重
+      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, serverTaskId } : h));
+      taskManager.updateTask(taskId, {
+        metadata: { ...(taskManager.tasks.find(t => t.id === taskId)?.metadata || {}), serverTaskId }
+      });
+
+      // 轮询 /api/create/status/{serverTaskId}，最多 15 分钟
+      const MAX_POLL = 15 * 60 * 1000;
+      const pollStart = Date.now();
+      while (Date.now() - pollStart < MAX_POLL) {
+        await new Promise(r => setTimeout(r, 3000));
+        try {
+          const statusRes = await fetch(`${API_BASE_URL}/api/create/status/${serverTaskId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (!statusRes.ok) continue;
+          const st = await statusRes.json();
+          if (st.status === 'SUCCESS') {
+            const imgUrl = st.image_url || (st.image_urls && st.image_urls[0]);
+            taskManager.completeTask(taskId, imgUrl);
+            setHistory(prev => prev.map(h => h.id === taskId ? { ...h, image: imgUrl, status: 'done', progress: 100 } : h));
+            return;
+          }
+          if (st.status === 'FAILED') {
+            throw new Error('生成失败，请重试');
+          }
+          // ON_QUEUE → 继续等
+        } catch (pe) {
+          if (pe.message && pe.message.includes('失败')) throw pe;
+          // 网络抖动，忽略
+        }
+      }
+      throw new Error('生成超时，请稍后在历史记录中查看');
+    } catch (err) {
+      taskManager.failTask(taskId, err.message);
+      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, status: 'error', error: err.message } : h));
+    }
+  };
+
+  const handleDownload = async (url) => {
+    if (!url) return;
+    const secureUrl = toSecureUrl(url);
+    try {
+      const res = await fetch(secureUrl);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `OG_AI_${Date.now()}.png`;
+      a.click();
+      showToast('开始下载');
+    } catch (e) {
+      window.open(secureUrl, '_blank');
+    }
+  };
+
+  // 删除当前图片：成功态调后端删除 + 本地清理；失败/进行中态仅本地清理
+  const handleDeleteImage = async (item) => {
+    if (!item || isDeleting) return;
+    setIsDeleting(true);
+
+    // 先在本地同步移除（无论成功/失败）
+    const removeLocal = () => {
+      taskManager.removeTask(item.id);
+      setHistory(prev => {
+        const next = prev.filter(h => h.id !== item.id);
+        if (activeHistoryIdRef.current === item.id) {
+          setActiveHistoryId(next[0]?.id || null);
+        }
+        return next;
+      });
+    };
+
+    try {
+      if (item.status === 'done') {
+        // 成功任务：服务端有持久化记录，需要同时删除
+        // batch 对账写入的条目用 serverRecordId；单任务/非 batch 用 serverTaskId；服务端返回条目用 item.id
+        const remoteId = item.serverRecordId || item.serverTaskId || item.id;
+        const res = await fetch(`${API_BASE_URL}/api/history/${remoteId}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) throw new Error('delete failed');
+      }
+      removeLocal();
+      showToast('已删除');
+      setDeleteConfirmItem(null);
+    } catch (e) {
+      showToast('删除失败', 'error');
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
-    <div className="w-full h-full bg-[#050505] text-white font-sans flex flex-col overflow-hidden selection:bg-[#FF8A3D] selection:text-white">
-      <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={handleLogin} t={t} />
-      <FullscreenViewer isOpen={showFullscreen} image={activeTask?.image} onClose={() => setShowFullscreen(false)} />
+    <div className="w-full h-full bg-[#050505] text-white font-sans flex flex-col overflow-hidden selection:bg-white/20">
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={() => window.location.reload()} t={t} />
 
-      <main className="flex-1 flex flex-col md:flex-row gap-0 min-h-0 relative overflow-auto md:overflow-hidden">
-        <div className="w-full md:w-[380px] bg-[#0a0a0a] border-b md:border-b-0 md:border-r border-white/5 flex flex-col z-20 shadow-[0_4px_24px_rgba(0,0,0,0.4)] md:shadow-[4px_0_24px_rgba(0,0,0,0.4)]">
-          <div className="flex-1 overflow-visible md:overflow-y-auto p-4 md:p-6 custom-scrollbar space-y-6 md:space-y-8">
-            <div className="space-y-3">
-              <SectionLabel icon={<UploadCloud size={14} />}>{t.upload.title}</SectionLabel>
-              <div className="grid grid-cols-3 gap-2">
-                {sourceImages.map((img, index) => (
-                  <div key={img.id} className="relative aspect-square rounded-lg overflow-hidden group border border-white/10 bg-[#141414]">
-                    <img src={img.preview} className="w-full h-full object-cover" alt={`upload-${index}`} />
-                    <div className="absolute top-1 left-1 w-5 h-5 bg-black/60 backdrop-blur text-white text-[10px] flex items-center justify-center rounded-md font-bold border border-white/10">{index + 1}</div>
-                    {img.uploading ? <div className="absolute inset-0 bg-black/60 flex items-center justify-center"><Loader2 className="w-4 h-4 text-[#FF8A3D] animate-spin" /></div> : <button onClick={(e) => { e.stopPropagation(); handleRemoveImage(img.id); }} className="absolute top-1 right-1 p-1 bg-red-500/80 hover:bg-red-500 text-white rounded-md opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={12} /></button>}
+      <main className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
+        {/* 配置面板 */}
+        <div className="w-full md:w-[320px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-y-auto scrollbar-hide z-10">
+          <div className="p-5 space-y-6 flex-1">
+            {/* 动态参数面板 */}
+            <div className="space-y-8">
+              {(mode === 'image' || mode === 'product') && (
+                <div className="space-y-4">
+                  <SectionLabel icon={<Edit3 size={14} />}>提示词</SectionLabel>
+                  <div className="relative group">
+                    <textarea
+                      value={prompt}
+                      onChange={e => setPrompt(e.target.value)}
+                      placeholder="例如：一个极简风格的玻璃瓶在阳光下，背后的森林隐约可见..."
+                      className="w-full h-36 bg-white/[0.03] border border-white/5 rounded-2xl p-4 text-sm text-white/80 placeholder:text-white/10 focus:outline-none focus:border-transparent focus:ring-0 focus:ring-offset-0 focus:shadow-none transition-none resize-none leading-relaxed"
+                    />
+                    <div className="absolute bottom-3 right-3 text-[10px] text-white/10 font-mono">{prompt.length}</div>
                   </div>
-                ))}
-                <div onClick={() => fileInputRef.current.click()} className="aspect-square rounded-lg border border-dashed border-white/10 hover:border-[#FF8A3D]/50 hover:bg-white/[0.02] flex flex-col items-center justify-center cursor-pointer transition-all group"><Plus className="text-white/30 group-hover:text-[#FF8A3D] transition-colors" size={24} /><span className="text-[10px] text-white/30 mt-1">{t.upload.desc}</span></div>
-              </div>
-              <input id="file-upload" ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
-            </div>
+                </div>
+              )}
 
-            <div className="space-y-6">
+              {/* 图片上传区域 */}
               <div className="space-y-3">
-                <div className="flex justify-between items-center"><SectionLabel icon={<Edit3 size={14} />}>{t.prompt.label}</SectionLabel><button onClick={handleImprovePrompt} disabled={isImproving || !prompt} className="text-[10px] text-[#FF8A3D] hover:text-[#ff9752] flex items-center gap-1 bg-[#FF8A3D]/10 px-2 py-1 rounded transition-colors disabled:opacity-50"><Sparkles size={10} /> {isImproving ? t.prompt.enhancing : t.prompt.enhance}</button></div>
-                <textarea value={prompt} onChange={e => setPrompt(e.target.value)} placeholder={t.prompt.placeholder} className="w-full h-28 min-h-[70px] max-h-[300px] bg-[#141414] border border-white/10 rounded-xl p-3 text-xs text-white/90 placeholder:text-white/20 resize-y focus:outline-none focus:border-[#FF8A3D]/50 transition-colors custom-scrollbar" style={{ resize: 'vertical' }} />
+                <SectionLabel icon={<UploadCloud size={14} />}>参考图</SectionLabel>
+                <div className="grid grid-cols-4 gap-2">
+                  {referImages.map((url, i) => (
+                    <div key={i} className="relative aspect-square rounded-xl overflow-hidden border border-white/10 group animate-in zoom-in-50 duration-300">
+                      <img src={toSecureUrl(url)} className="w-full h-full object-cover" alt="ref" />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button onClick={() => setReferImages(prev => prev.filter((_, idx) => idx !== i))} className="p-1.5 bg-red-500 rounded-lg shadow-lg"><X size={12} /></button>
+                      </div>
+                    </div>
+                  ))}
+                  {(mode === 'image' || mode === 'product' || referImages.length === 0) && (
+                    <label className="aspect-square rounded-xl border-2 border-dashed border-white/5 hover:border-white/20 hover:bg-white/5 flex flex-col items-center justify-center cursor-pointer transition-all group">
+                      {isUploading ? <Loader2 size={20} className="animate-spin text-white/20" /> : <Plus size={20} className="text-white/10 group-hover:text-white/40 transition-colors" />}
+                      <input type="file" className="hidden" onChange={handleFileUpload} />
+                    </label>
+                  )}
+                </div>
               </div>
-              <div className="space-y-5">
-                <TemplateSection
-                  label={t.template}
-                  templates={TEMPLATES}
-                  activeId={selectedTemplate}
-                  hoverId={hoverTemplate}
-                  lang={lang}
-                  onSelect={handleSelectTemplate}
-                  onHover={setHoverTemplate}
-                />
+
+              {mode === 'image' && (
+                <div className="space-y-5">
+                  {/* 模型选择自定义下拉框 */}
+                  <div className="space-y-2.5">
+                    <SectionLabel icon={<Cpu size={14} />}>选择模型</SectionLabel>
+                    <div className="relative group">
+                      <div className="w-full bg-white/[0.03] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white/80 flex items-center justify-between cursor-pointer hover:bg-white/[0.05] transition-all" onClick={() => setShowModelMenu(!showModelMenu)}>
+                        <div className="flex items-center gap-2">
+                          {model === 'nano-banana' ? (
+                            <span className="text-[14px]">🍌</span>
+                          ) : model === 'midjourney' ? (
+                            <img src={MidjourneyIcon} className="w-4 h-4" alt="midjourney" />
+                          ) : (
+                            <img src={ChatGptIcon} className="w-4 h-4 brightness-0 invert" alt="gpt" />
+                          )}
+                          <span>
+                            {model === 'gpt-image-2' ? 'GPT Image 2'
+                              : model === 'gpt-image-2-vip' ? 'GPT Image 2 High'
+                              : model === 'gpt-image-2-pro' ? 'GPT Image 2 Pro'
+                              : model === 'midjourney' ? `Midjourney ${(MJ_VERSIONS.find(v => v.id === mjVersion) || {}).label || ''}`.trim()
+                              : 'Nano Banana'}
+                          </span>
+                        </div>
+                        <ChevronDown size={14} className={`opacity-20 transition-transform ${showModelMenu ? 'rotate-180' : ''}`} />
+                      </div>
+                      
+                      {showModelMenu && (
+                        <>
+                          <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)}></div>
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+                            {[
+                              { id: 'gpt-image-2', name: 'GPT Image 2' },
+                              { id: 'gpt-image-2-vip', name: 'GPT Image 2 High' },
+                              { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
+                              { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
+                              { id: 'nano-banana', name: 'Nano Banana' }
+                            ].map(m => {
+                              const disabled = m.minQuota !== undefined && quota < m.minQuota;
+                              return (
+                                <button
+                                  key={m.id}
+                                  disabled={disabled}
+                                  onClick={() => {
+                                    if (disabled) {
+                                      showToast(`积分不足 ${m.minQuota}，无法使用 ${m.name}`, 'error');
+                                      return;
+                                    }
+                                    setModel(m.id);
+                                    setShowModelMenu(false);
+                                  }}
+                                  className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${model === m.id ? 'bg-white/[0.03]' : ''} ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'}`}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    {m.id === 'nano-banana' ? (
+                                      <span className="text-xl">🍌</span>
+                                    ) : m.id === 'midjourney' ? (
+                                      <img src={MidjourneyIcon} className="w-5 h-5" alt="midjourney" />
+                                    ) : (
+                                      <img src={ChatGptIcon} className="w-5 h-5 brightness-0 invert" alt="gpt" />
+                                    )}
+                                    <div className="flex flex-col items-start gap-0.5">
+                                      <div className="flex items-center gap-1.5">
+                                        <div className="text-xs font-bold text-white/80">{m.name}</div>
+                                        {m.badge && (
+                                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold tracking-wider">{m.badge}</span>
+                                        )}
+                                      </div>
+                                      {disabled && (
+                                        <div className="text-[10px] text-white/40">积分不足</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {model === m.id && <Check size={14} className="text-orange-400" />}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 比例选择网格（所有模型共用，Pro 也能随便选） */}
+                  <div className="space-y-3">
+                    <SectionLabel icon={<LayoutIcon size={14} />}>选择比例</SectionLabel>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {RATIOS.map(r => {
+                        const isAuto = r === 'auto';
+                        let icon = null;
+                        if (isAuto) icon = <Sparkles size={14} />;
+                        else {
+                          const [w, h] = r.split(':').map(Number);
+                          const max = Math.max(w, h);
+                          icon = <div className="border border-current rounded-[1px] opacity-60" style={{ width: (w/max)*10, height: (h/max)*10 }}></div>;
+                        }
+                        return (
+                          <button 
+                            key={r} 
+                            onClick={() => setAspectRatio(r)}
+                            className={`flex flex-col items-center gap-1.5 py-2.5 rounded-lg border transition-all ${aspectRatio === r ? 'bg-white/10 border-white/20 text-white' : 'bg-transparent border-transparent text-white/30 hover:text-white/60'}`}
+                          >
+                            <div className="h-4 flex items-center justify-center">{icon}</div>
+                            <span className="text-[9px] font-medium uppercase">{isAuto ? '智能' : r}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* MJ 速度模式（选中 MJ 时显示） */}
+                  {isMjModel && (
+                    <>
+                    {/* 版本选择 */}
+                    <div className="space-y-3">
+                      <SectionLabel icon={<Cpu size={14} />}>版本</SectionLabel>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {MJ_VERSIONS.map(v => (
+                          <button
+                            key={v.id}
+                            onClick={() => setMjVersion(v.id)}
+                            className={`py-2.5 rounded-lg border transition-all flex flex-col items-center gap-0.5 ${mjVersion === v.id ? 'bg-white/10 border-white/20 text-white' : 'bg-transparent border-white/5 text-white/40 hover:text-white/70'}`}
+                          >
+                            <span className="text-[11px] font-bold">{v.label}</span>
+                            <span className="text-[9px] opacity-60">{v.sub}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <SectionLabel icon={<Sparkles size={14} />}>速度模式</SectionLabel>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[
+                          { id: 'relax', label: 'Relax', cost: MJ_COST_BY_MODE.relax, sub: '慢速省钱' },
+                          { id: 'fast', label: 'Fast', cost: MJ_COST_BY_MODE.fast, sub: '推荐' },
+                          { id: 'turbo', label: 'Turbo', cost: MJ_COST_BY_MODE.turbo, sub: '极速' },
+                        ].map(m => {
+                          const disabled = quota < m.cost;
+                          return (
+                            <button
+                              key={m.id}
+                              disabled={disabled}
+                              onClick={() => !disabled && setMjMode(m.id)}
+                              className={`py-3 rounded-xl border transition-all flex flex-col items-center gap-0.5 ${mjMode === m.id ? 'bg-white/10 border-white/20 text-white' : 'bg-[#141414] border-transparent text-white/40 hover:text-white/70'} ${disabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                            >
+                              <span className="text-xs font-bold">{m.label}</span>
+                              <span className="text-[9px] opacity-60">{m.sub}</span>
+                              <span className="text-[10px] font-mono text-orange-300/80">{m.cost} 积分/次</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="text-[10px] text-white/40 px-1">每次生成 4 张子图</div>
+                    </div>
+                    </>
+                  )}
+
+                  {/* 分辨率大按钮 - gpt-image-2 仅支持 1K，该模型下隐藏；Pro 支持任意 WxH 因此可选；MJ 不支持分辨率选择 */}
+                  {!lockedTo1K && !isMjModel && (
+                    <div className="space-y-3">
+                      <SectionLabel icon={<Maximize2 size={14} />}>选择分辨率</SectionLabel>
+                      <div className="grid grid-cols-3 gap-2">
+                        {['1K', '2K', '4K'].map(level => (
+                          <button
+                            key={level}
+                            onClick={() => setResLevel(level)}
+                            className={`py-3 rounded-xl border font-bold text-xs transition-all flex items-center justify-center gap-2 ${resLevel === level ? 'bg-white/10 border-white/20 text-white' : 'bg-[#141414] border-transparent text-white/30 hover:text-white/50'}`}
+                          >
+                            {level === '1K' ? '标清 1K' : level === '2K' ? '高清 2K' : <><span className="text-white">超清 4K</span><Sparkles size={12} className="text-[#00C4B6]" /></>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 尺寸展示（MJ 不展示） */}
+                  {!isMjModel && (
+                    <div className="space-y-3">
+                      <SectionLabel icon={<Square size={14} />}>尺寸</SectionLabel>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 flex items-center justify-between">
+                           <span className="text-[10px] font-bold text-white/20">W</span>
+                           <span className="text-xs font-mono text-white/40">{dispW}</span>
+                        </div>
+                        <Link size={12} className="text-white/10" />
+                        <div className="flex-1 bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 flex items-center justify-between">
+                           <span className="text-[10px] font-bold text-white/20">H</span>
+                           <span className="text-xs font-mono text-white/40">{dispH}</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-white/20 ml-1 uppercase">PX</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {(mode === 'retouch' || mode === 'portrait') && (
+                <div className="space-y-6">
+                  {mode === 'retouch' && (
+                    <ParamSection 
+                      label="修图算法" 
+                      options={['general', 'landscape', 'product']} 
+                      translations={{general: '智能通用', landscape: '风景优化', product: '产品增效'}} 
+                      active={retouchMode} 
+                      onChange={setRetouchMode} 
+                    />
+                  )}
+                  <ParamSection 
+                    label="重绘强度" 
+                    options={['low', 'medium', 'high']} 
+                    translations={{low: '细腻', medium: '平衡', high: '重塑'}} 
+                    active={strength} 
+                    onChange={setStrength} 
+                  />
+                  <div className="space-y-3">
+                    <label className="text-[10px] text-white/40 font-bold uppercase tracking-widest px-1">细节建议</label>
+                    <input 
+                      value={suggestion} 
+                      onChange={e => setSuggestion(e.target.value)}
+                      placeholder="如：突出光影感、让色彩更鲜艳"
+                      className="w-full bg-white/[0.03] border border-white/5 rounded-xl px-4 py-3 text-xs text-white/80 focus:outline-none focus:border-transparent focus:ring-0 focus:ring-offset-0 focus:shadow-none transition-none"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {mode === 'product' && (
+                <div>
+                  <ParamSection 
+                    label="视觉风格" 
+                    options={['Luxurious', 'Minimalist', 'Outdoor', 'Cyberpunk', 'Cinematic']} 
+                    translations={{Luxurious: '奢华', Minimalist: '极简', Outdoor: '户外', Cyberpunk: '赛博', Cinematic: '电影'}} 
+                    active={productStyle} 
+                    onChange={setProductStyle} 
+                    grid
+                  />
+                </div>
+              )}
+
+              {/* 生成数量（最多 50 张，前端并发下发，服务端独立完成）；MJ 下为"生成次数" */}
+              <div className="space-y-3">
+                <SectionLabel icon={<Hash size={14} />}>{isMjModel ? '生成次数' : '生成数量'}</SectionLabel>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCount(c => clampCount((Number(c) || 1) - 1))}
+                    disabled={Number(count) <= 1 || isBatchRunning}
+                    className="w-11 h-11 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    aria-label="减少"
+                  >
+                    <Minus size={14} />
+                  </button>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={count}
+                    disabled={isBatchRunning}
+                    onChange={e => {
+                      const v = e.target.value.replace(/[^0-9]/g, '');
+                      if (v === '') { setCount(''); return; }
+                      setCount(clampCount(v));
+                    }}
+                    onBlur={e => setCount(clampCount(e.target.value))}
+                    className="flex-1 h-11 bg-white/[0.03] border border-white/5 rounded-xl px-3 text-sm text-white text-center font-mono focus:outline-none focus:border-white/20 transition-all disabled:opacity-40"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setCount(c => clampCount((Number(c) || 0) + 1))}
+                    disabled={Number(count) >= effectiveMax || isBatchRunning}
+                    className="w-11 h-11 rounded-xl bg-white/[0.03] border border-white/5 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                    aria-label="增加"
+                  >
+                    <Plus size={14} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="p-4 md:p-6 border-t border-white/5 bg-[#0a0a0a]">
-            <button onClick={handleGenerate} disabled={isLoggedIn && !isValid} className={`w-full h-12 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${isLoggedIn && !isValid ? 'bg-[#1a1a1a] text-white/30 cursor-not-allowed border border-white/5' : 'bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white hover:opacity-90 shadow-orange-900/20'}`}>
-              {!isLoggedIn ? <><Lock size={14} /> {t.generate.loginRequired}</> : quota <= 0 ? t.generate.quotaEmpty : !isValid ? t.generate.disabled : <><Sparkles size={16} /> {t.generate.idle} <span className="opacity-50 text-[10px] ml-1">(-1)</span></>}
+          {/* 生成按钮 */}
+          <div className="p-6 bg-[#0a0a0a] border-t border-white/5 sticky bottom-0">
+            <button
+              onClick={handleGenerate}
+              disabled={isBatchRunning}
+              className="w-full h-12 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] shadow-lg shadow-orange-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isBatchRunning ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  <span>排队生成中...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles size={18} />
+                  <span>开始创作</span>
+                  <span className="text-white/60 text-[10px] ml-1">
+                    {(() => {
+                      // MJ：每次 4 张，按 mode 计费
+                      if (model === 'midjourney') {
+                        const per = mjCostPerTask;
+                        const totalCost = count * per;
+                        return count > 1
+                          ? `共 ${count} 次 · ${count * MJ_IMAGES_PER_TASK} 张 · 消耗${totalCost}积分`
+                          : `${MJ_IMAGES_PER_TASK} 张 · 消耗${per}积分`;
+                      }
+                      const per = model === 'gpt-image-2-pro' ? PRO_COST_PER_IMAGE : (resLevel === '4K' ? 2 : 1);
+                      const totalCost = count * per;
+                      return count > 1
+                        ? `共 ${count} 张 · 消耗${totalCost}积分`
+                        : `消耗${per}积分`;
+                    })()}
+                  </span>
+                </>
+              )}
             </button>
           </div>
         </div>
 
-        {/* Middle Canvas */}
-        <div className="flex-1 bg-[#050505] p-4 md:p-6 min-w-0 flex flex-col min-h-[300px] md:min-h-0">
-          <div className="flex-1 rounded-2xl bg-[#0a0a0a] border border-white/5 relative overflow-hidden flex items-center justify-center group min-h-[250px]">
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
+        {/* 中间预览区域 */}
+        <div className="flex-1 bg-[#050505] p-4 flex flex-col relative min-w-0">
+          <div className="flex-1 rounded-2xl bg-[#0a0a0a] border border-white/5 relative flex items-center justify-center overflow-hidden group">
+             <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
 
-            {activeTask?.status === 'generating' && (
-              <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
-                <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden mb-4"><div className="h-full bg-[#FF8A3D] transition-all duration-300" style={{ width: `${activeTask.progress}%` }}></div></div>
-                <div className="text-[#FF8A3D] font-mono text-2xl animate-pulse">{Math.round(activeTask.progress)}%</div>
-                <div className="text-white/40 text-xs mt-2 uppercase tracking-widest">{t.status.generating}</div>
-              </div>
-            )}
-
-            <div className="relative w-full h-full p-8 flex items-center justify-center">
-              {!activeTask?.image && activeTask?.status !== 'generating' ? (
-                <div className="text-center opacity-20 flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-2xl border border-dashed border-white/30 flex items-center justify-center"><ImageIcon size={32} /></div>
-                  <p className="text-sm font-medium tracking-wide">{t.status.ready}</p>
-                </div>
-              ) : (
-                <div className={`relative w-full h-full flex items-center justify-center transition-all duration-500 ${activeTask?.status === 'generating' ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}`}>
-                  {activeTask?.image && <img src={toSecureUrl(activeTask.image)} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" alt="Result" />}
-                  {activeTask?.status === 'failed' && <div className="text-red-500 flex flex-col items-center gap-2"><AlertCircle size={32} /><span>{t.status.failed}</span></div>}
-                </div>
-              )}
-            </div>
-
-            {activeTask?.status === 'done' && activeTask?.image && (
-              <div className="absolute bottom-8 flex items-center gap-3 p-2 rounded-full bg-[#1e1e1e]/80 border border-white/10 shadow-2xl backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
-                <ActionBtn icon={<Download size={18} />} onClick={handleDownload} tooltip={t.actions.download} />
-                <ActionBtn icon={<Maximize2 size={18} />} onClick={() => setShowFullscreen(true)} tooltip={t.actions.fullscreen} />
-                <div className="w-[1px] h-4 bg-white/10"></div>
-                <ActionBtn icon={<Copy size={18} />} onClick={handleCopy} tooltip={t.actions.copy} />
-              </div>
-            )}
+             {activeTask ? (
+               <div className="relative w-full h-full flex items-center justify-center p-6">
+                 {activeTask.status === 'done' ? (
+                   <div className="relative group/result w-full h-full flex items-center justify-center">
+                     <img src={toSecureUrl(activeTask.image)} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" alt="result" />
+                     <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 p-2 rounded-full bg-[#1e1e1e]/80 backdrop-blur-md border border-white/10 opacity-0 group-hover/result:opacity-100 transition-all translate-y-2 group-hover/result:translate-y-0">
+                       <button onClick={() => handleDownload(activeTask.image)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="下载"><Download size={18} /></button>
+                       <button onClick={() => setShowFullscreen(true)} className="p-2 hover:bg-white/10 rounded-full transition-colors" title="全屏"><Maximize2 size={18} /></button>
+                       <button onClick={() => setDeleteConfirmItem(activeTask)} className="p-2 hover:bg-red-600 text-white/80 hover:text-white rounded-full transition-colors" title="删除"><Trash2 size={18} /></button>
+                     </div>
+                   </div>
+                 ) : activeTask.status === 'error' ? (
+                   <div className="flex flex-col items-center gap-3 text-red-400">
+                     <AlertCircle size={36} />
+                     <p className="text-sm">{activeTask.error || '生成失败，请重试'}</p>
+                     <div className="flex items-center gap-2 mt-2">
+                       <button onClick={() => executeTask(activeTask.id)} className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs transition-all">重试</button>
+                       <button onClick={() => setDeleteConfirmItem(activeTask)} className="px-4 py-1.5 bg-red-600/20 hover:bg-red-600 text-red-300 hover:text-white rounded-lg text-xs transition-all flex items-center gap-1"><Trash2 size={12} />删除</button>
+                     </div>
+                   </div>
+                 ) : (
+                   <div className="flex flex-col items-center gap-4">
+                     <div className="relative">
+                       <div className="w-20 h-20 rounded-full border-4 border-white/5 border-t-white/40 animate-spin"></div>
+                       <div className="absolute inset-0 flex items-center justify-center font-mono text-lg">{Math.round(activeTask.progress || 0)}%</div>
+                     </div>
+                     <p className="text-white/40 text-xs">
+                       {activeTask.batchTotal > 1
+                         ? `第 ${(activeTask.batchIndex ?? 0) + 1}/${activeTask.batchTotal} 张 · 正在创作中...`
+                         : '正在创作中...'}
+                     </p>
+                   </div>
+                 )}
+               </div>
+             ) : (
+               <div className="text-center flex flex-col items-center gap-4 opacity-20">
+                 <Wand2 size={40} />
+                 <p className="text-sm font-medium">配置参数后点击"开始创作"</p>
+               </div>
+             )}
           </div>
         </div>
 
-        {/* Right History Panel - 移动端隐藏 */}
-        <div className="hidden lg:flex w-[220px] bg-[#0a0a0a] border-l border-white/5 flex-col z-20">
-          <div className="p-5 border-b border-white/5"><SectionLabel icon={<History size={14} />}>{t.gallery.title}</SectionLabel></div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-            {history.map(item => (
-              <div
-                key={item.id}
-                onClick={() => setActiveHistoryId(item.id)}
-                className={`aspect-square rounded-xl overflow-hidden border cursor-pointer relative group bg-[#111] transition-all hover:shadow-lg hover:shadow-orange-900/10
-                  ${activeHistoryId === item.id ? 'border-[#FF8A3D] ring-1 ring-[#FF8A3D]/50' : 'border-white/5 hover:border-[#FF8A3D]/50'}
-                `}
+        {/* 右侧历史面板 */}
+        <div className="hidden lg:flex w-[200px] bg-[#0a0a0a] border-l border-white/5 flex-col">
+          <div className="p-4 border-b border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[11px] font-bold text-white/40">
+              <History size={14} />
+              <span>创作记录</span>
+            </div>
+            {history.some(h => h.status === 'pending' || h.status === 'running') && (
+              <button
+                onClick={() => {
+                  // 清理所有本地仍在进行中的任务（大多数是上次会话遗留的僵尸）
+                  taskManager.getTasksByType('quick-create')
+                    .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
+                    .forEach(t => taskManager.removeTask(t.id));
+                  setHistory(prev => prev.filter(h => h.status !== 'pending' && h.status !== 'running'));
+                  showToast('已清理进行中任务');
+                }}
+                className="p-1 text-white/30 hover:text-white/60 transition-colors"
+                title="清理残留的进行中任务"
               >
-                {item.status === 'generating' ? (
-                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#1a1a1a]">
-                    <Loader2 className="animate-spin text-[#FF8A3D] mb-2" size={20} />
-                    <span className="text-[10px] text-white/50 font-mono">{Math.round(item.progress)}%</span>
-                  </div>
-                ) : item.status === 'failed' ? (
-                  <div className="w-full h-full flex items-center justify-center bg-red-900/20 text-red-500"><AlertCircle size={20} /></div>
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+            {history.map(h => (
+              <div
+                key={h.id}
+                onClick={() => setActiveHistoryId(h.id)}
+                className={`aspect-square rounded-xl overflow-hidden cursor-pointer border transition-all relative group/thumb bg-[#111]
+                  ${activeHistoryId === h.id ? 'border-[#FF8A3D] ring-1 ring-[#FF8A3D]/30' : 'border-white/5 hover:border-white/20'}`}
+              >
+                {h.status === 'done' && h.image ? (
+                  <img src={toSecureUrl(h.image)} className="w-full h-full object-cover opacity-80 group-hover/thumb:opacity-100 transition-opacity" alt="" />
+                ) : h.status === 'error' ? (
+                  <div className="w-full h-full flex items-center justify-center bg-red-900/10"><AlertCircle size={16} className="text-red-500/60" /></div>
                 ) : (
-                  <img src={toSecureUrl(item.image)} className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity" alt="thumb" />
+                  <div className="w-full h-full flex flex-col items-center justify-center bg-[#1a1a1a]">
+                    <Loader2 size={16} className="animate-spin text-[#FF8A3D] mb-1" />
+                    <span className="text-[10px] text-white/40 font-mono">{Math.round(h.progress || 0)}%</span>
+                  </div>
                 )}
-                {item.status === 'done' && <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/90 to-transparent"><p className="text-[9px] text-white/80 line-clamp-1">{item.prompt}</p></div>}
+                {/* 批次编号徽标 */}
+                {h.batchTotal > 1 && (
+                  <div className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/70 backdrop-blur-sm text-[9px] text-white/80 font-mono">
+                    {(h.batchIndex ?? 0) + 1}/{h.batchTotal}
+                  </div>
+                )}
+                {h.status === 'done' && <div className="absolute bottom-0 inset-x-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent"><p className="text-[9px] text-white/70 truncate">{h.prompt || (h.type === 'retouch' ? '修图' : '创作')}</p></div>}
               </div>
             ))}
-            {history.length === 0 && <div className="text-center text-[10px] text-white/20 mt-10">{t.gallery.empty}</div>}
+            {history.length === 0 && <div className="text-center text-white/15 text-[10px] mt-8">暂无记录</div>}
           </div>
         </div>
       </main>
 
-      <style>{`
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #222; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #333; }
-        textarea {
-          scrollbar-gutter: stable;
-        }
-        textarea::-webkit-resizer { 
-          background-color: #141414;
-          background-image: linear-gradient(135deg, transparent 50%, #444 50%, #444 55%, transparent 55%, transparent 60%, #444 60%, #444 65%, transparent 65%);
-          background-size: 8px 8px;
-          background-position: bottom right;
-          background-repeat: no-repeat;
-          border-radius: 0 0 10px 0;
-          cursor: ns-resize;
-        }
-      `}</style>
+      <FullscreenViewer
+        isOpen={showFullscreen}
+        image={fullscreenImage || activeTask?.image}
+        onClose={() => { setShowFullscreen(false); setFullscreenImage(null); }}
+      />
+
+      {/* 删除二次确认弹窗 */}
+      {deleteConfirmItem && (
+        <div
+          className="fixed inset-0 z-[1002] bg-black/80 flex items-center justify-center"
+          onClick={() => !isDeleting && setDeleteConfirmItem(null)}
+        >
+          <div
+            className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 className="text-xl font-bold text-white mb-4">确认删除</h3>
+            <p className="text-white/60 text-sm mb-8">
+              {deleteConfirmItem.status === 'done'
+                ? '确定要删除这张图片吗？此操作无法撤销。'
+                : '确定要删除这条记录吗？此操作无法撤销。'}
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setDeleteConfirmItem(null)}
+                disabled={isDeleting}
+                className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors disabled:opacity-40"
+              >
+                取消
+              </button>
+              <button
+                onClick={() => handleDeleteImage(deleteConfirmItem)}
+                disabled={isDeleting}
+                className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+              >
+                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
+
 
 const NavButton = ({ active, disabled, icon, label, tooltip, onClick }) => (
   <button onClick={disabled ? undefined : onClick} className={`group relative flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all ${active ? 'bg-white/10 text-white shadow-inner' : disabled ? 'text-white/30 cursor-not-allowed' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
@@ -3777,7 +4698,7 @@ const App = () => {
 
   // 从后端实时获取配额
   useEffect(() => {
-    if (!token) return;
+    if (!token || token === 'null') return;
 
     const fetchQuota = async () => {
       try {
@@ -3865,10 +4786,6 @@ const App = () => {
         return <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
       case 'gallery':
         return <GalleryPage token={token} lang={lang} onNavigate={handleNavigate} />;
-      case 'retouch':
-        return <AIRetouchStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
-      case 'portrait':
-        return <PortraitStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'video':
         return <VideoStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'create':
@@ -3881,9 +4798,18 @@ const App = () => {
         />;
       case 'admin':
         return role === 'admin' ? <AdminPanel token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
+      case 'api-keys':
+        return token ? <ApiKeysPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
+      case 'models':
+        return token ? <ModelsPlazaPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
+      case 'admin-models':
+        return role === 'admin' ? <AdminModelsPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
+      case 'quick-create':
       case 'product':
+      case 'retouch':
+      case 'portrait':
       default:
-        return <AIPhotoStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
+        return <QuickCreateStudio onBack={() => handleNavigate('home')} lang={lang} token={token} />;
     }
   };
 
@@ -3924,6 +4850,8 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [copied, setCopied] = useState(false);
+
 
   const filterOptions = [
     { id: 'all', label: { zh: '全部', en: 'All' } },
@@ -3965,10 +4893,15 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
   };
 
   useEffect(() => {
-    if (token) fetchAllHistory();
+    if (token) {
+      fetchAllHistory();
+      const interval = setInterval(fetchAllHistory, 5000); // 每5秒刷新一次，保持同步
+      return () => clearInterval(interval);
+    }
   }, [token]);
 
   const filteredHistory = history.filter(item => {
+    if (!isCompletedHistoryItem(item)) return false;
     if (filter === 'all') return true;
     if (filter === 'product') return !item.type || item.type === 'product';
     return item.type === filter;
@@ -4063,15 +4996,117 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
 
       {/* 图片预览 - 从顶栏下方开始 */}
       {selectedImage && (
-        <div className="fixed top-14 md:top-16 bottom-0 left-0 right-0 z-[50] bg-black/95 flex items-center justify-center p-4 md:p-8" onClick={() => setSelectedImage(null)}>
-          {/* 关闭按钮 - 简洁风格 */}
-          <button
-            onClick={() => setSelectedImage(null)}
-            className="absolute top-4 right-4 md:top-6 md:right-6 p-2 text-white/80 hover:text-white transition-colors"
+        <div className="fixed inset-0 z-[2000] bg-black/95 flex flex-col md:flex-row animate-in fade-in duration-300" onClick={() => setSelectedImage(null)}>
+          {/* 左侧：图片展示区 */}
+          <div className="flex-1 relative flex items-center justify-center p-4 md:p-12 min-h-0">
+            <img 
+              src={toSecureUrl(selectedImage.image)} 
+              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-transform duration-500" 
+              onClick={e => e.stopPropagation()} 
+              alt="" 
+            />
+            
+            {/* 移动端关闭按钮 */}
+            <button
+              onClick={() => setSelectedImage(null)}
+              className="md:hidden absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* 右侧：详情面板 */}
+          <div 
+            className="w-full md:w-[380px] h-full bg-[#111] border-l border-white/5 flex flex-col animate-in slide-in-from-right duration-500"
+            onClick={e => e.stopPropagation()}
           >
-            <X size={28} />
-          </button>
-          <img src={toSecureUrl(selectedImage.image)} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} alt="" />
+            {/* 详情头部 */}
+            <div className="h-16 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
+              <h3 className="text-white font-bold flex items-center gap-2">
+                <AlertCircle size={18} className="text-[#FF8A3D]" />
+                {lang === 'zh' ? '图片详情' : 'Image Details'}
+              </h3>
+              <button 
+                onClick={() => setSelectedImage(null)}
+                className="p-2 hover:bg-white/5 rounded-full text-white/40 hover:text-white transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* 详情内容 */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
+              {/* Prompt 区域 */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-white/30 uppercase tracking-widest">{lang === 'zh' ? '创意描述 (Prompt)' : 'Prompt'}</label>
+                  <button 
+                    onClick={() => {
+                      const cleanP = selectedImage.prompt ? selectedImage.prompt.replace(/^\[.*?\]\s*/, '') : '';
+                      navigator.clipboard.writeText(cleanP);
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 2000);
+                    }}
+                    className={`flex items-center gap-1.5 text-[10px] transition-all font-bold ${copied ? 'text-green-500' : 'text-[#FF8A3D] hover:text-[#FF8A3D]/80'}`}
+                  >
+                    {copied ? <Check size={12} /> : <Copy size={12} />} 
+                    {copied ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制' : 'Copy')}
+                  </button>
+                </div>
+                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl text-sm text-white/80 leading-relaxed italic">
+                  {selectedImage.prompt ? selectedImage.prompt.replace(/^\[.*?\]\s*/, '') : (lang === 'zh' ? '暂无描述' : 'No prompt')}
+                </div>
+              </div>
+
+              {/* 参数网格 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-1">
+                  <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '画幅比例' : 'Aspect Ratio'}</div>
+                  <div className="text-sm font-mono text-white/80">{selectedImage.ratio || selectedImage.aspect_ratio || '1:1'}</div>
+                </div>
+                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-1">
+                  <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '分辨率' : 'Resolution'}</div>
+                  <div className="text-sm font-mono text-white/80">{selectedImage.size || selectedImage.resolution || '1024x1024'}</div>
+                </div>
+              </div>
+
+              {/* 模型信息 */}
+              <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-3">
+                <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '生成模型' : 'Model'}</div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#FF8A3D]/10 flex items-center justify-center">
+                    <Sparkles size={20} className="text-[#FF8A3D]" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-bold text-white">{selectedImage.model || 'GPT-Image-2'}</div>
+                    <div className="text-[10px] text-white/30 uppercase tracking-tighter">AI Generation Engine</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 其他信息 */}
+              <div className="pt-4 border-t border-white/5 flex flex-col gap-2">
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-white/20">{lang === 'zh' ? '创建时间' : 'Created At'}</span>
+                  <span className="text-white/40">{selectedImage.timestamp ? new Date(selectedImage.timestamp * 1000).toLocaleString() : '-'}</span>
+                </div>
+                <div className="flex justify-between text-[11px]">
+                  <span className="text-white/20">{lang === 'zh' ? '任务类型' : 'Task Type'}</span>
+                  <span className="text-[#FF8A3D]/60 font-bold uppercase">{selectedImage.type || 'create'}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* 底部操作 */}
+            <div className="p-6 border-t border-white/5 shrink-0 flex gap-3">
+              <button 
+                onClick={() => handleDownload(selectedImage.image)}
+                className="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Download size={18} /> {lang === 'zh' ? '下载图片' : 'Download'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

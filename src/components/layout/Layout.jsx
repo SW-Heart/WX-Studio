@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
     Home, Camera, Wand2, User, Edit3, FolderOpen,
     ChevronLeft, ChevronRight, LogOut, Zap, Globe, Menu, X, PanelLeftClose, PanelLeft,
-    MessageSquare, Send, Loader2, Film, Shield
+    MessageSquare, Send, Loader2, Film, Shield, Palette, Key, Cpu, Sparkles
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -234,11 +234,8 @@ const QuotaLogsModal = ({ isOpen, onClose, lang }) => {
 // ==========================================
 const NAV_ITEMS = [
     { id: 'home', icon: Home, label: { zh: '首页', en: 'Home' } },
-    { id: 'create', icon: Edit3, label: { zh: '创作', en: 'Create' }, gradient: 'from-[#10B981] to-[#059669]' },
-    { id: 'product', icon: Camera, label: { zh: '商品', en: 'Product' }, gradient: 'from-[#FF8A3D] to-[#E65100]' },
-    { id: 'retouch', icon: Wand2, label: { zh: '修图', en: 'Retouch' }, gradient: 'from-[#8B5CF6] to-[#6D28D9]' },
-    { id: 'portrait', icon: User, label: { zh: '人像', en: 'Portrait' }, gradient: 'from-[#06B6D4] to-[#0891B2]' },
-    { id: 'video', icon: Film, label: { zh: '视频', en: 'Video' }, gradient: 'from-[#EF4444] to-[#B91C1C]' },
+    { id: 'create', icon: Palette, label: { zh: '无限画布', en: 'Infinite Canvas' } },
+    { id: 'quick-create', icon: Wand2, label: { zh: '快速创作', en: 'Quick Create' } },
     { id: 'gallery', icon: FolderOpen, label: { zh: '图库', en: 'Gallery' } },
 ];
 
@@ -271,7 +268,7 @@ export const Sidebar = ({
                 />
             )}
 
-            {/* 侧边栏 - 固定宽度，icon+文字纵向排列 */}
+            {/* 侧边栏 - 固定宽度，极简深色风格 */}
             <aside
                 className={`
           fixed top-0 left-0 h-full bg-[#0a0a0a] border-r border-white/5 z-30
@@ -288,74 +285,156 @@ export const Sidebar = ({
                     />
                 </div>
 
-                {/* 导航菜单 - 纵向icon+文字 */}
-                <nav className="flex-1 py-3 px-2 space-y-1 overflow-y-auto">
+                {/* 导航菜单 - 图标 + 右侧悬浮 Tooltip */}
+                <nav className="flex-1 py-4 px-2 space-y-3 overflow-visible">
                     {NAV_ITEMS.map((item) => {
                         const Icon = item.icon;
                         const isActive = currentPage === item.id;
                         return (
-                            <button
-                                key={item.id}
-                                onClick={() => {
-                                    onNavigate(item.id);
-                                    onMobileClose?.();
-                                }}
-                                className={`
-                  w-full flex flex-col items-center gap-1 py-2.5 rounded-lg transition-all relative overflow-hidden group
-                  ${isActive
-                                        ? 'bg-white/10 text-white font-medium shadow-sm'
-                                        : 'text-white/80 hover:text-white hover:bg-white/5'
-                                    }
-                `}
-                            >
-                                {isActive && <div className="absolute left-0 top-1/4 bottom-1/4 w-[3px] rounded-r-full bg-og-gradient shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}
-                                <Icon size={18} className={`${isActive ? 'text-white drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]' : 'opacity-90 group-hover:opacity-100 group-hover:drop-shadow-[0_0_3px_rgba(255,255,255,0.3)]'}`} />
-                                <span className="text-[10px] font-normal tracking-wide">
+                            <div key={item.id} className="relative group flex items-center justify-center">
+                                <button
+                                    onClick={() => {
+                                        onNavigate(item.id);
+                                        onMobileClose?.();
+                                    }}
+                                    className={`
+                                        w-12 h-12 flex items-center justify-center rounded-xl transition-all relative
+                                        ${isActive
+                                            ? 'bg-white/15 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+                                            : 'text-white/60 hover:text-white hover:bg-white/5'
+                                        }
+                                    `}
+                                >
+                                    <Icon size={22} strokeWidth={isActive ? 2 : 1.5} className={isActive ? 'drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]' : ''} />
+                                </button>
+
+                                {/* 右侧 Tooltip */}
+                                <div className="absolute left-[calc(100%+16px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-white/10">
                                     {item.label[lang]}
-                                </span>
-                            </button>
+                                    <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                                </div>
+                            </div>
                         );
                     })}
 
+                    {/* 模型广场入口 - 登录用户可见 */}
+                    {username && (
+                        <div className="relative group flex items-center justify-center">
+                            <button
+                                onClick={() => {
+                                    onNavigate('models');
+                                    onMobileClose?.();
+                                }}
+                                className={`
+                                    w-12 h-12 flex items-center justify-center rounded-xl transition-all relative
+                                    ${currentPage === 'models'
+                                        ? 'bg-white/15 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+                                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                <Sparkles size={22} strokeWidth={1.5} />
+                            </button>
+                            <div className="absolute left-[calc(100%+16px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-white/10">
+                                {lang === 'zh' ? '模型广场' : 'Models'}
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* API 管理入口 - 登录用户可见 */}
+                    {username && (
+                        <div className="relative group flex items-center justify-center">
+                            <button
+                                onClick={() => {
+                                    onNavigate('api-keys');
+                                    onMobileClose?.();
+                                }}
+                                className={`
+                                    w-12 h-12 flex items-center justify-center rounded-xl transition-all relative
+                                    ${currentPage === 'api-keys'
+                                        ? 'bg-white/15 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+                                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                <Key size={22} strokeWidth={1.5} />
+                            </button>
+                            <div className="absolute left-[calc(100%+16px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-white/10">
+                                {lang === 'zh' ? 'API 管理' : 'API Keys'}
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                            </div>
+                        </div>
+                    )}
+
                     {/* 管理后台入口 - 仅admin可见 */}
                     {role === 'admin' && (
-                        <button
-                            onClick={() => {
-                                onNavigate('admin');
-                                onMobileClose?.();
-                            }}
-                            className={`
-                                w-full flex flex-col items-center gap-1 py-2.5 rounded-lg transition-all relative overflow-hidden group
-                                ${currentPage === 'admin'
-                                    ? 'bg-white/10 text-white font-medium shadow-sm'
-                                    : 'text-white/80 hover:text-white hover:bg-white/5'
-                                }
-                            `}
-                        >
-                            {currentPage === 'admin' && <div className="absolute left-0 top-1/4 bottom-1/4 w-[3px] rounded-r-full bg-og-gradient shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>}
-                            <Shield size={18} className={`${currentPage === 'admin' ? 'text-white drop-shadow-[0_0_5px_rgba(16,185,129,0.5)]' : 'opacity-90 group-hover:opacity-100 group-hover:drop-shadow-[0_0_3px_rgba(255,255,255,0.3)]'}`} />
-                            <span className="text-[10px] font-normal tracking-wide">
+                        <div className="relative group flex items-center justify-center">
+                            <button
+                                onClick={() => {
+                                    onNavigate('admin');
+                                    onMobileClose?.();
+                                }}
+                                className={`
+                                    w-12 h-12 flex items-center justify-center rounded-xl transition-all relative
+                                    ${currentPage === 'admin'
+                                        ? 'bg-white/15 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+                                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                <Shield size={22} strokeWidth={1.5} />
+                            </button>
+                            <div className="absolute left-[calc(100%+16px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-white/10">
                                 {lang === 'zh' ? '管理' : 'Admin'}
-                            </span>
-                        </button>
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 模型管理入口 - 仅 admin 可见 */}
+                    {role === 'admin' && (
+                        <div className="relative group flex items-center justify-center">
+                            <button
+                                onClick={() => {
+                                    onNavigate('admin-models');
+                                    onMobileClose?.();
+                                }}
+                                className={`
+                                    w-12 h-12 flex items-center justify-center rounded-xl transition-all relative
+                                    ${currentPage === 'admin-models'
+                                        ? 'bg-white/15 text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.1)]'
+                                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                                    }
+                                `}
+                            >
+                                <Cpu size={22} strokeWidth={1.5} />
+                            </button>
+                            <div className="absolute left-[calc(100%+16px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_10px_40px_rgba(0,0,0,0.8)] border border-white/10">
+                                {lang === 'zh' ? '模型管理' : 'Models'}
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                            </div>
+                        </div>
                     )}
                 </nav>
 
                 {/* 底部反馈按钮 */}
                 <div className="p-2 border-t border-white/5">
-                    <button
-                        onClick={() => setShowFeedback(true)}
-                        className="w-full flex flex-col items-center gap-1 py-2.5 rounded-lg text-white/80 hover:text-white hover:bg-white/5 transition-all group"
-                    >
-                        <div className="relative">
-                            <MessageSquare size={18} className="opacity-90 group-hover:opacity-100 group-hover:scale-105 transition-transform group-hover:drop-shadow-[0_0_3px_rgba(255,255,255,0.3)]" />
-                            {/* 动态脉冲点 */}
-                            <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-                        </div>
-                        <span className="text-[10px] font-normal tracking-wide">
+                    <div className="relative group flex items-center justify-center">
+                        <button
+                            onClick={() => setShowFeedback(true)}
+                            className="w-12 h-12 flex items-center justify-center rounded-xl text-white/60 hover:text-white hover:bg-white/5 transition-all relative"
+                        >
+                            <div className="relative">
+                                <MessageSquare size={22} strokeWidth={1.5} />
+                                <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+                            </div>
+                        </button>
+                        <div className="absolute left-[calc(100%+12px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_8px_30px_rgb(0,0,0,0.8)] border border-white/10">
                             {lang === 'zh' ? '反馈' : 'Feedback'}
-                        </span>
-                    </button>
+                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                        </div>
+                    </div>
                 </div>
 
                 {/* 移动端关闭按钮 */}
