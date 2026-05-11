@@ -50,6 +50,7 @@ class UpsertModelReq(BaseModel):
     upstream_api_key: Optional[str] = None
     display_name: Optional[str] = None
     channel: Optional[str] = None
+    visible: Optional[bool] = True
     description: Optional[str] = ""
     enabled: Optional[bool] = True
     supports: Optional[Dict[str, bool]] = None
@@ -62,6 +63,7 @@ class PatchModelReq(BaseModel):
     upstream_api_key: Optional[str] = None
     display_name: Optional[str] = None
     channel: Optional[str] = None
+    visible: Optional[bool] = None
     description: Optional[str] = None
     enabled: Optional[bool] = None
     supports: Optional[Dict[str, bool]] = None
@@ -135,15 +137,24 @@ def build_router(
 
     @router.get("/api/models/public")
     def list_public_models(u: str = Depends(get_current_user)):
-        """供 API 管理页 / 模型广场展示可选模型（不含敏感字段，不暴露 adapter 类型/渠道）"""
+        """供 API 管理页 / 模型广场展示可选模型（不含敏感字段，不暴露 adapter 类型/渠道）
+
+        只返回 enabled=True 且 visible!=False 的模型。
+        如果模型自身有 params_schema 字段则优先使用（admin 可自定义），否则回落到 adapter 默认。
+        """
         from .adapters import get_adapter
+        from .config import get_public_api_base
         out = []
         for m in storage.list_models(include_disabled=False):
-            params = []
-            try:
-                params = get_adapter(m.get("adapter_type") or "").params_schema()
-            except Exception:
-                params = []
+            if m.get("visible") is False:
+                continue
+            # 优先用模型自身的 params_schema（admin 可在模型管理里自定义）
+            params = m.get("params_schema")
+            if not params:
+                try:
+                    params = get_adapter(m.get("adapter_type") or "").params_schema()
+                except Exception:
+                    params = []
             out.append({
                 "id": m["id"],
                 "display_name": m.get("display_name") or m["id"],
@@ -152,7 +163,7 @@ def build_router(
                 "pricing": m.get("pricing") or {},
                 "params_schema": params,
             })
-        return {"models": out}
+        return {"models": out, "api_base": get_public_api_base()}
 
     # ---- Admin：模型管理 ----
 

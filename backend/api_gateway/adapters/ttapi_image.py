@@ -46,17 +46,17 @@ class TTAPIImageAdapter(BaseAdapter):
     def params_schema(cls) -> list:
         return [
             {"name": "model", "type": "string", "required": True,
-             "description": "Model id (as shown on the card)."},
+             "description": "模型 ID（使用卡片上显示的值）"},
             {"name": "prompt", "type": "string", "required": True,
-             "description": "Text prompt.",
-             "example": "a cat sitting on a book, studio lighting"},
+             "description": "文本提示词，描述你想生成的内容",
+             "example": "一只猫坐在书上，影棚灯光"},
             {"name": "image", "type": "string[] | string", "required": False,
-             "description": "Reference image URL(s) for image-to-image. Pass 1 or more HTTPS URLs."},
+             "description": "参考图 URL（支持传入 1 张或多张 HTTPS 链接，用于图生图）"},
             {"name": "size", "type": "string", "required": False,
-             "description": "Output size like '1024x1024' or '2048x2048'.",
+             "description": "输出尺寸，格式 WxH。限制：最大边长 ≤ 3840px；宽高必须是 16 的整数倍；长短边比例 ≤ 3:1；总像素 655,360 ~ 8,294,400。gpt-image-2 仅支持 1K（如 1024x1024）。",
              "example": "1024x1024"},
             {"name": "n", "type": "number", "required": False, "default": 1,
-             "description": "Number of images. Not natively supported — requests >1 are split client-side."},
+             "description": "生成数量（1-10），每张独立计费"},
         ]
 
     def generate(self, ctx: AdapterContext) -> AdapterResult:

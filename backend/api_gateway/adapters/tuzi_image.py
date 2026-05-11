@@ -11,7 +11,8 @@ from __future__ import annotations
 import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Dict, List
+from math import gcd
+from typing import Any, Dict, List, Optional
 
 import requests
 
@@ -39,6 +40,12 @@ class TuziImageAdapter(BaseAdapter):
                 {"key": "concurrent_n", "type": "boolean", "required": False,
                  "default": True,
                  "help": "n>1 时是否拆成并发多次单张请求（避免长连接被 LB 切断）"},
+                {"key": "fixed_quality", "type": "string", "required": False,
+                 "help": "强制覆盖 quality（如 nano-banana-2 的 1k/2k/4k），设置后忽略入参"},
+                {"key": "size_as_ratio", "type": "boolean", "required": False,
+                 "default": False,
+                 "help": "将 WxH 形式的 size 转换为最简比例形式（如 1344x768 → 16x9），"
+                         "适用于 nano-banana-2 这种按 quality 决定实际分辨率的模型"},
             ],
         }
 
@@ -67,6 +74,8 @@ class TuziImageAdapter(BaseAdapter):
         endpoint = cfg.get("endpoint") or self.DEFAULT_ENDPOINT
         timeout = int(cfg.get("timeout") or self.DEFAULT_TIMEOUT)
         concurrent_n = bool(cfg.get("concurrent_n", True))
+        fixed_quality = cfg.get("fixed_quality")
+        size_as_ratio = bool(cfg.get("size_as_ratio", False))
 
         if not ctx.api_key:
             raise AdapterError("missing Tuzi api_key", status_code=500)
@@ -80,11 +89,25 @@ class TuziImageAdapter(BaseAdapter):
             "prompt": ctx.prompt,
             "model": upstream_model,
         }
-        if ctx.size:
-            base_payload["size"] = ctx.size
+
+        # size：nano-banana-2 这类模型只接受比例形式（如 1x1、16x9、3x4），
+        # 不接受具体像素尺寸；这里把 1344x768 这种转成 16x9。
+        # 若客户端传了 "auto" 或没传 size，则默认 1x1。
+        size_value = ctx.size
+        if size_as_ratio:
+            ratio = _size_to_ratio(size_value) if size_value else None
+            size_value = ratio or "1x1"
+        if size_value:
+            base_payload["size"] = size_value
+
         if ctx.image:
             base_payload["image"] = ctx.image
-        if ctx.quality:
+
+        # quality：若模型在 config 里固定了 quality（如 nano-banana-2-4k 固定传 "4k"），
+        # 以 config 为准；否则透传客户端的 quality
+        if fixed_quality:
+            base_payload["quality"] = fixed_quality
+        elif ctx.quality:
             base_payload["quality"] = ctx.quality
 
         actual_n = max(1, min(10, int(ctx.n or 1)))
@@ -139,3 +162,74 @@ class TuziImageAdapter(BaseAdapter):
     def _parse_many(first_url: str) -> List[str]:
         # 目前 _single 只取 data[0]，若未来需要从一次响应取所有 url 可在此扩展
         return [first_url]
+
+
+# ---------------- helpers ----------------
+
+# 常见画幅 → 文档里 nano-banana-2 支持的比例 token 的就近映射
+_RATIO_TOKENS = [
+    (1, 1, "1x1"),
+    (2, 3, "2x3"),
+    (3, 2, "3x2"),
+    (3, 4, "3x4"),
+    (4, 3, "4x3"),
+    (4, 5, "4x5"),
+    (5, 4, "5x4"),
+    (9, 16, "9x16"),
+    (16, 9, "16x9"),
+    (21, 9, "21x9"),
+    (1, 8, "1x8"),
+    (3, 8, "3x8"),
+    (8, 3, "8x3"),
+    (4, 11, "4x11"),
+    (11, 4, "11x4"),
+    (4, 8, "4x8"),
+    (8, 4, "8x4"),
+    (8, 11, "8x11"),
+    (11, 8, "11x8"),
+    (6, 11, "6x11"),
+]
+
+
+def _size_to_ratio(size: str) -> Optional[str]:
+    """把 '1344x768' 这类像素尺寸就近映射为 nano-banana-2 支持的比例 token（如 '16x9'）。
+
+    - 若 size 已经像 'NxM' 且 N、M ≤ 32，则原样返回（视作客户端直接传了比例）。
+    - 先做最简分数化，命中 _RATIO_TOKENS 则直接返回。
+    - 否则按宽高比与候选做最近邻匹配。
+    """
+    if not size:
+        return None
+    s = size.lower().replace("×", "x").strip()
+    if "x" not in s:
+        return None
+    try:
+        w_str, h_str = s.split("x", 1)
+        w = int(w_str)
+        h = int(h_str)
+    except Exception:
+        return None
+    if w <= 0 or h <= 0:
+        return None
+
+    # 视作已是比例：N/M 都比较小，直接透传
+    if w <= 32 and h <= 32:
+        return f"{w}x{h}"
+
+    # 最简分数命中
+    g = gcd(w, h)
+    rw, rh = w // g, h // g
+    for a, b, token in _RATIO_TOKENS:
+        if a == rw and b == rh:
+            return token
+
+    # 最近邻：按宽高比差找最接近的候选
+    target = w / h
+    best = None
+    best_diff = 1e9
+    for a, b, token in _RATIO_TOKENS:
+        diff = abs((a / b) - target)
+        if diff < best_diff:
+            best_diff = diff
+            best = token
+    return best

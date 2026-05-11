@@ -14,7 +14,7 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, Optional
 
 # 这些引用由 main.py 在启动时 set_deps() 注入
-_deduct_quota: Optional[Callable[[str, int], int]] = None
+_deduct_quota: Optional[Callable] = None
 _refund_quota: Optional[Callable[[str, int], None]] = None
 _upload_bytes_to_oss: Optional[Callable[[bytes, str], str]] = None
 _get_user_quota: Optional[Callable[[str], int]] = None
@@ -44,7 +44,7 @@ def set_deps(*,
 def deduct_quota(username: str, amount: int) -> int:
     if _deduct_quota is None:
         raise RuntimeError("api_gateway.deps not initialized")
-    return _deduct_quota(username, amount)
+    return _deduct_quota(username, amount, source="api")
 
 
 def refund_quota(username: str, amount: int) -> None:

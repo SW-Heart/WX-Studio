@@ -1473,9 +1473,23 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   useEffect(() => {
     if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
   }, [lockedTo1K, resLevel]);
-  
+
+  // Nano Banana 2：三档分辨率 = 三个独立 model id（与 gpt-image-2 的锁 1K 不冲突）
+  const isNanoBanana2 = model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k';
+  const NANO_BANANA_2_COST_PER_IMAGE = 30;
+
+  // 单张积分价（和后端 pricing 保持一致）
+  // - gpt-image-2       → 7
+  // - gpt-image-2-high  → 13
+  // - nano-banana-2 *   → 30
+  const costPerImage = (() => {
+    if (isNanoBanana2) return NANO_BANANA_2_COST_PER_IMAGE;
+    if (model === 'gpt-image-2-high') return 13;
+    return 7; // gpt-image-2
+  })();
+
   const currentDimensions = calculateSize(aspectRatio, resLevel);
-  const pointsPerImage = resLevel === '4K' ? 2 : 1;
+  const pointsPerImage = costPerImage;
   const totalPoints = (numImages || 1) * pointsPerImage;
 
   const [result, setResult] = useState(null);
@@ -1553,7 +1567,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     setHistory([]); setActiveHistoryId(null);
   };
 
-  // 加载历史记录
+  // 加载历史记录（仅用于认领画布里已存在的本地任务产出；不再自动同步服务器历史到画布）
   const fetchHistory = async () => {
     if (!token) return;
     const createHistory = [];
@@ -1566,11 +1580,10 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       }
     } catch (err) { console.error('Fetch history failed:', err); }
 
-    // 智能对账：清理僵尸任务 (Smart Reconciliation)
+    // 智能对账：只认领画布中已存在的本地任务（不向画布添加新节点）
     const runningTasks = taskManagerRef.current.getTasksByType('create')
       .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING);
 
-    const ignoredServerIds = new Set();
     runningTasks.forEach(localTask => {
       const matches = createHistory.filter(serverItem => {
         const timeMatch = serverItem.timestamp >= (localTask.startTime / 1000) - 600;
@@ -1580,7 +1593,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       });
 
       if (matches.length > 0) {
-        matches.forEach(m => ignoredServerIds.add(m.id));
         const completedMatch = matches.find(m => m.image);
         if (completedMatch) {
           taskManagerRef.current.completeTask(localTask.id, completedMatch.image);
@@ -1588,47 +1600,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
         taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
       }
-    });
-
-    // 将服务器历史合并到画布节点（只添加尚未存在的）
-    setCanvasNodes(prev => {
-      const existingTaskIds = new Set(prev.map(n => n.taskId).filter(Boolean));
-      const existingServerTaskIds = new Set(prev.map(n => n.serverTaskId).filter(Boolean));
-      const existingIds = new Set(prev.map(n => n.id));
-      // 规范化 URL 集合，用于去重
-      const normalize = (url) => url ? url.split('?')[0].replace('http:', 'https:').replace('8.149.136.249', 'aigcog.com') : '';
-      const existingUrls = new Set(prev.map(n => normalize(n.image)).filter(Boolean));
-      
-      // 过滤：1. 必须有真实 image 2. 不能和现有的 id/taskId 重复 3. 不能是被本地任务匹配认领走的 4. 不能和现有的 url 重复
-      const newFromServerItems = createHistory.filter(item => {
-        if (!item.image) return false;
-        const normUrl = normalize(item.image);
-        return !existingIds.has(item.id) && 
-               !existingTaskIds.has(item.id) && 
-               !existingServerTaskIds.has(item.id) &&
-               !ignoredServerIds.has(item.id) &&
-               !existingUrls.has(normUrl);
-      });
-      if (newFromServerItems.length === 0) return prev;
-
-      // 动态计算位置
-      const center = canvasRef.current?.getViewportCenter() || { x: 500, y: 300 };
-      const positions = getNewNodePositions(newFromServerItems.length, prev, center);
-
-      const newFromServer = newFromServerItems.map((item, i) => ({
-          id: item.id,
-          x: positions[i].x,
-          y: positions[i].y,
-          w: NODE_DEFAULT_W,
-          h: NODE_DEFAULT_H,
-          image: item.image,
-          image_urls: item.image_urls,
-          prompt: item.prompt,
-          status: 'done',
-          progress: 100,
-          zIndex: 1,
-      }));
-      return [...prev, ...newFromServer];
     });
   };
 
@@ -1711,11 +1682,12 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     localStorage.setItem('quota', optimisticQuota.toString());
     window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
 
+    // 直接使用用户在 UI 中选择的 model id（gpt-image-2 / gpt-image-2-high）
+    // Nano Banana 2：按用户选择的分辨率切换到对应的 model id（同家族三档）
     let finalModel = model;
-    if (model === 'nano-banana') {
-      if (resLevel === '1K') finalModel = 'nano-banana-2';
+    if (model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k') {
+      if (resLevel === '4K') finalModel = 'nano-banana-2-4k';
       else if (resLevel === '2K') finalModel = 'nano-banana-2-2k';
-      else if (resLevel === '4K') finalModel = 'nano-banana-2-4k';
       else finalModel = 'nano-banana-2';
     }
 
@@ -1756,7 +1728,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       if (ta) ta.style.height = 'auto';
     }, 10);
 
-    executeCreateTask(taskId, prompt, referImages, { model, size: currentDimensions.str, quality, n: numImages });
+    executeCreateTask(taskId, prompt, referImages, { model: finalModel, size: currentDimensions.str, quality, n: numImages });
     isSubmittingRef.current = false;
   };
 
@@ -2229,15 +2201,16 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                     ref={modelBtnRef}
                     onClick={() => setShowModel(!showModel)}
                     className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${showModel ? 'bg-[#2a2a2e] text-white shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
+                    title={isNanoBanana2 ? 'Nano Banana 2' : (model === 'gpt-image-2-high' ? 'GPT Image 2 High' : 'GPT Image 2')}
                   >
-                    {model === 'nano-banana' ? (
-                      <span className={`text-[16px] ${showModel ? 'opacity-100' : 'opacity-70'}`}>🍌</span>
+                    {isNanoBanana2 ? (
+                      <span className="text-base">🍌</span>
                     ) : (
                       <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} style={{ filter: 'brightness(0) invert(1)' }} />
                     )}
                   </button>
                   {showModel && (
-                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[200px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
+                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[240px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
                       <button onClick={() => { setModel('gpt-image-2'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
                         <div className="flex items-center gap-2">
                           <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
@@ -2245,19 +2218,28 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                         </div>
                         {model === 'gpt-image-2' && <Check size={14} className="text-[#00C4B6]" />}
                       </button>
-                      <button onClick={() => { setModel('gpt-image-2-vip'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2-vip' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
+                      <button onClick={() => { setModel('gpt-image-2-high'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2-high' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
                         <div className="flex items-center gap-2">
                           <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
-                          <span className={model === 'gpt-image-2-vip' ? "text-[#00C4B6]" : ""}>GPT Image 2 High</span>
+                          <span className={model === 'gpt-image-2-high' ? "text-[#00C4B6]" : ""}>GPT Image 2 High</span>
                         </div>
-                        {model === 'gpt-image-2-vip' && <Check size={14} className="text-[#00C4B6]" />}
+                        {model === 'gpt-image-2-high' && <Check size={14} className="text-[#00C4B6]" />}
                       </button>
-                      <button onClick={() => { setModel('nano-banana'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'nano-banana' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
+                      <button
+                        onClick={() => {
+                          // 切到 Nano Banana 2 时：默认选中 1K 档；实际 model id 在提交时按分辨率映射
+                          if (!isNanoBanana2) setResLevel('1K');
+                          setModel('nano-banana-2');
+                          setShowModel(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${isNanoBanana2 ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}
+                      >
                         <div className="flex items-center gap-2">
-                          <span className="text-[14px]">🍌</span>
-                          <span className={model === 'nano-banana' ? "text-[#00C4B6]" : ""}>Nano Banana 2</span>
+                          <span className="text-base">🍌</span>
+                          <span className={isNanoBanana2 ? 'text-[#FBBF24]' : ''}>Nano Banana 2</span>
+                          <span className="text-[9px] px-1 py-0.5 rounded bg-[#FBBF24]/15 text-[#FBBF24] font-bold">30分</span>
                         </div>
-                        {model === 'nano-banana' && <Check size={14} className="text-[#00C4B6]" />}
+                        {isNanoBanana2 && <Check size={14} className="text-[#FBBF24]" />}
                       </button>
                     </div>
                   )}
@@ -3245,12 +3227,12 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   const [resLevel, setResLevel] = useState('1K');
   const [quality, setQuality] = useState('auto');
 
-  // GPT Image 2 Pro：固定 2 积分/张
-  const PRO_COST_PER_IMAGE = 2;
+  // GPT Image 2 Pro：固定 22 积分/张
+  const PRO_COST_PER_IMAGE = 22;
   const isProModel = model === 'gpt-image-2-pro';
 
   // Midjourney：按模式计费，每次生成 4 张子图
-  const MJ_COST_BY_MODE = { relax: 2, fast: 3, turbo: 5 };
+  const MJ_COST_BY_MODE = { relax: 22, fast: 42, turbo: 62 };
   const MJ_IMAGES_PER_TASK = 4;
   const MJ_VERSIONS = [
     { id: 'v8.1', label: 'V8.1', sub: '最新' },
@@ -3262,7 +3244,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   const isMjModel = model === 'midjourney';
   const [mjMode, setMjMode] = useState('fast'); // relax / fast / turbo
   const [mjVersion, setMjVersion] = useState('v8.1');
-  const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 3;
+  const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 42;
 
   // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K，同时在 UI 隐藏分辨率切换
   // Pro / MJ 不锁 1K：Pro 支持任意 WxH；MJ 根本没分辨率选项（后面会整块隐藏）
@@ -3270,6 +3252,10 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   useEffect(() => {
     if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
   }, [lockedTo1K, resLevel]);
+
+  // Nano Banana 2：三档分辨率 = 三个 model id，统一 30 积分/张
+  const isNanoBanana2 = model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k';
+  const NANO_BANANA_2_COST_PER_IMAGE = 30;
 
   // 积分不足时如果曾选中 Pro，自动回退到基础模型，避免卡住
   useEffect(() => {
@@ -3296,18 +3282,22 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   const MAX_COUNT = 50;
   const PRO_MAX_COUNT = 10; // Pro 模型原生 n 上限
   const MJ_MAX_COUNT = 5;   // MJ 一次出 4 张，count 代表批次数，限制 5（最多 20 张）
+  const NANO_BANANA_2_MAX_COUNT = 10; // 一次性最多 10 张（按 n 计费）
   const effectiveMax = model === 'gpt-image-2-pro' ? PRO_MAX_COUNT
                      : model === 'midjourney' ? MJ_MAX_COUNT
+                     : isNanoBanana2 ? NANO_BANANA_2_MAX_COUNT
                      : MAX_COUNT;
   const clampCount = (n) => Math.max(1, Math.min(effectiveMax, Math.floor(Number(n) || 1)));
   const [isBatchRunning, setIsBatchRunning] = useState(false);
 
-  // 切到 Pro 时如果当前 count 超过 10，自动夹到 10；MJ 类似
+  // 切到 Pro 时如果当前 count 超过 10，自动夹到 10；MJ 类似；Nano Banana 2 也限 10
   useEffect(() => {
     if (model === 'gpt-image-2-pro' && Number(count) > PRO_MAX_COUNT) {
       setCount(PRO_MAX_COUNT);
     } else if (model === 'midjourney' && Number(count) > MJ_MAX_COUNT) {
       setCount(MJ_MAX_COUNT);
+    } else if (isNanoBanana2 && Number(count) > NANO_BANANA_2_MAX_COUNT) {
+      setCount(NANO_BANANA_2_MAX_COUNT);
     }
   }, [model, count]);
 
@@ -3560,6 +3550,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
     // 按模型算总积分：
     // - Pro: 2/张；n 张
     // - MJ:  按 mode 2/3/5 积分每"次"（每次出 4 张），共 total 次
+    // - Nano Banana 2: 30/张，n 张（不分 1K/2K/4K）
     // - 其他: 4K=2/张，否则 1/张
     if (mode === 'image' && model === 'gpt-image-2-pro') {
       const totalCost = total * PRO_COST_PER_IMAGE;
@@ -3573,8 +3564,16 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
         showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error');
         return;
       }
+    } else if (mode === 'image' && isNanoBanana2) {
+      const totalCost = total * NANO_BANANA_2_COST_PER_IMAGE;
+      if (quota < totalCost) {
+        showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error');
+        return;
+      }
     } else {
-      const pointsPerImage = mode === 'image' && resLevel === '4K' ? 2 : 1;
+      // gpt-image-2 = 7 / gpt-image-2-high = 13（与分辨率无关，分辨率只影响可用尺寸）
+      // retouch/portrait/product 等后端都走 gpt-image-2，按 7 算
+      const pointsPerImage = mode === 'image' && model === 'gpt-image-2-high' ? 13 : 7;
       const totalCost = total * pointsPerImage;
       if (quota < totalCost) { showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error'); return; }
     }
@@ -3587,8 +3586,15 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
     }
 
     // 捕获当前参数快照，避免批量过程中用户修改状态导致串台
+    // Nano Banana 2：按用户选择的分辨率映射到具体的 model id（同家族三档）
+    let effectiveModel = model;
+    if (mode === 'image' && isNanoBanana2) {
+      if (resLevel === '4K') effectiveModel = 'nano-banana-2-4k';
+      else if (resLevel === '2K') effectiveModel = 'nano-banana-2-2k';
+      else effectiveModel = 'nano-banana-2';
+    }
     const snapshot = {
-      mode, referImages: [...referImages], model, aspectRatio, resLevel, quality,
+      mode, referImages: [...referImages], model: effectiveModel, aspectRatio, resLevel, quality,
       retouchMode: mode === 'portrait' ? 'portrait' : retouchMode,
       strength, suggestion, productStyle, prompt, mjMode, mjVersion
     };
@@ -4105,19 +4111,20 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                     <div className="relative group">
                       <div className="w-full bg-white/[0.03] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white/80 flex items-center justify-between cursor-pointer hover:bg-white/[0.05] transition-all" onClick={() => setShowModelMenu(!showModelMenu)}>
                         <div className="flex items-center gap-2">
-                          {model === 'nano-banana' ? (
-                            <span className="text-[14px]">🍌</span>
-                          ) : model === 'midjourney' ? (
+                          {model === 'midjourney' ? (
                             <img src={MidjourneyIcon} className="w-4 h-4" alt="midjourney" />
+                          ) : isNanoBanana2 ? (
+                            <span className="text-base leading-none">🍌</span>
                           ) : (
                             <img src={ChatGptIcon} className="w-4 h-4 brightness-0 invert" alt="gpt" />
                           )}
                           <span>
                             {model === 'gpt-image-2' ? 'GPT Image 2'
-                              : model === 'gpt-image-2-vip' ? 'GPT Image 2 High'
+                              : model === 'gpt-image-2-high' ? 'GPT Image 2 High'
                               : model === 'gpt-image-2-pro' ? 'GPT Image 2 Pro'
+                              : isNanoBanana2 ? `Nano Banana 2 ${resLevel}`
                               : model === 'midjourney' ? `Midjourney ${(MJ_VERSIONS.find(v => v.id === mjVersion) || {}).label || ''}`.trim()
-                              : 'Nano Banana'}
+                              : model}
                           </span>
                         </div>
                         <ChevronDown size={14} className={`opacity-20 transition-transform ${showModelMenu ? 'rotate-180' : ''}`} />
@@ -4129,12 +4136,13 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                           <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                             {[
                               { id: 'gpt-image-2', name: 'GPT Image 2' },
-                              { id: 'gpt-image-2-vip', name: 'GPT Image 2 High' },
+                              { id: 'gpt-image-2-high', name: 'GPT Image 2 High' },
                               { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
+                              { id: 'nano-banana-2', name: 'Nano Banana 2', badge: 'NEW', minQuota: NANO_BANANA_2_COST_PER_IMAGE, desc: '1K/2K/4K · 30 积分/张' },
                               { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
-                              { id: 'nano-banana', name: 'Nano Banana' }
                             ].map(m => {
                               const disabled = m.minQuota !== undefined && quota < m.minQuota;
+                              const isActive = model === m.id || (m.id === 'nano-banana-2' && isNanoBanana2);
                               return (
                                 <button
                                   key={m.id}
@@ -4144,16 +4152,20 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                                       showToast(`积分不足 ${m.minQuota}，无法使用 ${m.name}`, 'error');
                                       return;
                                     }
+                                    // 切到 Nano Banana 2 时默认 1K，用户可在下方分辨率按钮切换
+                                    if (m.id === 'nano-banana-2' && !isNanoBanana2) {
+                                      setResLevel('1K');
+                                    }
                                     setModel(m.id);
                                     setShowModelMenu(false);
                                   }}
-                                  className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${model === m.id ? 'bg-white/[0.03]' : ''} ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'}`}
+                                  className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isActive ? 'bg-white/[0.03]' : ''} ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'}`}
                                 >
                                   <div className="flex items-center gap-3">
-                                    {m.id === 'nano-banana' ? (
-                                      <span className="text-xl">🍌</span>
-                                    ) : m.id === 'midjourney' ? (
+                                    {m.id === 'midjourney' ? (
                                       <img src={MidjourneyIcon} className="w-5 h-5" alt="midjourney" />
+                                    ) : m.id === 'nano-banana-2' ? (
+                                      <span className="text-lg leading-none">🍌</span>
                                     ) : (
                                       <img src={ChatGptIcon} className="w-5 h-5 brightness-0 invert" alt="gpt" />
                                     )}
@@ -4164,12 +4176,15 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                                           <span className="text-[9px] px-1.5 py-0.5 rounded bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold tracking-wider">{m.badge}</span>
                                         )}
                                       </div>
+                                      {m.desc && !disabled && (
+                                        <div className="text-[10px] text-white/40">{m.desc}</div>
+                                      )}
                                       {disabled && (
                                         <div className="text-[10px] text-white/40">积分不足</div>
                                       )}
                                     </div>
                                   </div>
-                                  {model === m.id && <Check size={14} className="text-orange-400" />}
+                                  {isActive && <Check size={14} className="text-orange-400" />}
                                 </button>
                               );
                             })}
@@ -4403,7 +4418,11 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                           ? `共 ${count} 次 · ${count * MJ_IMAGES_PER_TASK} 张 · 消耗${totalCost}积分`
                           : `${MJ_IMAGES_PER_TASK} 张 · 消耗${per}积分`;
                       }
-                      const per = model === 'gpt-image-2-pro' ? PRO_COST_PER_IMAGE : (resLevel === '4K' ? 2 : 1);
+                      const per = model === 'gpt-image-2-pro'
+                        ? PRO_COST_PER_IMAGE
+                        : isNanoBanana2
+                          ? NANO_BANANA_2_COST_PER_IMAGE
+                          : model === 'gpt-image-2-high' ? 13 : 7;
                       const totalCost = count * per;
                       return count > 1
                         ? `共 ${count} 张 · 消耗${totalCost}积分`

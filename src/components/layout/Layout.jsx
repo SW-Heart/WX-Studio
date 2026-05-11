@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import {
     Home, Camera, Wand2, User, Edit3, FolderOpen,
     ChevronLeft, ChevronRight, LogOut, Zap, Globe, Menu, X, PanelLeftClose, PanelLeft,
-    MessageSquare, Send, Loader2, Film, Shield, Palette, Key, Cpu, Sparkles
+    MessageSquare, Send, Loader2, Film, Shield, Palette, Key, Cpu, Sparkles, Settings
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
@@ -63,7 +63,7 @@ const FeedbackModal = ({ isOpen, onClose, lang, username }) => {
                             </svg>
                         </div>
                         <h3 className="text-lg font-bold text-white">
-                            {lang === 'zh' ? '感谢您的反馈！' : 'Thank you for your feedback!'}
+                            感谢您的反馈！
                         </h3>
                     </div>
                 ) : (
@@ -74,10 +74,10 @@ const FeedbackModal = ({ isOpen, onClose, lang, username }) => {
                             </div>
                             <div>
                                 <h3 className="text-lg font-bold text-white">
-                                    {lang === 'zh' ? '意见反馈' : 'Feedback'}
+                                    意见反馈
                                 </h3>
                                 <p className="text-xs text-white/40">
-                                    {lang === 'zh' ? '您的建议对我们很重要' : 'Your suggestions matter to us'}
+                                    您的建议对我们很重要
                                 </p>
                             </div>
                         </div>
@@ -85,12 +85,12 @@ const FeedbackModal = ({ isOpen, onClose, lang, username }) => {
                         <div className="space-y-4">
                             <div>
                                 <label className="block text-xs text-white/60 mb-2">
-                                    {lang === 'zh' ? '反馈内容' : 'Your Feedback'}
+                                    反馈内容
                                 </label>
                                 <textarea
                                     value={content}
                                     onChange={e => setContent(e.target.value)}
-                                    placeholder={lang === 'zh' ? '请描述您的建议或遇到的问题...' : 'Describe your suggestion or issue...'}
+                                    placeholder="请描述您的建议或遇到的问题..."
                                     rows={5}
                                     className="w-full px-4 py-3 bg-[#0a0a0a] border border-white/10 rounded-xl text-white text-sm placeholder:text-white/30 focus:border-white/50 focus:outline-none transition-colors resize-none"
                                 />
@@ -102,7 +102,7 @@ const FeedbackModal = ({ isOpen, onClose, lang, username }) => {
                                 onClick={onClose}
                                 className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
                             >
-                                {lang === 'zh' ? '取消' : 'Cancel'}
+                                取消
                             </button>
                             <button
                                 onClick={handleSubmit}
@@ -114,7 +114,7 @@ const FeedbackModal = ({ isOpen, onClose, lang, username }) => {
                                 ) : (
                                     <Send size={16} />
                                 )}
-                                {lang === 'zh' ? '提交' : 'Submit'}
+                                提交
                             </button>
                         </div>
                     </>
@@ -123,12 +123,14 @@ const FeedbackModal = ({ isOpen, onClose, lang, username }) => {
         </div>
     );
 };
+
 // ==========================================
-// ⚡ 积分历史弹窗组件
+// ⚡ 积分历史弹窗组件（区分平台创作 / API调用）
 // ==========================================
 const QuotaLogsModal = ({ isOpen, onClose, lang }) => {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [filter, setFilter] = useState('all'); // all, platform, api
 
     useEffect(() => {
         if (!isOpen) return;
@@ -154,23 +156,30 @@ const QuotaLogsModal = ({ isOpen, onClose, lang }) => {
 
     if (!isOpen) return null;
 
+    const filteredLogs = logs.filter(log => {
+        if (filter === 'all') return true;
+        if (filter === 'platform') return log.source !== 'api';
+        if (filter === 'api') return log.source === 'api';
+        return true;
+    });
+
     return createPortal(
         <div className="fixed inset-0 z-[1000] bg-black/70 flex items-center justify-center p-4" onClick={onClose}>
             <div
                 className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 w-full max-w-lg shadow-2xl max-h-[80vh] flex flex-col"
                 onClick={e => e.stopPropagation()}
             >
-                <div className="flex items-center justify-between mb-6 shrink-0">
+                <div className="flex items-center justify-between mb-4 shrink-0">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/5">
                             <Zap size={20} className="text-white" />
                         </div>
                         <div>
                             <h3 className="text-lg font-bold text-white">
-                                {lang === 'zh' ? '积分明细' : 'Quota History'}
+                                积分明细
                             </h3>
                             <p className="text-xs text-white/40">
-                                {lang === 'zh' ? '最近的使用与充值记录' : 'Recent transaction details'}
+                                最近的使用与充值记录
                             </p>
                         </div>
                     </div>
@@ -179,42 +188,74 @@ const QuotaLogsModal = ({ isOpen, onClose, lang }) => {
                     </button>
                 </div>
 
+                {/* 筛选标签 */}
+                <div className="flex items-center gap-2 mb-4 shrink-0">
+                    {[
+                        { id: 'all', label: '全部' },
+                        { id: 'platform', label: '平台创作' },
+                        { id: 'api', label: 'API调用' },
+                    ].map(opt => (
+                        <button
+                            key={opt.id}
+                            onClick={() => setFilter(opt.id)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                                ${filter === opt.id
+                                    ? 'bg-white/15 text-white border border-white/20'
+                                    : 'bg-white/5 text-white/50 hover:text-white/80 border border-transparent'
+                                }`}
+                        >
+                            {opt.label}
+                        </button>
+                    ))}
+                </div>
+
                 <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
                     {loading ? (
                         <div className="flex items-center justify-center py-10">
                             <Loader2 className="animate-spin text-white/40" size={24} />
                         </div>
-                    ) : logs.length === 0 ? (
+                    ) : filteredLogs.length === 0 ? (
                         <div className="text-center py-10 text-white/40 text-sm">
-                            {lang === 'zh' ? '暂无记录' : 'No records found'}
+                            暂无记录
                         </div>
                     ) : (
-                        logs.map(log => {
+                        filteredLogs.map(log => {
                             let typeBadge = null;
                             if (log.type === 'refund') {
-                                typeBadge = <span className="ml-2 px-1.5 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 text-[10px] whitespace-nowrap">{lang === 'zh' ? '已退回' : 'Refunded'}</span>;
+                                typeBadge = <span className="ml-2 px-1.5 py-0.5 rounded-md bg-yellow-500/20 text-yellow-400 text-[10px] whitespace-nowrap">已退回</span>;
                             } else if (log.amount > 0) {
-                                typeBadge = <span className="ml-2 px-1.5 py-0.5 rounded-md bg-green-500/20 text-green-400 text-[10px] whitespace-nowrap">{lang === 'zh' ? '获得' : 'Gained'}</span>;
+                                typeBadge = <span className="ml-2 px-1.5 py-0.5 rounded-md bg-green-500/20 text-green-400 text-[10px] whitespace-nowrap">获得</span>;
+                            }
+
+                            // 来源标签
+                            let sourceBadge = null;
+                            if (log.type === 'consume' && log.amount < 0) {
+                                if (log.source === 'api') {
+                                    sourceBadge = <span className="ml-2 px-1.5 py-0.5 rounded-md bg-blue-500/20 text-blue-400 text-[10px] whitespace-nowrap">API调用</span>;
+                                } else {
+                                    sourceBadge = <span className="ml-2 px-1.5 py-0.5 rounded-md bg-purple-500/20 text-purple-400 text-[10px] whitespace-nowrap">平台创作</span>;
+                                }
                             }
 
                             return (
                                 <div key={log.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
                                     <div>
-                                        <div className="text-sm text-white/90 font-medium flex items-center">
+                                        <div className="text-sm text-white/90 font-medium flex items-center flex-wrap gap-1">
                                             {log.reason}
                                             {typeBadge}
+                                            {sourceBadge}
                                         </div>
                                         <div className="text-xs text-white/40 mt-1">
                                             {new Date(log.timestamp * 1000).toLocaleString()}
                                         </div>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="text-right shrink-0 ml-3">
                                         <div className={`text-sm font-bold font-mono ${log.amount > 0 ? 'text-green-400' : 'text-white'}`}>
                                             {log.amount > 0 ? '+' : ''}{log.amount}
                                         </div>
                                         {log.balance_after !== undefined && (
                                             <div className="text-[10px] text-white/30 font-mono mt-1">
-                                                {lang === 'zh' ? '余额:' : 'Balance:'} {log.balance_after}
+                                                余额: {log.balance_after}
                                             </div>
                                         )}
                                     </div>
@@ -251,14 +292,22 @@ export const Sidebar = ({
     isMobileOpen,
     onMobileClose,
     username,
-    role
+    role,
+    quota,
+    isLoggedIn,
+    onLogin,
+    onLogout
 }) => {
     const [showFeedback, setShowFeedback] = useState(false);
+    const [showUserMenu, setShowUserMenu] = useState(false);
+    const [showQuotaLogs, setShowQuotaLogs] = useState(false);
 
     return (
         <>
             {/* 反馈弹窗 */}
             <FeedbackModal isOpen={showFeedback} onClose={() => setShowFeedback(false)} lang={lang} username={username} />
+            {/* 积分明细弹窗 */}
+            <QuotaLogsModal isOpen={showQuotaLogs} onClose={() => setShowQuotaLogs(false)} lang={lang} />
 
             {/* 移动端遮罩 */}
             {isMobileOpen && (
@@ -418,8 +467,29 @@ export const Sidebar = ({
                     )}
                 </nav>
 
-                {/* 底部反馈按钮 */}
-                <div className="p-2 border-t border-white/5">
+                {/* 底部区域：积分 + 反馈 + 头像 */}
+                <div className="p-2 border-t border-white/5 space-y-2">
+                    {/* 积分显示 */}
+                    {isLoggedIn && (
+                        <div className="relative group flex items-center justify-center">
+                            <button
+                                onClick={() => setShowQuotaLogs(true)}
+                                className="w-12 h-8 flex items-center justify-center rounded-lg text-white/70 hover:text-white hover:bg-white/5 transition-all"
+                                title="积分明细"
+                            >
+                                <div className="flex items-center gap-0.5">
+                                    <Zap size={11} className="text-white/80 shrink-0" fill="currentColor" />
+                                    <span className="text-[10px] font-mono font-medium tracking-tight leading-none max-w-[36px] truncate">{quota}</span>
+                                </div>
+                            </button>
+                            <div className="absolute left-[calc(100%+12px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_8px_30px_rgb(0,0,0,0.8)] border border-white/10">
+                                积分: {quota}
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 反馈按钮 */}
                     <div className="relative group flex items-center justify-center">
                         <button
                             onClick={() => setShowFeedback(true)}
@@ -431,10 +501,76 @@ export const Sidebar = ({
                             </div>
                         </button>
                         <div className="absolute left-[calc(100%+12px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_8px_30px_rgb(0,0,0,0.8)] border border-white/10">
-                            {lang === 'zh' ? '反馈' : 'Feedback'}
+                            反馈
                             <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
                         </div>
                     </div>
+
+                    {/* 头像 - 点击弹出菜单 */}
+                    {isLoggedIn ? (
+                        <div className="relative flex items-center justify-center">
+                            <button
+                                onClick={() => setShowUserMenu(!showUserMenu)}
+                                className="w-12 h-12 flex items-center justify-center rounded-xl hover:bg-white/5 transition-all"
+                            >
+                                <div className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center">
+                                    <span className="text-[10px] font-medium text-white">{username?.slice(0, 2)}</span>
+                                </div>
+                            </button>
+
+                            {/* 用户菜单弹窗 */}
+                            {showUserMenu && (
+                                <>
+                                    <div className="fixed inset-0 z-[99]" onClick={() => setShowUserMenu(false)} />
+                                    <div className="absolute left-[calc(100%+8px)] bottom-0 z-[100] w-44 bg-[#141414] border border-white/10 rounded-xl shadow-2xl py-2">
+                                        <div className="px-4 py-2 border-b border-white/5">
+                                            <span className="text-[11px] text-white/40 font-mono">{username}</span>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                setShowUserMenu(false);
+                                                setShowQuotaLogs(true);
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-white/80 hover:bg-white/5 hover:text-white flex items-center gap-2 mt-1 transition-colors"
+                                        >
+                                            <Zap size={14} /> 积分明细
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowUserMenu(false);
+                                                onNavigate('api-keys');
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-white/80 hover:bg-white/5 hover:text-white flex items-center gap-2 transition-colors"
+                                        >
+                                            <Key size={14} /> API 管理
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setShowUserMenu(false);
+                                                onLogout();
+                                            }}
+                                            className="w-full text-left px-4 py-2.5 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2 transition-colors"
+                                        >
+                                            <LogOut size={14} /> 退出登录
+                                        </button>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="relative group flex items-center justify-center">
+                            <button
+                                onClick={onLogin}
+                                className="w-12 h-12 flex items-center justify-center rounded-xl text-white/60 hover:text-white hover:bg-white/5 transition-all"
+                            >
+                                <User size={22} strokeWidth={1.5} />
+                            </button>
+                            <div className="absolute left-[calc(100%+12px)] px-3 py-1.5 bg-[#1a1a1a] text-white text-[11px] font-bold rounded-lg whitespace-nowrap opacity-0 scale-90 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 z-[100] shadow-[0_8px_30px_rgb(0,0,0,0.8)] border border-white/10">
+                                登录
+                                <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-[#1a1a1a] rotate-45 border-l border-b border-white/10" />
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* 移动端关闭按钮 */}
@@ -450,22 +586,11 @@ export const Sidebar = ({
 };
 
 // ==========================================
-// 🎨 Header 组件
+// 🎨 Header 组件（精简版 - 去掉语言切换和用户区域）
 // ==========================================
 export const Header = ({
-    username,
-    quota,
-    isLoggedIn,
-    onLogin,
-    onLogout,
-    lang,
-    setLang,
     onMobileMenuOpen,
-    sidebarExpanded
 }) => {
-    const [showUserMenu, setShowUserMenu] = useState(false);
-    const [showQuotaLogs, setShowQuotaLogs] = useState(false);
-
     return (
         <header
             className={`
@@ -483,72 +608,10 @@ export const Header = ({
                 >
                     <Menu size={20} />
                 </button>
-
             </div>
 
-            <QuotaLogsModal isOpen={showQuotaLogs} onClose={() => setShowQuotaLogs(false)} lang={lang} />
-
-            {/* 右侧：用户区域 */}
+            {/* 右侧留空 - 用户信息已移至侧边栏底部 */}
             <div className="flex items-center gap-3 ml-auto">
-                {/* 语言切换 */}
-                <button
-                    onClick={() => setLang(l => l === 'zh' ? 'en' : 'zh')}
-                    className="p-1.5 hover:bg-white/10 rounded-full transition-colors flex items-center gap-1 text-xs font-normal text-white/80 hover:text-white tracking-wide"
-                >
-                    <Globe size={14} className="opacity-90 hover:opacity-100" />
-                    <span className="hidden sm:inline">{lang === 'zh' ? 'EN' : '中'}</span>
-                </button>
-
-                <div className="w-[1px] h-5 bg-white/10"></div>
-
-                {isLoggedIn ? (
-                    <div
-                        className="relative"
-                        onMouseEnter={() => setShowUserMenu(true)}
-                        onMouseLeave={() => setShowUserMenu(false)}
-                    >
-                        <button className="flex items-center gap-1.5 hover:bg-white/5 p-1 rounded-full transition-colors border border-white/5 bg-[#141414]">
-                            <div className="flex items-center gap-1 px-2">
-                                <Zap size={12} className="text-white/90" fill="currentColor" />
-                                <span className="text-xs text-white/90 font-mono font-normal tracking-wide">{quota}</span>
-                            </div>
-                            <div className="w-6 h-6 md:w-7 md:h-7 rounded-full bg-white/10 border border-white/20 flex items-center justify-center">
-                                <span className="text-[10px] font-normal tracking-wide text-white">{username?.slice(0, 3)}</span>
-                            </div>
-                        </button>
-                        {showUserMenu && (
-                            <div className="absolute top-full right-0 pt-2 z-50">
-                                <div className="w-40 bg-[#141414] border border-white/10 rounded-xl shadow-2xl py-2">
-                                    <div className="px-4 py-2 border-b border-white/5">
-                                        <span className="text-[11px] text-white/40 font-mono">{username}</span>
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setShowUserMenu(false);
-                                            setShowQuotaLogs(true);
-                                        }}
-                                        className="w-full text-left px-4 py-2.5 text-xs text-white/80 hover:bg-white/5 hover:text-white flex items-center gap-2 mt-1 transition-colors"
-                                    >
-                                        <Zap size={14} /> {lang === 'zh' ? '积分明细' : 'Quota History'}
-                                    </button>
-                                    <button
-                                        onClick={onLogout}
-                                        className="w-full text-left px-4 py-2.5 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2 transition-colors"
-                                    >
-                                        <LogOut size={14} /> {lang === 'zh' ? '退出登录' : 'Logout'}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    <button
-                        onClick={onLogin}
-                        className="px-3 py-1.5 rounded-full bg-og-gradient text-white text-xs font-medium hover:opacity-90 transition-opacity tracking-wide"
-                    >
-                        {lang === 'zh' ? '登录' : 'Login'}
-                    </button>
-                )}
             </div>
         </header>
     );
@@ -569,7 +632,7 @@ export const Layout = ({
     onLogin,
     onLogout,
     role,
-    isImmersive = false // 新增 prop
+    isImmersive = false
 }) => {
     const [sidebarExpanded, setSidebarExpanded] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -588,21 +651,17 @@ export const Layout = ({
                     onMobileClose={() => setMobileMenuOpen(false)}
                     username={username}
                     role={role}
+                    quota={quota}
+                    isLoggedIn={isLoggedIn}
+                    onLogin={onLogin}
+                    onLogout={onLogout}
                 />
             )}
 
             {/* Header */}
             {!isImmersive && (
                 <Header
-                    username={username}
-                    quota={quota}
-                    isLoggedIn={isLoggedIn}
-                    onLogin={onLogin}
-                    onLogout={onLogout}
-                    lang={lang}
-                    setLang={setLang}
                     onMobileMenuOpen={() => setMobileMenuOpen(true)}
-                    sidebarExpanded={sidebarExpanded}
                 />
             )}
 

@@ -162,6 +162,22 @@ def save_db(data):
     with open(DB_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
 
 def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
+
+
+# 旧前端 id 到新 id 的兼容映射（逐步过渡，确认所有前端已更新后可删除）
+_LEGACY_MODEL_ID_MAP = {
+    "gpt-image-2-vip": "gpt-image-2-high",
+    # 老前端里 nano-banana 是 tuzi 的 gpt-image-2 特殊 quality 档位，现已下线
+    "nano-banana": "gpt-image-2",
+    # 注意：nano-banana-2 / nano-banana-2-2k / nano-banana-2-4k 现在是真实注册的模型
+    # （tuzi · gemini-3.1-flash-image-preview），不能再重定向
+}
+
+
+def _normalize_model_id(model: str) -> str:
+    if not model:
+        return "gpt-image-2"
+    return _LEGACY_MODEL_ID_MAP.get(model, model)
 def create_access_token(data):
     to_encode = data.copy()
     to_encode.update({"exp": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)})
@@ -698,14 +714,16 @@ def basic_create(
     except:
         image_list = []
 
-    # 计费：走 registry 的 "gpt-image-2-via-tuzi" 定价（tiered_pixels）
+    # 计费：按用户选择的 model_id 走 registry
     try:
         from backend.api_gateway.pricing import resolve_model_cost
     except ImportError:
         from api_gateway.pricing import resolve_model_cost
 
-    # resolve 会按 tiered_pixels 规则根据 size 选 1 或 2 积分
-    cost_per_item = resolve_model_cost("gpt-image-2-via-tuzi", n=1, size=size, default=1)
+    # 标准化：把老 id gpt-image-2-vip 映射到新 id（兼容旧前端）
+    model = _normalize_model_id(model)
+
+    cost_per_item = resolve_model_cost(model, n=1, size=size, default=1)
     total_cost = cost_per_item * n
     
     # 预扣分 (按照生成张数扣除积分)
@@ -770,11 +788,9 @@ def background_generate_image(
     amount: int,
     batch_id: str = "",
 ):
-    """后台线程执行图片生成（Tuzi 同步通道）。
+    """后台线程执行图片生成，直接使用用户选择的 model_id（走 registry 里的对应 adapter）。
 
-    走 API Gateway 的 run_model_raw：每次产一张，失败的按数量退款。
-    这里 model 参数是前端传入的 upstream_model；我们固定使用注册表中的
-    "gpt-image-2-via-tuzi" adapter 条目，用 config_override 切换 upstream_model。
+    N 张图并发下发：每次单张调用，失败按比例退款。
     """
     try:
         try:
@@ -786,36 +802,24 @@ def background_generate_image(
         refund_quota(username, amount=amount)
         return
 
-    # nano-banana-2 系列的特殊映射（Tuzi 上游接 gemini-3.1 + quality）
-    upstream_model = model
-    upstream_quality = None
-    if (model or "").startswith("nano-banana-2"):
-        upstream_quality = "1k"
-        if model == "nano-banana-2-2k":
-            upstream_quality = "2k"
-        elif model == "nano-banana-2-4k":
-            upstream_quality = "4k"
-        upstream_model = "gemini-3.1-flash-image-preview"
-
     actual_n = max(1, min(10, int(n or 1)))
     cost_per = amount // actual_n if actual_n else amount
     print(f"🎨 [/api/create] 任务 {task_id[:8]} user={username} n={actual_n} "
-          f"upstream_model={upstream_model} size={size}")
+          f"model={model} size={size}")
 
     def _one(i: int) -> str:
         if i > 0:
             time.sleep(random.uniform(1.0, 2.0) * i)
         res = run_model_raw(
-            model_id="gpt-image-2-via-tuzi",
+            model_id=model,
             prompt=prompt,
             image=image_list or [],
             size=size if size else None,
             n=1,
-            quality=upstream_quality or quality,
+            quality=quality if quality and quality != "auto" else None,
             username=username,
             source="product:/api/create",
             mirror_to_oss=True,
-            config_override={"upstream_model": upstream_model, "concurrent_n": False},
         )
         return (res.get("images") or [None])[0]
 
@@ -840,10 +844,6 @@ def background_generate_image(
         if refund_amount > 0:
             refund_quota(username, amount=refund_amount)
             print(f"  💰 {failed}/{actual_n} 张失败，退回 {refund_amount} 积分")
-
-    if not result_urls and failed == actual_n:
-        # 全失败：剩余款额也退（实际上已经按张数退完，此处无剩余）
-        pass
 
     # 写回 DB
     with db_lock:
@@ -1572,10 +1572,15 @@ def video_generate(
 ):
     try:
         from backend.api_gateway.pricing import resolve_model_cost
+        from backend.api_gateway.storage import get_model
     except ImportError:
         from api_gateway.pricing import resolve_model_cost
+        from api_gateway.storage import get_model
 
-    model = "veo3.1-4k"
+    # 视频默认走 veo3.1-4k；admin 若改成别的 id，可通过 env 覆盖
+    model = os.getenv("VIDEO_MODEL_ID", "veo3.1-4k")
+    if not get_model(model):
+        raise HTTPException(503, f"视频模型 {model} 尚未在管理后台配置")
     cost = resolve_model_cost(model, default=5)
 
     deduct_quota_atomic(username, cost)
@@ -1965,11 +1970,14 @@ async def admin_toggle_status(username: str, admin: str = Depends(get_admin_user
 _original_deduct_quota_atomic = deduct_quota_atomic
 _original_refund_quota = refund_quota
 
-def deduct_quota_atomic_with_log(username: str, amount: int = 1) -> int:
-    """带日志的原子扣分"""
+def deduct_quota_atomic_with_log(username: str, amount: int = 1, source: str = "platform") -> int:
+    """带日志的原子扣分
+    source: "platform" 表示平台创作消耗, "api" 表示 API 调用消耗
+    """
     remaining = _original_deduct_quota_atomic(username, amount)
     # 记录消耗日志
     try:
+        reason = "API调用消耗" if source == "api" else "创作消耗"
         with db_lock:
             db = load_db()
             if "quota_logs" not in db:
@@ -1980,8 +1988,9 @@ def deduct_quota_atomic_with_log(username: str, amount: int = 1) -> int:
                 "operator": "system",
                 "amount": -amount,
                 "balance_after": remaining,
-                "reason": "创作消耗",
+                "reason": reason,
                 "type": "consume",
+                "source": source,
                 "timestamp": time.time()
             })
             save_db(db)
