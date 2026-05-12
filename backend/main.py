@@ -73,7 +73,7 @@ class VerifyCodeRequest(BaseModel):
     code: str
 
 class AdminCreateUserRequest(BaseModel):
-    initial_quota: int = 10
+    initial_quota: int = 50
 
 class AdminQuotaRequest(BaseModel):
     amount: int
@@ -120,46 +120,91 @@ app.add_middleware(
 
 # --- 2. 数据层 ---
 def load_db():
-    """加载数据库，如果主文件损坏则尝试从备份恢复"""
+    """加载数据库，如果主文件损坏则尝试从备份恢复。
+
+    线程安全说明：读操作在 db_lock 下调用最保险；本函数自身不加锁，
+    由调用方决定是否在 with db_lock 中使用。已有路径（deduct/refund/
+    业务读写）基本都在锁内读，外部偶发脏读不会造成数据损坏。
+    """
     if not os.path.exists(DB_FILE):
         default_hash = pwd_context.hash("wxstudio2025")
         initial_data = {"users": {"admin": {"hash": default_hash, "quota": 9999, "role": "admin"}}, "history": {}}
         save_db(initial_data)
         print("✅ 初始化新数据库")
         return initial_data
-    
+
     # 尝试从主文件加载
     try:
         with open(DB_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # 验证数据结构完整性
             if "users" in data and "history" in data:
                 return data
             raise ValueError("数据结构不完整")
     except Exception as e:
         print(f"⚠️ 主数据库加载失败: {e}")
-    
-    # 主文件损坏，尝试从备份恢复
+
+    # 主文件损坏或不完整，尝试从备份恢复
     backup_file = f"{DB_FILE}.bak"
     if os.path.exists(backup_file):
         try:
             with open(backup_file, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 if "users" in data and "history" in data:
-                    # 恢复备份到主文件
-                    shutil.copy(backup_file, DB_FILE)
+                    # 恢复备份到主文件（用原子写，避免再次产生半写状态）
+                    _atomic_write_json(DB_FILE, data)
                     print(f"✅ 已从备份文件恢复数据库")
                     return data
         except Exception as e:
             print(f"❌ 备份文件也损坏: {e}")
-    
-    # 两个文件都损坏，这是严重错误，不应返回空数据导致配额重置
-    # 抛出异常让服务启动失败，而不是静默丢失用户数据
+
+    # 两个文件都损坏：抛异常让服务启动失败，不返回空数据导致配额重置
     raise RuntimeError("❌ 数据库及备份均损坏，请手动检查 wx_data.json 和 wx_data.json.bak")
 
+
+# --- 原子写 + 节流备份 ---
+# 每次 save_db 都用 tmp + fsync + os.replace 做原子替换，保证 DB_FILE 永远是一致的 JSON。
+# .bak 不再每次都 copy（高并发下是两倍 I/O），改为至少 BACKUP_MIN_INTERVAL 秒才刷新一次快照。
+BACKUP_MIN_INTERVAL = float(os.getenv("DB_BACKUP_INTERVAL_SECONDS", "30"))
+_last_backup_ts = 0.0
+
+
+def _atomic_write_json(path: str, data) -> None:
+    """tmp 文件写完 fsync 后用 os.replace 原子替换目标文件。
+
+    - os.replace 在 POSIX 下是原子的；进程崩溃不会留下半写 DB_FILE。
+    - 失败时保留 tmp 方便排查，不破坏原始 DB_FILE。
+    """
+    tmp_path = f"{path}.tmp.{os.getpid()}.{threading.get_ident()}"
+    with open(tmp_path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.flush()
+        try:
+            os.fsync(f.fileno())
+        except OSError:
+            # 某些文件系统（如部分 CI 容器）不支持 fsync，忽略
+            pass
+    os.replace(tmp_path, path)
+
+
 def save_db(data):
-    if os.path.exists(DB_FILE): shutil.copy(DB_FILE, f"{DB_FILE}.bak")
-    with open(DB_FILE, 'w', encoding='utf-8') as f: json.dump(data, f, ensure_ascii=False, indent=2)
+    """原子写 + 节流备份。
+
+    所有业务路径已经在 db_lock 内调用，这里不再重复加锁。
+    备份按时间节流：读时只要 DB_FILE 合法就不依赖 .bak；
+    .bak 作为"万一 DB_FILE 被人工误删"时的回退。
+    """
+    global _last_backup_ts
+    # 先做 .bak（用当前磁盘上的旧值，不包含本次要写的新数据；节流）
+    now = time.time()
+    if os.path.exists(DB_FILE) and (now - _last_backup_ts) >= BACKUP_MIN_INTERVAL:
+        try:
+            shutil.copy(DB_FILE, f"{DB_FILE}.bak")
+            _last_backup_ts = now
+        except Exception as e:
+            # 备份失败不阻塞主写
+            print(f"⚠️ 备份 wx_data.json.bak 失败: {e}")
+    # 原子替换主文件
+    _atomic_write_json(DB_FILE, data)
 
 def verify_password(plain, hashed): return pwd_context.verify(plain, hashed)
 
@@ -355,15 +400,29 @@ async def verify_code(request: VerifyCodeRequest):
     db = load_db()
     
     if phone not in db["users"]:
-        # 新用户注册
+        # 新用户注册（一次性赠送初始积分）
+        INITIAL_QUOTA_FOR_NEW_USER = 50
         db["users"][phone] = {
             "phone": phone,
-            "quota": 10,  # 新用户初始配额
+            "quota": INITIAL_QUOTA_FOR_NEW_USER,
             "role": "user",
             "created_at": time.time()
         }
+        # 记录初始积分日志，与 admin_grant 保持一致，便于对账
+        if "quota_logs" not in db:
+            db["quota_logs"] = []
+        db["quota_logs"].append({
+            "id": str(uuid.uuid4()),
+            "username": phone,
+            "operator": "system",
+            "amount": INITIAL_QUOTA_FOR_NEW_USER,
+            "balance_after": INITIAL_QUOTA_FOR_NEW_USER,
+            "reason": "新用户注册赠送积分",
+            "type": "signup_bonus",
+            "timestamp": time.time()
+        })
         save_db(db)
-        print(f"✅ 新用户注册: {phone}")
+        print(f"✅ 新用户注册: {phone}（初始积分 {INITIAL_QUOTA_FOR_NEW_USER}）")
     
     user = db["users"][phone]
     token = create_access_token({"sub": phone})

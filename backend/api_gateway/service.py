@@ -27,6 +27,7 @@ import requests
 from . import deps, storage
 from .adapters import get_adapter
 from .adapters.base import AdapterContext, AdapterError
+from .concurrency import UpstreamBusyError, upstream_slot
 
 
 class ServiceError(Exception):
@@ -107,7 +108,14 @@ def run_model_raw(
     }
 
     try:
-        result = adapter_cls().generate(ctx)
+        with upstream_slot():
+            result = adapter_cls().generate(ctx)
+    except UpstreamBusyError as be:
+        if record_log:
+            storage.append_log({**log_base, "status": "rejected", "error": str(be),
+                                "http_status": be.status_code,
+                                "finished_at": time.time()})
+        raise ServiceError(str(be), be.status_code)
     except AdapterError as ae:
         if record_log:
             storage.append_log({**log_base, "status": "failed", "error": str(ae),
@@ -239,7 +247,16 @@ def call_image_model(
     )
 
     try:
-        result = adapter_cls().generate(ctx)
+        # 扣费已成功；此处限制同时打给上游的并发数
+        with upstream_slot():
+            result = adapter_cls().generate(ctx)
+    except UpstreamBusyError as be:
+        deps.refund_quota(username, cost)
+        log_entry.update(status="rejected", error=str(be),
+                         http_status=be.status_code,
+                         finished_at=time.time())
+        storage.append_log(log_entry)
+        raise ServiceError(str(be), be.status_code)
     except AdapterError as ae:
         deps.refund_quota(username, cost)
         log_entry.update(status="failed", error=str(ae),

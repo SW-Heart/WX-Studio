@@ -18,7 +18,7 @@ const StatCard = ({ icon, label, value, sub, gradient }) => (
 
 // 创建用户弹窗
 const CreateUserModal = ({ isOpen, onClose, token, lang, onCreated }) => {
-  const [quota, setQuota] = useState(10);
+  const [quota, setQuota] = useState(50);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);

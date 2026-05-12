@@ -207,4 +207,16 @@ def build_router(
         return {"logs": storage.list_logs(username=username, key_id=key_id,
                                           limit=min(1000, max(1, limit)))}
 
+    @router.get("/api/admin/concurrency")
+    def admin_concurrency(admin: str = Depends(get_admin_user)):
+        """上游并发槽位监控"""
+        from .concurrency import get_capacity, get_inflight
+        cap = get_capacity()
+        inflight = get_inflight()
+        return {
+            "capacity": cap,
+            "inflight": inflight,
+            "available": max(0, cap - inflight),
+        }
+
     return router
