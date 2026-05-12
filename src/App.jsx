@@ -200,7 +200,7 @@ const FullscreenViewer = ({ isOpen, image, onClose }) => {
   if (!isOpen || !image) return null;
   const secureImage = toSecureUrl(image);
   return (
-    <div className="fixed top-14 md:top-16 bottom-0 left-0 right-0 z-[50] bg-black/95 flex items-center justify-center p-4 md:p-8" onClick={onClose}>
+    <div className="fixed top-0 bottom-0 left-0 right-0 z-[50] bg-black/95 flex items-center justify-center p-4 md:p-8" onClick={onClose}>
       {/* 关闭按钮 - 简洁风格 */}
       <button
         onClick={onClose}

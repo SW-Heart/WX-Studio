@@ -658,18 +658,21 @@ export const Layout = ({
                 />
             )}
 
-            {/* Header */}
+            {/* 移动端菜单按钮 */}
             {!isImmersive && (
-                <Header
-                    onMobileMenuOpen={() => setMobileMenuOpen(true)}
-                />
+                <button
+                    onClick={() => setMobileMenuOpen(true)}
+                    className="fixed top-3 left-3 z-40 p-2 bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-lg text-white/60 hover:text-white md:hidden"
+                >
+                    <Menu size={20} />
+                </button>
             )}
 
             {/* 主内容区 - 固定高度 */}
             <main
                 className={`
           fixed bottom-0 right-0 transition-all duration-300
-          ${isImmersive ? 'top-0 left-0 z-[100]' : 'top-12 md:top-14 left-0 md:left-16'}
+          ${isImmersive ? 'top-0 left-0 z-[100]' : 'top-0 left-0 md:left-16'}
         `}
             >
                 {children}
