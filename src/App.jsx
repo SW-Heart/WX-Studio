@@ -458,49 +458,6 @@ const HomePage = ({ onNavigate, token, lang }) => {
   const [recentHistory, setRecentHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
-  const features = [
-    {
-      id: 'video',
-      icon: <Film size={28} />,
-      title: { zh: '视频生成', en: 'Video Generation' },
-      desc: { zh: '让画面动起来，赋予无限生命力。', en: 'Bring your images to life with motion.' },
-      available: true,
-      gradient: 'from-[#EF4444] to-[#B91C1C]'
-    },
-    {
-      id: 'product',
-      icon: <Camera size={28} />,
-      title: { zh: '商品摄影', en: 'Product Photography' },
-      desc: { zh: '毫厘尽显匠心，一眼即是心动。', en: 'Every detail tells a story.' },
-      available: true,
-      gradient: 'from-[#FF8A3D] to-[#E65100]'
-    },
-    {
-      id: 'retouch',
-      icon: <Wand2 size={28} />,
-      title: { zh: '智能修图', en: 'AI Retouch' },
-      desc: { zh: '懂审美的AI，让想象触手可及。', en: 'Perfect images with AI magic.' },
-      available: true,
-      gradient: 'from-[#8B5CF6] to-[#6D28D9]'
-    },
-    {
-      id: 'portrait',
-      icon: <User size={28} />,
-      title: { zh: '人像写真', en: 'Portrait Photography' },
-      desc: { zh: '以光影为笔，描绘灵魂的轮廓。', en: 'Telling your story through light and shadow.' },
-      available: true,
-      gradient: 'from-[#06B6D4] to-[#0891B2]'
-    },
-    {
-      id: 'create',
-      icon: <Edit3 size={28} />,
-      title: { zh: '自由创作', en: 'Basic Create' },
-      desc: { zh: '文生图、图生图，任意创作。', en: 'Text2Img, Img2Img, free creation.' },
-      available: true,
-      gradient: 'from-[#10B981] to-[#059669]'
-    }
-  ];
-
   // 加载最近创作记录 - 仅显示已完成的作品
   useEffect(() => {
     const fetchRecentHistory = async () => {
@@ -545,79 +502,56 @@ const HomePage = ({ onNavigate, token, lang }) => {
           </p>
         </div>
 
-        {/* 主打功能：自由创作 */}
-        <div className="relative z-10 mb-8">
-          {features.filter(f => f.id === 'create').map(feature => (
-            <div
-              key={feature.id}
-              onClick={() => feature.available && onNavigate(feature.id)}
-              className={`group relative p-6 md:p-8 rounded-2xl border transition-all duration-300 cursor-pointer overflow-hidden
-              ${feature.available
-                  ? 'bg-gradient-to-br from-[#10B981]/5 to-[#059669]/5 border-[#10B981]/20 hover:border-[#10B981]/40 hover:shadow-2xl hover:shadow-[#10B981]/10 hover:scale-[1.01]'
-                  : 'bg-white/[0.02] border-white/5 cursor-not-allowed opacity-60'
-                }`}
-            >
-              {/* Background Glow */}
-              <div className="absolute top-0 right-0 w-64 h-64 bg-[#10B981]/10 rounded-full blur-[80px] -mr-10 -mt-10 pointer-events-none" />
-
-              <div className="flex items-center gap-5 md:gap-6 relative z-10">
-                {/* 图标 */}
-                <div className={`shrink-0 w-16 h-16 md:w-20 md:h-20 rounded-2xl bg-og-gradient flex items-center justify-center shadow-lg
-                ${feature.available ? 'group-hover:scale-110 group-hover:rotate-3 transition-transform duration-500 text-white' : 'grayscale text-white/50'}`}>
-                  {React.cloneElement(feature.icon, { size: 36 })}
-                </div>
-
-                {/* 文字 */}
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-1 md:mb-2">
-                    <h3 className="text-xl md:text-2xl font-bold text-white transition-colors">{feature.title[lang]}</h3>
-                    <span className="px-2 py-0.5 rounded-md bg-white/10 text-white text-[10px] font-bold uppercase border border-white/20">Hot</span>
-                  </div>
-                  <p className="text-white/60 text-sm md:text-base leading-relaxed">{feature.desc[lang]}</p>
-                </div>
-
-                {/* 进入箭头 */}
-                {feature.available && (
-                  <div className="hidden sm:flex w-12 h-12 rounded-full bg-white/5 items-center justify-center group-hover:bg-white group-hover:text-black transition-all duration-300 group-hover:translate-x-2 border border-white/10 group-hover:border-white">
-                    <ArrowRight size={20} />
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* 快捷入口卡片 / 其他小功能 */}
-        <h2 className="text-sm font-bold text-white/40 mb-3 flex items-center gap-2">
-          <Wand2 size={16} /> {lang === 'zh' ? '专业工具' : 'Pro Tools'}
-        </h2>
+        {/* 四个并列导航入口 */}
         <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
-          {features.filter(f => f.id !== 'create').map((feature) => (
+          {[
+            {
+              id: 'quick-create',
+              icon: <Zap size={28} />,
+              title: { zh: '快速创作', en: 'Quick Create' },
+              desc: { zh: '商品摄影、智能修图、人像写真，一站搞定。', en: 'Product shots, retouching, portraits in one place.' },
+              gradient: 'from-[#FF8A3D] to-[#E65100]'
+            },
+            {
+              id: 'create',
+              icon: <LayoutIcon size={28} />,
+              title: { zh: '无限画布', en: 'Infinite Canvas' },
+              desc: { zh: '自由创作空间，文生图、图生图任意组合。', en: 'Free creative space with text & image generation.' },
+              gradient: 'from-[#10B981] to-[#059669]'
+            },
+            {
+              id: 'models',
+              icon: <Sparkles size={28} />,
+              title: { zh: '模型广场', en: 'Models Plaza' },
+              desc: { zh: '探索海量AI模型，找到最适合你的创作工具。', en: 'Explore AI models for your creative needs.' },
+              gradient: 'from-[#8B5CF6] to-[#6D28D9]'
+            },
+            {
+              id: 'api-keys',
+              icon: <Link size={28} />,
+              title: { zh: 'API 管理', en: 'API Keys' },
+              desc: { zh: '管理API密钥，集成AI能力到你的应用。', en: 'Manage API keys and integrate AI into your apps.' },
+              gradient: 'from-[#06B6D4] to-[#0891B2]'
+            }
+          ].map((item) => (
             <div
-              key={feature.id}
-              onClick={() => feature.available && onNavigate(feature.id)}
-              className={`group relative p-4 md:p-5 rounded-xl border transition-all duration-300 cursor-pointer
-              ${feature.available
-                  ? 'bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02]'
-                  : 'bg-white/[0.02] border-white/5 cursor-not-allowed opacity-60'
-                }`}
+              key={item.id}
+              onClick={() => onNavigate(item.id)}
+              className="group relative p-5 md:p-6 rounded-xl border transition-all duration-300 cursor-pointer bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02]"
             >
               {/* 图标 */}
-              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center mb-3 shadow-sm
-              ${feature.available ? 'group-hover:scale-110 transition-transform duration-300 text-white' : 'grayscale text-white/50'}`}>
-                {feature.icon}
+              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-3 shadow-lg text-white group-hover:scale-110 transition-transform duration-300`}>
+                {item.icon}
               </div>
 
               {/* 标题 */}
-              <h3 className="text-base md:text-lg font-bold mb-1 text-white">{feature.title[lang]}</h3>
+              <h3 className="text-base md:text-lg font-bold mb-1 text-white">{item.title[lang]}</h3>
 
               {/* 描述 */}
-              <p className="text-white/40 text-xs md:text-sm line-clamp-2">{feature.desc[lang]}</p>
+              <p className="text-white/40 text-xs md:text-sm line-clamp-2">{item.desc[lang]}</p>
 
               {/* 进入箭头 */}
-              {feature.available && (
-                <ArrowRight size={16} className="absolute top-4 right-4 text-white/20 group-hover:text-white/80 group-hover:translate-x-1 transition-all" />
-              )}
+              <ArrowRight size={16} className="absolute top-5 right-5 text-white/20 group-hover:text-white/80 group-hover:translate-x-1 transition-all" />
             </div>
           ))}
         </div>
@@ -2237,7 +2171,6 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                         <div className="flex items-center gap-2">
                           <span className="text-base">🍌</span>
                           <span className={isNanoBanana2 ? 'text-[#FBBF24]' : ''}>Nano Banana 2</span>
-                          <span className="text-[9px] px-1 py-0.5 rounded bg-[#FBBF24]/15 text-[#FBBF24] font-bold">30分</span>
                         </div>
                         {isNanoBanana2 && <Check size={14} className="text-[#FBBF24]" />}
                       </button>
@@ -4172,13 +4105,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                                     <div className="flex flex-col items-start gap-0.5">
                                       <div className="flex items-center gap-1.5">
                                         <div className="text-xs font-bold text-white/80">{m.name}</div>
-                                        {m.badge && (
-                                          <span className="text-[9px] px-1.5 py-0.5 rounded bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold tracking-wider">{m.badge}</span>
-                                        )}
                                       </div>
-                                      {m.desc && !disabled && (
-                                        <div className="text-[10px] text-white/40">{m.desc}</div>
-                                      )}
                                       {disabled && (
                                         <div className="text-[10px] text-white/40">积分不足</div>
                                       )}

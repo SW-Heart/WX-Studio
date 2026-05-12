@@ -78,6 +78,8 @@ class TTAPIImageAdapter(BaseAdapter):
             "prompt": ctx.prompt,
             "model": upstream_model,
         }
+        if ctx.size:
+            payload["size"] = ctx.size
         if ctx.image:
             payload["referImages"] = ctx.image
         # TTAPI 不支持原生 n；上层需要多张应自己循环调用
