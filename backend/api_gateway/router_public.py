@@ -11,11 +11,23 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 
 from . import storage
 from .auth import AuthedKey, require_api_key
 from .service import ServiceError, call_image_model
+
+try:
+    from backend.rate_limiter import limiter, get_client_ip, API_KEY_LIMIT, API_IP_LIMIT
+except ImportError:
+    try:
+        from rate_limiter import limiter, get_client_ip, API_KEY_LIMIT, API_IP_LIMIT
+    except ImportError:
+        # Fallback: 限流器未安装时不阻塞启动
+        limiter = None
+        get_client_ip = lambda r: "unknown"
+        API_KEY_LIMIT = (30, 60)
+        API_IP_LIMIT = (60, 60)
 
 
 router = APIRouter(prefix="/v1", tags=["api-gateway"])
@@ -61,11 +73,17 @@ def _as_list(image_field) -> List[str]:
     return []
 
 
-def _call(authed: AuthedKey, body: Dict[str, Any]):
+def _call(authed: AuthedKey, body: Dict[str, Any], request: Request = None):
     model_id = body.get("model")
     if not model_id:
         raise HTTPException(400, "missing 'model'")
     _ensure_model_allowed(authed, model_id)
+
+    # API 限流：按 API Key + IP 双维度
+    if limiter and request:
+        client_ip = get_client_ip(request)
+        limiter.check("api_key", authed.id, *API_KEY_LIMIT, "API requests too frequent")
+        limiter.check("api_ip", client_ip, *API_IP_LIMIT, "API requests too frequent")
 
     prompt = body.get("prompt") or ""
     if not prompt:
@@ -93,8 +111,8 @@ def _call(authed: AuthedKey, body: Dict[str, Any]):
 # ---------- /v1/images/generations ----------
 
 @router.post("/images/generations")
-def images_generations(body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
-    return _call(authed, body)
+def images_generations(request: Request, body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
+    return _call(authed, body, request)
 
 
 # ---------- /v1/images/edits ----------
@@ -102,15 +120,15 @@ def images_generations(body: Dict[str, Any] = Body(...), authed: AuthedKey = Dep
 # 如需支持 multipart 上传，前端可以先走 /api/upload 拿到 URL 再调用此端点。
 
 @router.post("/images/edits")
-def images_edits(body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
+def images_edits(request: Request, body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
     # 等价于 /images/generations 但要求至少一张参考图
     if not _as_list(body.get("image")):
         raise HTTPException(400, "'image' is required for /images/edits")
-    return _call(authed, body)
+    return _call(authed, body, request)
 
 
 # ---------- /v1/videos ----------
 
 @router.post("/videos")
-def videos(body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
-    return _call(authed, body)
+def videos(request: Request, body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
+    return _call(authed, body, request)

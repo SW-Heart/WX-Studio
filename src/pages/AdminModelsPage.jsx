@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  Cpu, Plus, Trash2, Loader2, RefreshCw, X, CheckCircle2, XCircle,
-  Settings2, Power, Save, Eye, EyeOff, AlertCircle,
+  Settings2, Power, Save, Eye, EyeOff, AlertCircle, GripVertical, 
+  Cpu, X, Loader2, Plus, Search, Trash2, RefreshCw, XCircle, CheckCircle2
 } from 'lucide-react';
+import { ConfirmDialog, AlertDialog } from '../components/ui/Dialog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const authHeaders = (token, extra = {}) => ({ 'Authorization': `Bearer ${token}`, ...extra });
@@ -143,6 +144,7 @@ const ModelModal = ({ isOpen, onClose, token, lang, adapters, initial, onSaved }
   const [form, setForm] = useState(null);
   const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [alertData, setAlertData] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -165,8 +167,14 @@ const ModelModal = ({ isOpen, onClose, token, lang, adapters, initial, onSaved }
   const isEdit = Boolean(initial);
 
   const submit = async () => {
-    if (!form.id) { alert(lang === 'zh' ? '请输入模型 ID' : 'Please enter model id'); return; }
-    if (!form.adapter_type) { alert('adapter_type required'); return; }
+    if (!form.id) { 
+      setAlertData({ title: '提示', message: lang === 'zh' ? '请输入模型 ID' : 'Please enter model id', type: 'error' });
+      return; 
+    }
+    if (!form.adapter_type) { 
+      setAlertData({ title: '提示', message: 'adapter_type required', type: 'error' });
+      return; 
+    }
     setSaving(true);
     try {
       const url = isEdit ? `${API_BASE_URL}/api/admin/models/${form.id}` : `${API_BASE_URL}/api/admin/models`;
@@ -177,10 +185,16 @@ const ModelModal = ({ isOpen, onClose, token, lang, adapters, initial, onSaved }
         headers: authHeaders(token, { 'Content-Type': 'application/json' }),
         body: JSON.stringify(body),
       });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || 'save failed'); }
+      if (!res.ok) { 
+        const e = await res.json().catch(() => ({})); 
+        setAlertData({ title: '保存失败', message: e.detail || 'save failed', type: 'error' });
+        return;
+      }
       onSaved?.();
       onClose();
-    } catch (err) { alert(err.message); }
+    } catch (err) { 
+      setAlertData({ title: '发生错误', message: err.message, type: 'error' });
+    }
     finally { setSaving(false); }
   };
 
@@ -285,6 +299,14 @@ const ModelModal = ({ isOpen, onClose, token, lang, adapters, initial, onSaved }
             {lang === 'zh' ? '保存' : 'Save'}
           </button>
         </div>
+
+        <AlertDialog 
+          isOpen={!!alertData} 
+          onClose={() => setAlertData(null)} 
+          title={alertData?.title} 
+          message={alertData?.message} 
+          type={alertData?.type} 
+        />
       </div>
     </div>
   );
@@ -297,6 +319,8 @@ const AdminModelsPage = ({ token, lang }) => {
   const [loading, setLoading] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
+  const [alertData, setAlertData] = useState(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -322,9 +346,44 @@ const AdminModelsPage = ({ token, lang }) => {
   };
 
   const remove = async (m) => {
-    if (!confirm(lang === 'zh' ? `删除模型 ${m.id}？\n已用此模型的 Key 将不再能调用。` : `Delete model ${m.id}? Keys using it will lose access.`)) return;
-    const res = await fetch(`${API_BASE_URL}/api/admin/models/${m.id}`, { method: 'DELETE', headers: authHeaders(token) });
-    if (res.ok) fetchAll();
+    setConfirmData({
+      title: lang === 'zh' ? '删除模型' : 'Delete Model',
+      message: lang === 'zh' ? `确认删除模型 "${m.id}"？\n已用此模型的 API Key 将无法继续调用此模型。` : `Are you sure you want to delete "${m.id}"? API Keys using it will lose access.`,
+      onConfirm: async () => {
+        const res = await fetch(`${API_BASE_URL}/api/admin/models/${m.id}`, { method: 'DELETE', headers: authHeaders(token) });
+        if (res.ok) fetchAll();
+      }
+    });
+  };
+
+  const handleDragStart = (e, index) => {
+    e.dataTransfer.setData('index', index);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = async (e, targetIndex) => {
+    const sourceIndex = parseInt(e.dataTransfer.getData('index'));
+    if (sourceIndex === targetIndex) return;
+
+    const newModels = [...models];
+    const [moved] = newModels.splice(sourceIndex, 1);
+    newModels.splice(targetIndex, 0, moved);
+    
+    setModels(newModels);
+
+    // 同步到后端
+    try {
+      await fetch(`${API_BASE_URL}/api/admin/models/reorder`, {
+        method: 'POST',
+        headers: authHeaders(token, { 'Content-Type': 'application/json' }),
+        body: JSON.stringify(newModels.map(m => m.id)),
+      });
+    } catch (err) {
+      console.error('Reorder failed:', err);
+    }
   };
 
   return (
@@ -375,11 +434,23 @@ const AdminModelsPage = ({ token, lang }) => {
                   <tr><td colSpan={6} className="text-center py-12 text-white/30">
                     {lang === 'zh' ? '尚未配置模型。点击「新增模型」开始。' : 'No models yet. Click "Add model" to create one.'}
                   </td></tr>
-                ) : models.map(m => (
-                  <tr key={m.id} className="border-b border-white/5 hover:bg-white/[0.02]">
+                ) : models.map((m, idx) => (
+                  <tr 
+                    key={m.id} 
+                    draggable
+                    onDragStart={(e) => handleDragStart(e, idx)}
+                    onDragOver={handleDragOver}
+                    onDrop={(e) => handleDrop(e, idx)}
+                    className="border-b border-white/5 hover:bg-white/[0.02] cursor-move active:bg-white/[0.05]"
+                  >
                     <td className="px-4 py-2.5">
-                      <div className="text-white font-mono font-medium">{m.id}</div>
-                      {m.description && <div className="text-[10px] text-white/40 mt-0.5">{m.description}</div>}
+                      <div className="flex items-center gap-2">
+                        <GripVertical size={14} className="text-white/20" />
+                        <div>
+                          <div className="text-white font-mono font-medium">{m.id}</div>
+                          {m.description && <div className="text-[10px] text-white/40 mt-0.5">{m.description}</div>}
+                        </div>
+                      </div>
                     </td>
                     <td className="px-4 py-2.5"><Badge tone="info">{m.adapter_type}</Badge></td>
                     <td className="px-4 py-2.5">
@@ -437,6 +508,23 @@ const AdminModelsPage = ({ token, lang }) => {
         onClose={() => { setShowEdit(false); setEditing(null); }}
         token={token} lang={lang} adapters={adapters} initial={editing}
         onSaved={fetchAll}
+      />
+
+      <ConfirmDialog 
+        isOpen={!!confirmData}
+        onClose={() => setConfirmData(null)}
+        onConfirm={confirmData?.onConfirm || (() => {})}
+        title={confirmData?.title}
+        message={confirmData?.message}
+        type="danger"
+      />
+
+      <AlertDialog 
+        isOpen={!!alertData} 
+        onClose={() => setAlertData(null)} 
+        title={alertData?.title} 
+        message={alertData?.message} 
+        type={alertData?.type} 
       />
     </div>
   );

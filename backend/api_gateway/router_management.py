@@ -195,6 +195,11 @@ def build_router(
         storage.delete_model(model_id)
         return {"ok": True}
 
+    @router.post("/api/admin/models/reorder")
+    def admin_reorder_models(model_ids: List[str] = Body(...), admin: str = Depends(get_admin_user)):
+        storage.reorder_models(model_ids)
+        return {"ok": True}
+
     @router.get("/api/admin/api-keys")
     def admin_list_keys(admin: str = Depends(get_admin_user)):
         return {"keys": storage.list_all_api_keys()}

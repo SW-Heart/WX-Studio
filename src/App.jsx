@@ -12,57 +12,19 @@ import {
 import { Layout } from './components/layout/Layout';
 import { TaskProvider, useTaskManager, TASK_STATUS } from './context/TaskContext';
 import AdminPanel from './pages/AdminPanel';
+import GalleryPage from './pages/GalleryPage';
+import HomePage from './pages/HomePage';
 import ApiKeysPage from './pages/ApiKeysPage';
 import AdminModelsPage from './pages/AdminModelsPage';
 import ModelsPlazaPage from './pages/ModelsPlazaPage';
 import InfiniteCanvas, { getNewNodePositions, NODE_DEFAULT_W, NODE_DEFAULT_H } from './components/InfiniteCanvas';
 import ChatGptIcon from './assets/ChatGPT.svg';
 import MidjourneyIcon from './assets/midjourney.svg';
+import { API_BASE_URL, LOGO_URL } from './config/app';
+import { PORTRAIT_TEMPLATES, TEMPLATES, TRANSLATIONS } from './config/studioData';
+import { getCurrentPageFromLocation, navigateToPage } from './router/routes';
+import { isCompletedHistoryItem, toSecureUrl } from './utils/media';
 import { storage } from './utils/storage';
-
-//t [重要配置] 开发环境从 .env.development 读取, 生产环境留空让 Nginx 转发
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
-// 这样既能读本地 .env，上线后读不到就会自动变空字符串(适配Nginx)
-
-// ==========================================
-// 🎨 [在此处修改 LOGO]
-// 把下面的链接换成您自己的 Logo 图片地址
-// ==========================================
-const LOGO_URL = "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/logo.png";
-
-// --- 辅助函数：强制转换为 HTTPS 域名链接 ---
-// 解决 ERR_CERT_COMMON_NAME_INVALID 的核心：把 IP 替换为域名
-const toSecureUrl = (url) => {
-  if (!url) return "";
-  if (url.startsWith("blob:")) return url;
-
-  // [核心修复] 如果链接里包含您的IP，强制替换为域名
-  // 请确保这里的域名和您的一致
-  const YOUR_DOMAIN = "aigcog.com";
-  const YOUR_IP = "8.149.136.249";
-
-  let secureUrl = url;
-  if (secureUrl.includes(YOUR_IP)) {
-    secureUrl = secureUrl.replace(YOUR_IP, YOUR_DOMAIN);
-  }
-  if (secureUrl.startsWith("http:")) {
-    secureUrl = secureUrl.replace("http:", "https:");
-  }
-  return secureUrl;
-};
-
-// 判定一条 /api/history 记录是否为「已成功完成」的可展示作品。
-// - 同步 record（product/retouch/portrait）没有 status 字段，但 image 一定有效 → 视为完成。
-// - 异步 record（create/video）初始 status == "ON_QUEUE"、image == null → 视为未完成。
-// - 异步完成后 status == "SUCCESS"、image 为 URL → 视为完成。
-// - 任何 status != "SUCCESS"、或 image 为空/非字符串的项均视为未完成。
-// 仅用于首页「最近创作」与「我的图库」两个展示入口；工作室内部的 fetchHistory 仍需全量。
-const isCompletedHistoryItem = (item) => {
-  if (!item) return false;
-  if (item.status !== undefined && item.status !== 'SUCCESS') return false;
-  const img = item.image;
-  return typeof img === 'string' && img.trim() !== '';
-};
 
 // ==========================================
 // 🎨 LOGO 组件 (图片版)
@@ -88,113 +50,6 @@ const OGLogo = () => {
   );
 };
 
-// --- 📝 [在此处修改文案] ---
-const TRANSLATIONS = {
-  en: {
-    nav: { product: "Product Shot", retouch: "AI Retouch", portrait: "Portrait", soon: "Coming Soon" },
-    auth: {
-      login: "Log In", logout: "Log Out", submit: "Sign In", welcome: "Welcome",
-      productName: "OG AI",
-      subtitle: "Professional AI Photography",
-      tabPassword: "Account Login", tabPhone: "Phone Login",
-      username: "Username", password: "Password",
-      placeholderUsername: "Enter username",
-      placeholderPassword: "Enter password",
-      phone: "Phone Number", code: "Verification Code",
-      placeholderPhone: "Enter your phone number",
-      placeholderCode: "Enter 6-digit code",
-      sendCode: "Get Code", sending: "Sending...", resend: "Resend",
-      slideToVerify: "Slide to verify", verified: "Verified"
-    },
-    upload: { title: "Reference Images", desc: "Upload", uploaded: "Ready", uploading: "...", change: "Change" },
-    prompt: { label: "Creative Prompt", placeholder: "Describe materials, lighting, and mood...", enhance: "AI Enhance", enhancing: "Optimizing..." },
-    styles: { Luxurious: "Luxurious", Minimal: "Minimal", Nature: "Nature", Cyberpunk: "Cyberpunk", Studio: "Studio", Soft: "Soft", Vintage: "Vintage", Cinematic: "Cinematic", Neon: "Neon" },
-    template: "Reference Templates",
-    resolution: "Output Size", ratio: "Aspect Ratio",
-    generate: { idle: "Generate", loading: "Creating...", disabled: "Upload Image First", loginRequired: "Login to Create", quotaEmpty: "Quota Exceeded" },
-    status: { ready: "OG AI Ready", powered: "Powered by TT-API", generating: "Creating your masterpiece...", failed: "Generation Failed" },
-    gallery: { title: "History", empty: "No creations yet" },
-    quota: "Credits",
-    toast: { copySuccess: "Copied!", copyFail: "Copy Failed", downloadFail: "Download Failed", downloadSuccess: "Downloaded!", httpsRequired: "Copy requires HTTPS" },
-    actions: { download: "Download", fullscreen: "Fullscreen", copy: "Copy Image" }
-  },
-  zh: {
-    nav: { product: "商品摄影", retouch: "智能修图", portrait: "个人写真", soon: "敬请期待" },
-    auth: {
-      login: "登录 / 注册", logout: "退出登录", submit: "登录 / 注册", welcome: "欢迎回来",
-      productName: "OG AI",
-      subtitle: "专业 AI 商品摄影工坊",
-      tabPassword: "账号登录", tabPhone: "手机登录",
-      username: "用户名", password: "密码",
-      placeholderUsername: "请输入用户名",
-      placeholderPassword: "请输入密码",
-      phone: "手机号", code: "验证码",
-      placeholderPhone: "请输入手机号",
-      placeholderCode: "请输入6位验证码",
-      sendCode: "获取验证码", sending: "发送中...", resend: "重新获取",
-      slideToVerify: "拖动滑块完成验证", verified: "验证通过"
-    },
-    upload: { title: "参考图", desc: "上传参考图", uploaded: "已就绪", uploading: "上传中...", change: "更换" },
-    prompt: { label: "创意描述", placeholder: "描述材质、光影氛围、背景细节...", enhance: "AI 润色", enhancing: "优化中..." },
-    styles: { Luxurious: "奢华质感", Minimal: "极简白底", Nature: "自然森系", Cyberpunk: "赛博朋克", Studio: "专业影棚", Soft: "柔和光影", Vintage: "复古胶片", Cinematic: "电影大片", Neon: "霓虹光效" },
-    template: "参考模版",
-    resolution: "输出画质", ratio: "画幅比例",
-    generate: { idle: "立即生成", loading: "任务提交中...", disabled: "请先上传图片", loginRequired: "请登录后使用", quotaEmpty: "配额已用尽" },
-    status: { ready: "OG AI 就绪", powered: "由 TT-API 驱动", generating: "正在精心绘制中...", failed: "生成失败" },
-    gallery: { title: "创作记录", empty: "暂无历史记录" },
-    quota: "剩余点数",
-    toast: { copySuccess: "已复制到剪贴板", copyFail: "复制失败", downloadFail: "下载失败", downloadSuccess: "下载成功", httpsRequired: "复制功能需要 HTTPS 安全协议" },
-    actions: { download: "下载图片", fullscreen: "全屏查看", copy: "复制图片" }
-  }
-};
-
-// ==========================================
-// 📋 参考模版数据
-// ==========================================
-const TEMPLATES = [
-  {
-    id: 'storyboard',
-    name: { zh: '3X3故事板', en: '3x3 Storyboard' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/3x3.png',
-    prompt: '为高端{{家具}}电商广告制作一张 3×3 的写实风格故事板联系表，广告中仅包含以下产品： {{主产品}}和{{辅助产品}}\n背景{{背景}} \n照明{{照明}} \n生成一个等间距的 3×3 网格。'
-  },
-  {
-    id: 'frozen',
-    name: { zh: '冰爽优雅', en: 'Frozen Elegance' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/%E5%86%B0%E7%88%BD.jpeg',
-    prompt: '想象一下这样的视觉概念：[产品名称]（标签上印有{{}}文字）悬浮在一块裂纹遍布的超透明冰块中。产品清晰可见，周围环绕着一层薄霜。它静置于光滑的白色丝绸之上，环境灯光冷峻而优雅，光影在丝绸表面跳跃闪烁。请以奢华的韩国护肤品广告风格，用丰富的视觉细节描绘整个场景。'
-  },
-  {
-    id: 'brand',
-    name: { zh: '品牌设计', en: 'Brand Design' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/pinpai.png',
-    prompt: 'Create a vertical 9:16 brand design guide poster using the uploaded product image. Adapt the design style to match the product\'s niche and visual identity. Structure the poster with clear, elegant sections: (1) Large logo display and safe zone usage, (2) Product mockup centered and highlighted, (3) Primary and secondary color palette swatches with hex codes, (4) Typography guide with heading, subheading, body font samples, and line spacing specs, (5) Iconography or graphic motif examples used by the brand, (6) Image treatment style with sample lifestyle or studio visuals, (7) Grid system or layout rules, (8) Packaging mockups and surface applications, (9) Do\'s & Don\'ts with annotated visuals. Use minimalist white or soft neutral background with structured layout dividers and drop shadows. The result must be visually rich, clean, and suitable for a printed or digital brand book.'
-  },
-  {
-    id: 'food',
-    name: { zh: '食品海报', en: 'Food Poster' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/%E9%A3%9F%E5%93%81.jpeg',
-    prompt: 'A 2:3 aspect ratio, vertical, high-resolution food advertisement showcasing the most representative and delicious product from the uploaded reference image. The product is centered and enhanced with mouthwatering details such as melting cheese, dripping chocolate, whipped cream, or condensed moisture. The background should use a gradient or soft color scheme consistent with the brand image. A slogan aligned with the brand style should be prominently displayed at the top. The official brand logo should be included at the bottom. Utilize cinematic studio lighting, soft shadows, and ultra-clear textures to create a visually impactful yet minimalist poster.'
-  },
-  {
-    id: 'glass',
-    name: { zh: '拟态玻璃', en: 'Glass Morph' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/%E6%8B%9F%E6%80%81%E7%8E%BB%E7%92%83.jpeg',
-    prompt: '[产品名称] in a surreal, minimalist paper-glass style advertisement.\nThe product is centered, crafted from translucent frosted glass-paper, placed against a clean white or softly tinted background.\nSoft cinematic lighting creates gentle contrast and ambient shadows.\nA single brand color subtly interacts with the scene through glow, mist, liquid, or foam.\nInclude a bold, elegant 4-word slogan near the product.\nThe brand logo appears subtly etched, glowing, or printed in a refined manner.\nVertical or square aspect ratio, ultra-detailed, poster-quality, visually soothing and conceptually refined.'
-  },
-  {
-    id: 'sky',
-    name: { zh: '从天而降', en: 'Sky Drop' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/%E5%A4%A9.png',
-    prompt: '创作一张比例为 1:1 的图片\n一张梦幻般的品牌广告，广告主角是 [品牌名称]。广告中，品牌设计了一个泡泡状的胶囊，胶囊内装着品牌专属颜色的降落伞包装，包装盒内是他们的经典产品。背景是蓝天、模糊的降落伞包装、白云，顶部有一个小小的品牌标志，下方是一句简洁的标语。广告采用电影级的日光照明，并运用了镜头光晕、景深和 HDR 技术。'
-  },
-  {
-    id: 'planet',
-    name: { zh: '品牌星球', en: 'Brand Planet' },
-    image: 'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/mac%20book%20word.png',
-    prompt: 'Planet [产品名称], Year 3025. A distant world shaped entirely by the essence of the brand. The landscapes echo its core identity — from surreal terrains to fantastical weather patterns. Native flora and fauna embody its signature ingredients and aesthetics. Rivers flow with iconic flavors. Architecture is inspired by its packaging and visual language, fused with futuristic technology. The atmosphere is rich in texture, cinematic lighting, and surreal detail. A dreamlike vision of brand identity reimagined as a sci-fi utopia.'
-  }
-];
 
 const FullscreenViewer = ({ isOpen, image, onClose }) => {
   if (!isOpen || !image) return null;
@@ -244,405 +99,6 @@ const Toast = ({ message, type = 'success', onClose }) => {
     </div>
   );
 };
-
-// ==========================================
-// 📂 全局图库组件
-// ==========================================
-
-const MediaRenderer = ({ src, alt, className, onClick }) => {
-  if (!src) return null;
-  const isVideo = src.includes('.mp4') || src.includes('video');
-  if (isVideo) {
-    return (
-      <video 
-        src={src} 
-        className={`${className} object-cover`} 
-        onClick={onClick}
-        autoPlay loop muted playsInline
-      />
-    );
-  }
-  return <img src={src} alt={alt || 'media'} className={className} onClick={onClick} />;
-};
-
-const GalleryModal = ({ isOpen, onClose, token, lang }) => {
-  const [history, setHistory] = useState([]);
-  const [filter, setFilter,] = useState('all'); // all, product, retouch, portrait
-  const [loading, setLoading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null); // 要删除的图片ID
-  const [deleting, setDeleting] = useState(false);
-
-  const t = TRANSLATIONS[lang];
-
-  const filterOptions = [
-    { id: 'all', label: { zh: '全部', en: 'All' } },
-    { id: 'product', label: { zh: '商品摄影', en: 'Product' } },
-    { id: 'retouch', label: { zh: '智能修图', en: 'Retouch' } },
-    { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } },
-    { id: 'video', label: { zh: '视频生成', en: 'Video' } },
-    { id: 'create', label: { zh: '自由创作', en: 'Create' } }
-  ];
-
-  const fetchAllHistory = async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data);
-      }
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  const handleDelete = async (itemId) => {
-    if (!token || deleting) return;
-    setDeleting(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/history/${itemId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setHistory(prev => prev.filter(item => item.id !== itemId));
-        setDeleteConfirm(null);
-        if (selectedImage?.id === itemId) setSelectedImage(null);
-      }
-    } catch (err) { console.error(err); }
-    finally { setDeleting(false); }
-  };
-
-  useEffect(() => {
-    if (isOpen && token) fetchAllHistory();
-  }, [isOpen, token]);
-
-  const filteredHistory = history.filter(item => {
-    if (!isCompletedHistoryItem(item)) return false;
-    if (filter === 'all') return true;
-    if (filter === 'product') return !item.type || item.type === 'product';
-    return item.type === filter;
-  });
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 z-[1000] bg-black/90 backdrop-blur-xl flex flex-col animate-in fade-in duration-300">
-      {/* Header */}
-      <div className="h-16 flex items-center justify-between px-6 border-b border-white/10">
-        <div className="flex items-center gap-4">
-          <FolderOpen size={24} className="text-[#FF8A3D]" />
-          <h2 className="text-xl font-bold text-white">{lang === 'zh' ? '我的图库' : 'My Gallery'}</h2>
-        </div>
-        <div className="flex items-center gap-4">
-          {/* 筛选器 */}
-          <div className="flex items-center gap-2 bg-white/5 rounded-full p-1">
-            {filterOptions.map(opt => (
-              <button
-                key={opt.id}
-                onClick={() => setFilter(opt.id)}
-                className={`px-4 py-1.5 rounded-full text-xs font-medium transition-all
-                  ${filter === opt.id ? 'bg-[#FF8A3D] text-white' : 'text-white/60 hover:text-white'}`}
-              >
-                {opt.label[lang]}
-              </button>
-            ))}
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-full text-white/60 hover:text-white transition-colors">
-            <X size={24} />
-          </button>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 size={32} className="animate-spin text-[#FF8A3D]" />
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-white/30">
-            <FolderOpen size={48} className="mb-4" />
-            <p>{lang === 'zh' ? '暂无图片' : 'No images'}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-            {filteredHistory.map(item => (
-              <div
-                key={item.id}
-                className="aspect-square rounded-xl overflow-hidden border border-white/10 cursor-pointer group relative bg-[#111] hover:border-[#FF8A3D]/50 transition-all hover:shadow-lg hover:shadow-orange-900/20"
-              >
-                <img
-                  src={toSecureUrl(item.image)}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  alt=""
-                  onClick={() => setSelectedImage(item)}
-                />
-                {/* 删除按钮 */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item.id); }}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-red-600 text-white/70 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
-                  title={lang === 'zh' ? '删除' : 'Delete'}
-                >
-                  <Trash2 size={14} />
-                </button>
-                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent" onClick={() => setSelectedImage(item)}>
-                  <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
-                  <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                    ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
-                      item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
-                        item.type === 'create' ? 'bg-green-500/30 text-green-300' :
-                          'bg-orange-500/30 text-orange-300'}`}>
-                    {item.type === 'retouch' ? '修图' : item.type === 'portrait' ? '人像' : item.type === 'create' ? '创作' : '商品'}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 删除确认弹窗 */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-[1002] bg-black/80 flex items-center justify-center" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-white mb-4">{lang === 'zh' ? '确认删除' : 'Confirm Delete'}</h3>
-            <p className="text-white/60 text-sm mb-8">{lang === 'zh' ? '确定要删除这张图片吗？此操作无法撤销。' : 'Are you sure you want to delete this image? This action cannot be undone.'}</p>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setDeleteConfirm(null)}
-                className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors"
-              >
-                {lang === 'zh' ? '取消' : 'Cancel'}
-              </button>
-              <button
-                onClick={() => handleDelete(deleteConfirm)}
-                disabled={deleting}
-                className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2"
-              >
-                {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                {lang === 'zh' ? '删除' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 图片预览 */}
-      {selectedImage && (
-        <div className="fixed inset-0 z-[1001] bg-black/95 flex items-center justify-center p-8" onClick={() => setSelectedImage(null)}>
-          <button onClick={() => setSelectedImage(null)} className="absolute top-6 right-6 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white transition-colors">
-            <X size={24} />
-          </button>
-          {/* 预览界面的删除按钮 */}
-          <button
-            onClick={(e) => { e.stopPropagation(); setDeleteConfirm(selectedImage.id); }}
-            className="absolute top-6 right-20 p-2 bg-white/10 hover:bg-red-600 rounded-full text-white transition-colors"
-            title={lang === 'zh' ? '删除' : 'Delete'}
-          >
-            <Trash2 size={20} />
-          </button>
-          <img src={toSecureUrl(selectedImage.image)} className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} alt="" />
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==========================================
-// 🏠 首页组件
-// ==========================================
-const HomePage = ({ onNavigate, token, lang }) => {
-  const t = TRANSLATIONS[lang];
-  const [recentHistory, setRecentHistory] = useState([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
-
-  // 加载最近创作记录 - 仅显示已完成的作品
-  useEffect(() => {
-    const fetchRecentHistory = async () => {
-      if (!token) return;
-      setLoadingHistory(true);
-      try {
-        const res = await fetch(`${API_BASE_URL}/api/history`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (res.ok) {
-          const serverData = await res.json();
-          // 只显示已完成的服务器历史记录，不显示进行中的任务
-          setRecentHistory(serverData.filter(isCompletedHistoryItem).slice(0, 8));
-        }
-      } catch (err) { console.error(err); }
-      finally { setLoadingHistory(false); }
-    };
-    fetchRecentHistory();
-    // 移除自动刷新，避免滚动时被重置
-  }, [token]);
-
-  return (
-    <>
-      <Helmet>
-        <title>{lang === 'zh' ? 'OG AI - 首页 | AI商品摄影与智能修图' : 'OG AI - Home | AI Photography & Editing'}</title>
-        <meta name="description" content={lang === 'zh' ? 'OG AI - 专业的AI商品摄影和智能修图平台。一键生成高质量商品图片，AI智能修图，个人写真制作。' : 'OG AI - Professional AI photography and editing platform. Generate high-quality product images with one click.'} />
-      </Helmet>
-      <div className="h-full overflow-y-auto p-4 md:p-6 lg:p-8">
-        {/* 极简背景光晕 */}
-        <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
-          <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-white/5 rounded-full blur-[150px]" />
-          <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-white/5 rounded-full blur-[150px]" />
-        </div>
-
-        {/* 欢迎区域 */}
-        <div className="relative z-10 mb-8">
-          <h1 className="text-2xl md:text-3xl font-bold mb-2">
-            {lang === 'zh' ? '开始创作' : 'Start Creating'}
-          </h1>
-          <p className="text-white/50 text-sm md:text-base">
-            {lang === 'zh' ? '选择一个功能，开启 AI 创意之旅' : 'Choose a feature to start your AI creative journey'}
-          </p>
-        </div>
-
-        {/* 四个并列导航入口 */}
-        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
-          {[
-            {
-              id: 'quick-create',
-              icon: <Zap size={28} />,
-              title: { zh: '快速创作', en: 'Quick Create' },
-              desc: { zh: '商品摄影、智能修图、人像写真，一站搞定。', en: 'Product shots, retouching, portraits in one place.' },
-              gradient: 'from-[#FF8A3D] to-[#E65100]'
-            },
-            {
-              id: 'create',
-              icon: <LayoutIcon size={28} />,
-              title: { zh: '无限画布', en: 'Infinite Canvas' },
-              desc: { zh: '自由创作空间，文生图、图生图任意组合。', en: 'Free creative space with text & image generation.' },
-              gradient: 'from-[#10B981] to-[#059669]'
-            },
-            {
-              id: 'models',
-              icon: <Sparkles size={28} />,
-              title: { zh: '模型广场', en: 'Models Plaza' },
-              desc: { zh: '探索海量AI模型，找到最适合你的创作工具。', en: 'Explore AI models for your creative needs.' },
-              gradient: 'from-[#8B5CF6] to-[#6D28D9]'
-            },
-            {
-              id: 'api-keys',
-              icon: <Link size={28} />,
-              title: { zh: 'API 管理', en: 'API Keys' },
-              desc: { zh: '管理API密钥，集成AI能力到你的应用。', en: 'Manage API keys and integrate AI into your apps.' },
-              gradient: 'from-[#06B6D4] to-[#0891B2]'
-            }
-          ].map((item) => (
-            <div
-              key={item.id}
-              onClick={() => onNavigate(item.id)}
-              className="group relative p-5 md:p-6 rounded-xl border transition-all duration-300 cursor-pointer bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02]"
-            >
-              {/* 图标 */}
-              <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-3 shadow-lg text-white group-hover:scale-110 transition-transform duration-300`}>
-                {item.icon}
-              </div>
-
-              {/* 标题 */}
-              <h3 className="text-base md:text-lg font-bold mb-1 text-white">{item.title[lang]}</h3>
-
-              {/* 描述 */}
-              <p className="text-white/40 text-xs md:text-sm line-clamp-2">{item.desc[lang]}</p>
-
-              {/* 进入箭头 */}
-              <ArrowRight size={16} className="absolute top-5 right-5 text-white/20 group-hover:text-white/80 group-hover:translate-x-1 transition-all" />
-            </div>
-          ))}
-        </div>
-
-        {/* 最近创作记录 */}
-        {token && (
-          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg md:text-xl font-bold flex items-center gap-2">
-                <History size={20} className="text-[#FF8A3D]" />
-                {lang === 'zh' ? '最近创作' : 'Recent Creations'}
-              </h2>
-              <button
-                onClick={() => onNavigate('gallery')}
-                className="text-xs text-white/50 hover:text-[#FF8A3D] transition-colors flex items-center gap-1"
-              >
-                {lang === 'zh' ? '查看全部' : 'View All'}
-                <ArrowRight size={14} />
-              </button>
-            </div>
-
-            {loadingHistory ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 size={24} className="animate-spin text-[#FF8A3D]" />
-              </div>
-            ) : recentHistory.length === 0 ? (
-              <div className="bg-white/[0.02] border border-white/5 rounded-xl p-8 text-center">
-                <FolderOpen size={40} className="mx-auto mb-3 text-white/20" />
-                <p className="text-white/40 text-sm">
-                  {lang === 'zh' ? '暂无创作记录，开始你的第一次创作吧！' : 'No creations yet. Start your first creation!'}
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4">
-                {recentHistory.map(item => (
-                  <div
-                    key={item.id}
-                    className="aspect-square rounded-xl overflow-hidden border border-white/10 group relative bg-[#111] hover:border-[#FF8A3D]/50 transition-all cursor-pointer"
-                    onClick={() => onNavigate('gallery')}
-                  >
-                    <img src={toSecureUrl(item.image)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="" />
-                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent">
-                      <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
-                      <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                      ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
-                          item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
-                            item.type === 'create' ? 'bg-green-500/30 text-green-300' :
-                              'bg-orange-500/30 text-orange-300'}`}>
-                        {item.type === 'retouch' ? (lang === 'zh' ? '修图' : 'Retouch') :
-                          item.type === 'portrait' ? (lang === 'zh' ? '人像' : 'Portrait') :
-                            item.type === 'create' ? (lang === 'zh' ? '创作' : 'Create') :
-                              (lang === 'zh' ? '商品' : 'Product')}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* 未登录提示 */}
-        {!token && (
-          <div className="relative z-10 bg-gradient-to-r from-[#FF8A3D]/10 to-[#E65100]/10 border border-[#FF8A3D]/20 rounded-xl p-6 text-center">
-            <p className="text-white/70 mb-3">
-              {lang === 'zh' ? '登录后可保存创作记录并使用全部功能' : 'Login to save your creations and access all features'}
-            </p>
-            <p className="text-white/40 text-sm">
-              {lang === 'zh' ? '点击右上角登录按钮开始' : 'Click the login button in the top right to get started'}
-            </p>
-          </div>
-        )}
-      </div>
-    </>
-  );
-};
-
-// ==========================================
-// 👤 人像写真组件
-// ==========================================
-const PORTRAIT_TEMPLATES = [
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204825_350.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204545_252.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204511_359.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204428_924.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204310_957.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204209_146.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204129_497.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/ScreenShot_2025-12-11_204100_675.png',
-  'https://ai-shot.oss-cn-hangzhou.aliyuncs.com/model/704.jpeg'
-];
 
 const PortraitStudio = ({ onBack, lang, setLang }) => {
   const t = TRANSLATIONS[lang];
@@ -2224,7 +1680,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                     ) : isMjModel ? (
                       <img src={MidjourneyIcon} alt="MJ" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} />
                     ) : (
-                      <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} style={{ filter: 'brightness(0) invert(1)' }} />
+                      <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} />
                     )}
                   </button>
                   {showModel && (
@@ -2261,7 +1717,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                               ) : m.id === 'nano-banana-2' ? (
                                 <span className="text-lg leading-none">🍌</span>
                               ) : (
-                                <img src={ChatGptIcon} className="w-5 h-5 brightness-0 invert" alt="gpt" />
+                                <img src={ChatGptIcon} className="w-5 h-5" alt="gpt" />
                               )}
                               <div className="flex flex-col items-start gap-0.5">
                                 <div className="flex items-center gap-1.5">
@@ -3043,6 +2499,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
   const [showPwd, setShowPwd] = useState(false);
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [countdown, setCountdown] = useState(0);
@@ -3061,7 +2518,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
   React.useEffect(() => {
     if (!isOpen) {
       setUsername(''); setPassword(''); setPhone(''); setCode('');
-      setError(''); setCountdown(0); setCaptchaToken('');
+      setError(''); setCountdown(0); setCaptchaToken(''); setInviteCode('');
     }
   }, [isOpen]);
 
@@ -3118,7 +2575,7 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
       const res = await fetch(`${API_BASE_URL}/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, code })
+        body: JSON.stringify({ phone, code, invite_code: inviteCode || undefined })
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || '验证失败');
@@ -3222,6 +2679,16 @@ const LoginModal = ({ isOpen, onClose, onLogin, t }) => {
                   {sending ? t.auth.sending : countdown > 0 ? `${countdown}s` : t.auth.sendCode}
                 </button>
               </div>
+            </div>
+            {/* 邀请码（选填） */}
+            <div>
+              <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider mb-2 block">{t.auth.inviteCode}</label>
+              <input
+                type="text" value={inviteCode}
+                onChange={(e) => setInviteCode(e.target.value.replace(/[^A-Za-z0-9]/g, '').slice(0, 8).toUpperCase())}
+                className="w-full h-11 bg-[#0a0a0a] border border-white/10 rounded-lg px-4 text-sm text-white focus:border-[#FF8A3D] focus:outline-none transition-all placeholder:text-white/20"
+                placeholder={t.auth.placeholderInviteCode}
+              />
             </div>
             {error && <div className="text-red-400 text-xs flex items-center gap-1 bg-red-500/10 p-2 rounded"><AlertCircle size={12} />{error}</div>}
             <button type="submit" disabled={loading} className="w-full h-11 mt-1 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] hover:opacity-90 text-white font-bold rounded-lg text-sm transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2">
@@ -4156,7 +3623,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                           ) : isNanoBanana2 ? (
                             <span className="text-base leading-none">🍌</span>
                           ) : (
-                            <img src={ChatGptIcon} className="w-4 h-4 brightness-0 invert" alt="gpt" />
+                            <img src={ChatGptIcon} className="w-4 h-4" alt="gpt" />
                           )}
                           <span>
                             {model === 'gpt-image-2' ? 'GPT Image 2'
@@ -4207,7 +3674,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                                     ) : m.id === 'nano-banana-2' ? (
                                       <span className="text-lg leading-none">🍌</span>
                                     ) : (
-                                      <img src={ChatGptIcon} className="w-5 h-5 brightness-0 invert" alt="gpt" />
+                                      <img src={ChatGptIcon} className="w-5 h-5" alt="gpt" />
                                     )}
                                     <div className="flex flex-col items-start gap-0.5">
                                       <div className="flex items-center gap-1.5">
@@ -4738,7 +4205,7 @@ const ActionBtn = ({ icon, onClick, tooltip }) => (
 // 🚀 主 App 组件 - 页面路由管理
 // ==========================================
 const App = () => {
-  const [currentPage, setCurrentPage] = useState('home');
+  const [currentPage, setCurrentPage] = useState(getCurrentPageFromLocation);
   const [lang, setLang] = useState('zh');
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [isImmersive, setIsImmersive] = useState(false);
@@ -4753,6 +4220,14 @@ const App = () => {
     return saved ? parseInt(saved, 10) : 0;
   });
   const [role, setRole] = useState(() => localStorage.getItem('role') || 'user');
+
+  useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPage(getCurrentPageFromLocation());
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   // 从后端实时获取配额
   useEffect(() => {
@@ -4830,12 +4305,22 @@ const App = () => {
     setUsername('Guest');
     setQuota(0);
     setRole('user');
+    navigateToPage('home', { replace: true });
     setCurrentPage('home');
   };
 
-  const handleNavigate = (page) => {
+  const handleNavigate = (page, options) => {
+    navigateToPage(page, options);
     setCurrentPage(page);
   };
+
+  useEffect(() => {
+    const isAdminPage = currentPage === 'admin' || currentPage === 'admin-models';
+    const requiresLogin = currentPage === 'api-keys' || currentPage === 'models' || isAdminPage;
+    if ((requiresLogin && !token) || (isAdminPage && role !== 'admin')) {
+      handleNavigate('home', { replace: true });
+    }
+  }, [currentPage, token, role]);
 
   // 渲染当前页面内容
   const renderPage = () => {
@@ -4844,8 +4329,6 @@ const App = () => {
         return <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
       case 'gallery':
         return <GalleryPage token={token} lang={lang} onNavigate={handleNavigate} />;
-      case 'video':
-        return <VideoStudioContent lang={lang} token={token} onNavigate={handleNavigate} />;
       case 'create':
         return <BasicCreateStudioContent 
           lang={lang} 
@@ -4863,9 +4346,6 @@ const App = () => {
       case 'admin-models':
         return role === 'admin' ? <AdminModelsPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
       case 'quick-create':
-      case 'product':
-      case 'retouch':
-      case 'portrait':
       default:
         return <QuickCreateStudio onBack={() => handleNavigate('home')} lang={lang} token={token} />;
     }
@@ -4897,813 +4377,6 @@ const App = () => {
     </>
   );
 };
-
-// ==========================================
-// 📂 图库页面组件（包装 GalleryModal 为全屏页面）
-// ==========================================
-const GalleryPage = ({ token, lang, onNavigate }) => {
-  const [history, setHistory] = useState([]);
-  const [filter, setFilter,] = useState('all');
-  const [loading, setLoading] = useState(false);
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
-  const [deleting, setDeleting] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-
-  const filterOptions = [
-    { id: 'all', label: { zh: '全部', en: 'All' } },
-    { id: 'product', label: { zh: '商品摄影', en: 'Product' } },
-    { id: 'retouch', label: { zh: '智能修图', en: 'Retouch' } },
-    { id: 'portrait', label: { zh: '人像写真', en: 'Portrait' } },
-    { id: 'video', label: { zh: '视频生成', en: 'Video' } },
-    { id: 'create', label: { zh: '自由创作', en: 'Create' } }
-  ];
-
-  const fetchAllHistory = async () => {
-    if (!token) return;
-    setLoading(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        setHistory(data);
-      }
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
-
-  const handleDelete = async (itemId) => {
-    if (!token || deleting) return;
-    setDeleting(true);
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/history/${itemId}`, {
-        method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (res.ok) {
-        setHistory(prev => prev.filter(item => item.id !== itemId));
-        setDeleteConfirm(null);
-        if (selectedImage?.id === itemId) setSelectedImage(null);
-      }
-    } catch (err) { console.error(err); }
-    finally { setDeleting(false); }
-  };
-
-  const handleDownload = async (url) => {
-    if (!url) return;
-    const secureUrl = toSecureUrl(url);
-    try {
-      const res = await fetch(secureUrl);
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `OG_AI_${Date.now()}.png`;
-      a.click();
-      URL.revokeObjectURL(a.href);
-    } catch (e) {
-      window.open(secureUrl, '_blank');
-    }
-  };
-
-  useEffect(() => {
-    if (token) {
-      fetchAllHistory();
-      const interval = setInterval(fetchAllHistory, 5000); // 每5秒刷新一次，保持同步
-      return () => clearInterval(interval);
-    }
-  }, [token]);
-
-  const filteredHistory = history.filter(item => {
-    if (!isCompletedHistoryItem(item)) return false;
-    if (filter === 'all') return true;
-    if (filter === 'product') return !item.type || item.type === 'product';
-    return item.type === filter;
-  });
-
-  return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* 顶部筛选栏 */}
-      <div className="flex items-center gap-2 p-3 md:p-4 border-b border-white/5 bg-[#0a0a0a]/50">
-        <div className="flex items-center gap-1.5 overflow-x-auto">
-          {filterOptions.map(opt => (
-            <button
-              key={opt.id}
-              onClick={() => setFilter(opt.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap
-                ${filter === opt.id ? 'bg-[#FF8A3D] text-white' : 'bg-white/5 text-white/60 hover:text-white hover:bg-white/10'}`}
-            >
-              {opt.label[lang]}
-            </button>
-          ))}
-        </div>
-        <span className="ml-auto text-xs text-white/30">{filteredHistory.length} {lang === 'zh' ? '张' : 'images'}</span>
-      </div>
-
-      {/* 图片内容区 */}
-      <div className="flex-1 overflow-y-auto p-3 md:p-4">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 size={32} className="animate-spin text-[#FF8A3D]" />
-          </div>
-        ) : filteredHistory.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-white/30">
-            <FolderOpen size={48} className="mb-4" />
-            <p>{lang === 'zh' ? '暂无图片' : 'No images'}</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
-            {filteredHistory.map(item => (
-              <div
-                key={item.id}
-                className="aspect-square rounded-xl overflow-hidden border border-white/10 cursor-pointer group relative bg-[#111] hover:border-[#FF8A3D]/50 transition-all"
-              >
-                <img
-                  src={toSecureUrl(item.image)}
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                  alt=""
-                  onClick={() => setSelectedImage(item)}
-                />
-                <button
-                  onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item.id); }}
-                  className="absolute top-2 right-2 p-1.5 rounded-full bg-black/60 hover:bg-red-600 text-white/70 hover:text-white opacity-0 group-hover:opacity-100 transition-all"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent" onClick={() => setSelectedImage(item)}>
-                  <p className="text-[10px] text-white/70 line-clamp-1">{item.prompt}</p>
-                  <span className={`text-[8px] px-1.5 py-0.5 rounded-full mt-1 inline-block
-                    ${item.type === 'retouch' ? 'bg-emerald-500/30 text-purple-300' :
-                      item.type === 'portrait' ? 'bg-cyan-500/30 text-cyan-300' :
-                        item.type === 'create' ? 'bg-green-500/30 text-green-300' :
-                          'bg-orange-500/30 text-orange-300'}`}>
-                    {item.type === 'retouch' ? (lang === 'zh' ? '修图' : 'Retouch') :
-                      item.type === 'portrait' ? (lang === 'zh' ? '人像' : 'Portrait') :
-                        item.type === 'create' ? (lang === 'zh' ? '创作' : 'Create') :
-                          (lang === 'zh' ? '商品' : 'Product')}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* 删除确认弹窗 */}
-      {deleteConfirm && (
-        <div className="fixed inset-0 z-[1002] bg-black/80 flex items-center justify-center" onClick={() => setDeleteConfirm(null)}>
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl p-8 max-w-md w-full mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
-            <h3 className="text-xl font-bold text-white mb-4">{lang === 'zh' ? '确认删除' : 'Confirm Delete'}</h3>
-            <p className="text-white/60 text-sm mb-8">{lang === 'zh' ? '确定要删除这张图片吗？此操作无法撤销。' : 'Are you sure you want to delete this image? This action cannot be undone.'}</p>
-            <div className="flex gap-4">
-              <button onClick={() => setDeleteConfirm(null)} className="flex-1 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors">
-                {lang === 'zh' ? '取消' : 'Cancel'}
-              </button>
-              <button onClick={() => handleDelete(deleteConfirm)} disabled={deleting} className="flex-1 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors flex items-center justify-center gap-2">
-                {deleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                {lang === 'zh' ? '删除' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 图片预览 - 从顶栏下方开始 */}
-      {selectedImage && (
-        <div className="fixed inset-0 z-[2000] bg-black/95 flex flex-col md:flex-row animate-in fade-in duration-300" onClick={() => setSelectedImage(null)}>
-          {/* 左侧：图片展示区 */}
-          <div className="flex-1 relative flex items-center justify-center p-4 md:p-12 min-h-0">
-            <img 
-              src={toSecureUrl(selectedImage.image)} 
-              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl transition-transform duration-500" 
-              onClick={e => e.stopPropagation()} 
-              alt="" 
-            />
-            
-            {/* 移动端关闭按钮 */}
-            <button
-              onClick={() => setSelectedImage(null)}
-              className="md:hidden absolute top-4 right-4 p-2 bg-white/10 rounded-full text-white"
-            >
-              <X size={20} />
-            </button>
-          </div>
-
-          {/* 右侧：详情面板 */}
-          <div 
-            className="w-full md:w-[380px] h-full bg-[#111] border-l border-white/5 flex flex-col animate-in slide-in-from-right duration-500"
-            onClick={e => e.stopPropagation()}
-          >
-            {/* 详情头部 */}
-            <div className="h-16 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
-              <h3 className="text-white font-bold flex items-center gap-2">
-                <AlertCircle size={18} className="text-[#FF8A3D]" />
-                {lang === 'zh' ? '图片详情' : 'Image Details'}
-              </h3>
-              <button 
-                onClick={() => setSelectedImage(null)}
-                className="p-2 hover:bg-white/5 rounded-full text-white/40 hover:text-white transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            {/* 详情内容 */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar">
-              {/* Prompt 区域 */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-bold text-white/30 uppercase tracking-widest">{lang === 'zh' ? '创意描述 (Prompt)' : 'Prompt'}</label>
-                  <button 
-                    onClick={() => {
-                      const cleanP = selectedImage.prompt ? selectedImage.prompt.replace(/^\[.*?\]\s*/, '') : '';
-                      navigator.clipboard.writeText(cleanP);
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 2000);
-                    }}
-                    className={`flex items-center gap-1.5 text-[10px] transition-all font-bold ${copied ? 'text-green-500' : 'text-[#FF8A3D] hover:text-[#FF8A3D]/80'}`}
-                  >
-                    {copied ? <Check size={12} /> : <Copy size={12} />} 
-                    {copied ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制' : 'Copy')}
-                  </button>
-                </div>
-                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl text-sm text-white/80 leading-relaxed italic max-h-[200px] overflow-y-auto break-words whitespace-pre-wrap">
-                  {selectedImage.prompt ? selectedImage.prompt.replace(/^\[.*?\]\s*/, '') : (lang === 'zh' ? '暂无描述' : 'No prompt')}
-                </div>
-              </div>
-
-              {/* 参数网格 */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-1">
-                  <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '画幅比例' : 'Aspect Ratio'}</div>
-                  <div className="text-sm font-mono text-white/80">{selectedImage.ratio || selectedImage.aspect_ratio || selectedImage.size || '-'}</div>
-                </div>
-                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-1">
-                  <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '分辨率' : 'Resolution'}</div>
-                  <div className="text-sm font-mono text-white/80">{selectedImage.size && selectedImage.size.includes('x') ? selectedImage.size : '-'}</div>
-                </div>
-              </div>
-
-              {/* 模型信息 */}
-              <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-3">
-                <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '生成模型' : 'Model'}</div>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#FF8A3D]/10 flex items-center justify-center">
-                    <Sparkles size={20} className="text-[#FF8A3D]" />
-                  </div>
-                  <div>
-                    <div className="text-sm font-bold text-white">{selectedImage.model || '-'}</div>
-                    <div className="text-[10px] text-white/30 uppercase tracking-tighter">AI Generation Engine</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* 其他信息 */}
-              <div className="pt-4 border-t border-white/5 flex flex-col gap-2">
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-white/20">{lang === 'zh' ? '创建时间' : 'Created At'}</span>
-                  <span className="text-white/40">{selectedImage.timestamp ? new Date(selectedImage.timestamp * 1000).toLocaleString() : '-'}</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span className="text-white/20">{lang === 'zh' ? '任务类型' : 'Task Type'}</span>
-                  <span className="text-[#FF8A3D]/60 font-bold uppercase">{selectedImage.type || 'create'}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 底部操作 */}
-            <div className="p-6 border-t border-white/5 shrink-0 flex gap-3">
-              <button 
-                onClick={() => handleDownload(selectedImage.image)}
-                className="flex-1 h-12 rounded-xl bg-white/5 hover:bg-white/10 text-white font-bold text-sm transition-all flex items-center justify-center gap-2"
-              >
-                <Download size={18} /> {lang === 'zh' ? '下载图片' : 'Download'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==========================================
-// 🔄 各工作区的内容组件包装器（临时，后续可拆分）
-// ==========================================
-const AIPhotoStudioContent = ({ lang, token, onNavigate }) => (
-  <AIPhotoStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
-);
-
-const AIRetouchStudioContent = ({ lang, token, onNavigate }) => (
-  <AIRetouchStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
-);
-
-const PortraitStudioContent = ({ lang, token, onNavigate }) => (
-  <PortraitStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
-);
-
-const VideoStudio = ({ onBack, lang, setLang }) => {
-  const t = TRANSLATIONS[lang];
-  const taskManager = useTaskManager();
-  const taskManagerRef = useRef(taskManager);
-  taskManagerRef.current = taskManager; // 保持最新引用
-
-  const [token, setToken] = useState(() => localStorage.getItem('token'));
-  const [username, setUsername] = useState(() => localStorage.getItem('username') || 'Guest');
-  const [quota, setQuota] = useState(() => {
-    const saved = localStorage.getItem('quota');
-    return saved ? parseInt(saved, 10) : 0;
-  });
-
-  const [showLogin, setShowLogin] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const [showFullscreen, setShowFullscreen] = useState(false);
-  const [toast, setToast] = useState(null);
-  const showToast = (message, type = 'success') => setToast({ message, type });
-
-  // 核心状态
-  const [prompt, setPrompt] = useState('');
-  const [referImages, setReferImages] = useState([]); // 多参考图
-  const [isUploadingImage, setIsUploadingImage] = useState(false);
-
-  const [result, setResult] = useState(null);
-  const [progress, setProgress] = useState(0);
-  // 初始化时立即从 TaskManager 读取运行中的任务，避免页面切换时数据消失
-  const [history, setHistory] = useState(() => {
-    const runningTasks = taskManager.getTasksByType('video')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map(t => ({
-        id: t.id,
-        image: t.metadata?.referImages?.[0] || '',
-        prompt: t.prompt,
-        timestamp: t.startTime / 1000,
-        type: 'video',
-        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
-        progress: t.progress || 0
-      }));
-    return runningTasks;
-  });
-  const [activeHistoryId, setActiveHistoryId] = useState(null);
-  const activeHistoryIdRef = useRef(activeHistoryId);
-  activeHistoryIdRef.current = activeHistoryId; // 保持最新值，避免闭包问题
-
-  const isLoggedIn = !!token;
-  const isValid = prompt.trim().length > 0;
-
-  const handleBack = () => {
-    onBack?.();
-  };
-
-  const handleLogin = (newToken, newUser, newQuota) => {
-    localStorage.setItem('token', newToken);
-    localStorage.setItem('username', newUser);
-    localStorage.setItem('quota', newQuota.toString());
-    setToken(newToken); setUsername(newUser); setQuota(newQuota);
-    setShowLogin(false);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('username');
-    localStorage.removeItem('quota');
-    setToken(null); setUsername('Guest'); setQuota(0);
-    setHistory([]); setActiveHistoryId(null);
-  };
-
-  // 加载历史记录
-  const fetchHistory = async () => {
-    if (!token) return;
-    const createHistory = [];
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/history`, { headers: { 'Authorization': `Bearer ${token}` } });
-      if (res.ok) {
-        const data = await res.json();
-        const serverHistory = data.filter(item => item.type === 'video').map(item => {
-          let st = 'running';
-          let prog = 50;
-          if (item.status === 'SUCCESS') { st = 'done'; prog = 100; }
-          else if (item.status === 'FAILED') { st = 'error'; }
-          else if (item.status === 'ON_QUEUE') { st = 'pending'; prog = 10; }
-          return { ...item, status: st, progress: prog };
-        });
-        createHistory.push(...serverHistory);
-      }
-    } catch (err) { console.error('Fetch history failed:', err); }
-
-    // 智能对账：清理僵尸任务 (Smart Reconciliation)
-    const runningTasks = taskManagerRef.current.getTasksByType('video')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING);
-
-    runningTasks.forEach(localTask => {
-      const match = createHistory.find(serverItem => {
-        const timeMatch = serverItem.timestamp >= (localTask.startTime / 1000) - 600;
-        return serverItem.prompt === localTask.prompt && timeMatch;
-      });
-
-      if (match) {
-        if (match.status === 'done') {
-          taskManagerRef.current.completeTask(localTask.id, match.image);
-        } else if (match.status === 'error') {
-          taskManagerRef.current.failTask(localTask.id, 'Server reported failure');
-        }
-      } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
-        taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
-      }
-    });
-
-    const activeRunningTasks = taskManagerRef.current.getTasksByType('video')
-      .filter(t => t.status === TASK_STATUS.PENDING || t.status === TASK_STATUS.RUNNING)
-      .map(t => ({
-        id: t.id,
-        image: t.metadata?.referImages?.[0] || '', // 如有参考图则显示第一张，否则可能为空
-        prompt: t.prompt,
-        timestamp: t.startTime / 1000,
-        type: 'video',
-        status: t.status === TASK_STATUS.PENDING ? 'pending' : 'running',
-        progress: t.progress || 0
-      }));
-
-    // 过滤掉服务器历史中已经正在本地运行的任务，防止UI出现双份
-    const filteredServerHistory = createHistory.filter(serverItem => {
-      const isMatched = activeRunningTasks.some(localTask => {
-        const timeMatch = serverItem.timestamp >= (localTask.timestamp) - 600;
-        return serverItem.prompt === localTask.prompt && timeMatch;
-      });
-      return !isMatched;
-    });
-
-    const finalHistory = [...activeRunningTasks, ...filteredServerHistory];
-    setHistory(finalHistory);
-    if ((activeRunningTasks.length > 0 || finalHistory.length > 0) && !activeHistoryIdRef.current) {
-      setActiveHistoryId(finalHistory[0]?.id);
-    }
-  };
-
-  useEffect(() => {
-    if (!token) return;
-    fetchHistory();
-    const interval = setInterval(fetchHistory, 5000); // 加快刷新
-    return () => clearInterval(interval);
-  }, [token]);
-
-  // 同步任务进度
-  useEffect(() => {
-    const syncTaskProgress = () => {
-      const runningTasks = taskManager.getTasksByType('video');
-      if (runningTasks.length === 0) return;
-
-      setHistory(prev => prev.map(h => {
-        const task = runningTasks.find(t => t.id === h.id);
-        if (task) {
-          let newStatus = h.status;
-          if (task.status === TASK_STATUS.SUCCESS) newStatus = 'done';
-          else if (task.status === TASK_STATUS.ERROR) newStatus = 'error';
-          else if (task.status === TASK_STATUS.RUNNING) newStatus = 'running';
-          else newStatus = 'pending';
-
-          return {
-            ...h,
-            progress: task.progress || h.progress,
-            status: newStatus,
-            image: task.result || h.image,
-            error: task.error || h.error
-          };
-        }
-        return h;
-      }));
-    };
-    const interval = setInterval(syncTaskProgress, 500);
-    return () => clearInterval(interval);
-  }, [taskManager]);
-
-  // 上传图片
-  const uploadImage = async (file) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(`${API_BASE_URL}/api/upload`, {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-      body: formData
-    });
-    if (!res.ok) throw new Error('Upload failed');
-    const data = await res.json();
-    return data.url;
-  };
-
-  const handleAddImage = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!token) { setShowLogin(true); return; }
-
-    setIsUploadingImage(true);
-    try {
-      const url = await uploadImage(file);
-      setReferImages(prev => [...prev, url]);
-    } catch { showToast('上传失败', 'error'); }
-    setIsUploadingImage(false);
-    e.target.value = '';
-  };
-
-  const handleRemoveImage = (index) => {
-    setReferImages(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleGenerate = async () => {
-    if (!isValid || !token) return;
-    if (quota <= 0) { showToast(t.toast.noQuota, 'error'); return; }
-
-    const taskName = lang === 'zh' ? '视频生成' : 'Video Generation';
-    const taskId = taskManager.createTask('video', prompt, {
-      referImages
-    });
-
-    // 立即添加到历史
-    const newItem = {
-      id: taskId,
-      image: referImages[0] || null, // 优先显示参考图作为占位
-      prompt: prompt,
-      timestamp: Date.now() / 1000,
-      type: 'video',
-      status: 'pending',
-      progress: 0
-    };
-    setHistory(prev => [newItem, ...prev]);
-    setActiveHistoryId(taskId);
-
-    executeCreateTask(taskId, prompt, referImages);
-  };
-
-  // 异步执行创作任务
-  const executeCreateTask = async (taskId, p, rImgs) => {
-    taskManager.updateTask(taskId, { status: TASK_STATUS.RUNNING });
-    // setIsGenerating(false); // Removed
-
-    let currentProgress = 0;
-    const progressInterval = setInterval(() => {
-      currentProgress = Math.min(currentProgress + 1 + Math.random() * 2, 95);
-      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, progress: currentProgress } : h));
-      taskManager.updateProgress(taskId, currentProgress);
-    }, 500);
-
-    try {
-      const formData = new FormData();
-      formData.append('prompt', p);
-      formData.append('image_urls_json', JSON.stringify(rImgs));
-
-      const res = await fetch(`${API_BASE_URL}/api/video`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
-
-      clearInterval(progressInterval);
-
-      if (!res.ok) {
-        let errMsg = 'Generation failed';
-        try {
-          const errData = await res.json();
-          errMsg = errData.detail || errData.message || errMsg;
-        } catch (e) {
-          errMsg = `Server error: ${res.status}`;
-        }
-        throw new Error(errMsg);
-      }
-
-      // 视频是后台异步生成的，不需要在这里获取 image_url
-      // 智能对账系统 (Smart Reconciliation) 会通过轮询 /api/history 自动发现并完成该任务
-      showToast(lang === 'zh' ? '视频生成已在后台启动，这可能需要几分钟...' : 'Video generation started in background...', 'success');
-
-    } catch (err) {
-      clearInterval(progressInterval);
-      taskManager.failTask(taskId, err.message);
-      setHistory(prev => prev.map(h => h.id === taskId ? { ...h, status: 'error', error: err.message } : h));
-      showToast(err.message, 'error');
-    }
-  };
-
-  const currentImage = history.find(h => h.id === activeHistoryId)?.image || (activeHistoryId ? null : result);
-
-  const handleDownload = async () => {
-    if (!currentImage) return;
-    const secureUrl = toSecureUrl(currentImage);
-    try {
-      const response = await fetch(secureUrl, { mode: 'cors' });
-      if (!response.ok) throw new Error('Fetch failed');
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `create_${Date.now()}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      showToast(t.toast.downloadSuccess);
-    } catch (error) {
-      // 降级方案：在新标签页打开
-      window.open(secureUrl, '_blank');
-      showToast(lang === 'zh' ? '已在新标签页打开，请右键保存图片' : 'Opened in new tab, right-click to save', 'info');
-    }
-  };
-
-  const handleCopy = async () => {
-    if (!currentImage) return;
-    const secureUrl = toSecureUrl(currentImage);
-    try {
-      const response = await fetch(secureUrl, { mode: 'cors' });
-      if (!response.ok) throw new Error('Fetch failed');
-      const blob = await response.blob();
-      await navigator.clipboard.write([new ClipboardItem({ [blob.type]: blob })]);
-      showToast(t.toast.copySuccess);
-    } catch (err) {
-      // 降级方案：复制图片URL到剪贴板
-      try {
-        await navigator.clipboard.writeText(secureUrl);
-        showToast(lang === 'zh' ? '已复制图片链接' : 'Image URL copied', 'success');
-      } catch {
-        showToast(t.toast.copyFail, 'error');
-      }
-    }
-  };
-
-  return (
-    <div className="w-full h-full bg-[#050505] text-white font-sans flex flex-col overflow-hidden">
-      <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={handleLogin} t={t} />
-      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col md:flex-row gap-0 min-h-0 overflow-hidden">
-        {/* Left Panel */}
-        <div className="w-full md:w-[380px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            {/* Prompt 输入 */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                <Edit3 size={14} /> {lang === 'zh' ? '创意描述' : 'Prompt'} <span className="text-red-400">*</span>
-              </div>
-              <textarea
-                value={prompt}
-                onChange={e => setPrompt(e.target.value)}
-                placeholder={lang === 'zh' ? '描述你想要生成的视频...' : 'Describe the video you want to create...'}
-                className="w-full h-32 bg-[#111] border border-white/10 rounded-xl p-4 text-sm text-white placeholder:text-white/30 resize-none focus:border-[#10B981] focus:outline-none transition-colors"
-              />
-            </div>
-
-            {/* 参考图片（选填） */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-                  <ImageIcon size={14} /> {lang === 'zh' ? '首尾帧图片（选填）' : 'Start & End Frames (Optional)'}
-                </div>
-                <span className="text-[10px] text-white/30">{referImages.length}/2</span>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                {referImages.map((url, i) => (
-                  <div key={i} className="aspect-square rounded-lg overflow-hidden relative group border border-white/10">
-                    <img src={toSecureUrl(url)} className="w-full h-full object-cover" alt="" />
-                    <button onClick={() => handleRemoveImage(i)} className="absolute top-1 right-1 p-1 bg-red-500/80 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-                {referImages.length < 2 && (
-                  <label className="aspect-square rounded-lg border-2 border-dashed border-white/10 hover:border-[#10B981]/50 flex items-center justify-center cursor-pointer transition-colors relative">
-                    {isUploadingImage ? (
-                      <div className="flex flex-col items-center justify-center text-[#10B981]">
-                        <Loader2 size={20} className="animate-spin mb-1" />
-                        <span className="text-[10px] font-medium">{lang === 'zh' ? '上传中...' : 'Uploading'}</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Plus size={20} className="text-white/30" />
-                        <input type="file" accept="image/*" className="hidden" onChange={handleAddImage} disabled={isUploadingImage} />
-                      </>
-                    )}
-                  </label>
-                )}
-              </div>
-              <p className="text-[10px] text-white/30">{lang === 'zh' ? '无图=文生视频 | 1张图=首帧参考 | 2张图=首尾帧约束' : '0 images=Text2Video | 1 image=Start Frame | 2 images=Start&End'}</p>
-            </div>
-          </div>
-
-          {/* 生成按钮 */}
-          <div className="p-4 border-t border-white/5">
-            <button
-              onClick={handleGenerate}
-              disabled={!isValid || !isLoggedIn}
-              className={`w-full py-3 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all
-                ${isValid && isLoggedIn
-                  ? 'bg-gradient-to-r from-[#10B981] to-[#059669] hover:opacity-90 text-white shadow-lg shadow-emerald-500/20'
-                  : 'bg-white/10 text-white/30 cursor-not-allowed'}`}
-            >
-              <><Sparkles size={18} /> {lang === 'zh' ? '开始创作' : 'Create'}</>
-            </button>
-          </div>
-        </div>
-
-        {/* Center: Result */}
-        <div className="flex-1 bg-[#050505] p-6 flex flex-col">
-          <div className="flex-1 rounded-2xl bg-[#0a0a0a] border border-white/5 relative overflow-hidden flex items-center justify-center group">
-            <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-
-            {activeHistoryId && (() => {
-              const activeTask = history.find(h => h.id === activeHistoryId);
-              if (activeTask && (activeTask.status === 'pending' || activeTask.status === 'running')) {
-                return (
-                  <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
-                    <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden mb-4">
-                      <div className="h-full bg-[#10B981] transition-all duration-300" style={{ width: `${activeTask.progress}%` }}></div>
-                    </div>
-                    <div className="text-[#10B981] font-mono text-2xl animate-pulse">{Math.round(activeTask.progress)}%</div>
-                    <div className="text-white/40 text-xs mt-2">{lang === 'zh' ? '正在创作中...' : 'Creating...'}</div>
-                  </div>
-                );
-              }
-              // 修复：如果任务失败，显示错误信息
-              if (activeTask && activeTask.status === 'error') {
-                return (
-                  <div className="absolute inset-0 z-10 bg-black/60 flex flex-col items-center justify-center pointer-events-none">
-                    <AlertCircle size={48} className="text-red-500 mb-4" />
-                    <div className="text-red-400 text-sm">{activeTask.error || 'Creation Failed'}</div>
-                  </div>
-                );
-              }
-              return null;
-            })()}
-
-            <div className="relative w-full h-full p-8 flex items-center justify-center">
-              {currentImage ? (
-                <img src={toSecureUrl(currentImage)} className="max-w-full max-h-full object-contain shadow-2xl rounded-lg" alt="Result" />
-              ) : (
-                <div className="text-center opacity-20 flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-2xl border border-dashed border-white/30 flex items-center justify-center">
-                    <Edit3 size={32} />
-                  </div>
-                  <p className="text-sm font-medium">{lang === 'zh' ? '视频生成就绪' : 'Video Generation Ready'}</p>
-                </div>
-              )}
-            </div>
-
-            {currentImage && (
-              <div className="absolute bottom-8 flex items-center gap-3 p-2 rounded-full bg-[#1e1e1e]/80 border border-white/10 shadow-2xl backdrop-blur-md opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-4 group-hover:translate-y-0">
-                <ActionBtn icon={<Download size={18} />} onClick={handleDownload} tooltip={t.actions.download} />
-                <ActionBtn icon={<Maximize2 size={18} />} onClick={() => setShowFullscreen(true)} tooltip={t.actions.fullscreen} />
-                <div className="w-[1px] h-4 bg-white/10"></div>
-                <ActionBtn icon={<Copy size={18} />} onClick={handleCopy} tooltip={t.actions.copy} />
-              </div>
-            )}
-          </div>
-        </div>
-
-        <FullscreenViewer isOpen={showFullscreen} image={currentImage} onClose={() => setShowFullscreen(false)} />
-
-        {/* Right History Panel */}
-        <div className="hidden lg:flex w-[200px] bg-[#0a0a0a] border-l border-white/5 flex-col">
-          <div className="p-4 border-b border-white/5">
-            <div className="flex items-center gap-2 text-[11px] font-bold text-white/40 uppercase tracking-wider">
-              <History size={14} /> {t.gallery.title}
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-3">
-            {history.map(item => (
-              <div
-                key={item.id}
-                onClick={() => setActiveHistoryId(item.id)}
-                className={`aspect-square rounded-xl overflow-hidden cursor-pointer border-2 transition-all relative
-                  ${activeHistoryId === item.id ? 'border-[#10B981] ring-2 ring-[#10B981]/30' : 'border-white/5 hover:border-white/20'}`}
-              >
-                {item.image && <img src={toSecureUrl(item.image)} className={`w-full h-full object-cover transition-opacity ${item.status === 'done' ? 'opacity-100' : 'opacity-40'}`} alt="" />}
-
-                {/* 进度覆盖层 */}
-                {(item.status === 'pending' || item.status === 'running') && (
-                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
-                    <Loader2 size={16} className="text-[#10B981] animate-spin mb-1" />
-                    <span className="text-[10px] text-[#10B981] font-mono">{Math.round(item.progress || 0)}%</span>
-                  </div>
-                )}
-
-                {/* 失败覆盖层 */}
-                {item.status === 'error' && (
-                  <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
-                    <AlertCircle size={16} className="text-red-500" />
-                  </div>
-                )}
-              </div>
-            ))}
-            {history.length === 0 && (
-              <div className="text-center text-white/20 text-xs py-8">{t.gallery.empty}</div>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-};
-
-
-const VideoStudioContent = ({ lang, token, onNavigate }) => (
-  <VideoStudio onBack={() => onNavigate('home')} lang={lang} setLang={() => { }} />
-);
 
 const BasicCreateStudioContent = ({ lang, token, onNavigate, isImmersive, onToggleImmersive }) => (
   <BasicCreateStudio

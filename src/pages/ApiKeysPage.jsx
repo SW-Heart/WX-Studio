@@ -5,6 +5,7 @@ import {
   RefreshCw, X, AlertCircle, Activity, CheckCircle2, XCircle,
   ChevronLeft, ChevronRight,
 } from 'lucide-react';
+import { ConfirmDialog, AlertDialog } from '../components/ui/Dialog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const authHeaders = (token, extra = {}) => ({ 'Authorization': `Bearer ${token}`, ...extra });
@@ -31,6 +32,7 @@ const CreateKeyModal = ({ isOpen, onClose, token, models, onCreated }) => {
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
   const [show, setShow] = useState(true);
+  const [alertData, setAlertData] = useState(null);
 
   useEffect(() => { if (!isOpen) { setName(''); setAllowAll(true); setAllowed([]); setQuotaLimit(''); setResult(null); setCopied(false); setShow(true); } }, [isOpen]);
   if (!isOpen) return null;
@@ -43,7 +45,9 @@ const CreateKeyModal = ({ isOpen, onClose, token, models, onCreated }) => {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail || '创建失败');
       setResult(data); onCreated?.();
-    } catch (err) { alert(err.message); } finally { setLoading(false); }
+    } catch (err) { 
+      setAlertData({ title: '创建失败', message: err.message, type: 'error' });
+    } finally { setLoading(false); }
   };
   const copy = () => { navigator.clipboard?.writeText(result?.key || ''); setCopied(true); setTimeout(() => setCopied(false), 1500); };
   const toggleModel = (id) => setAllowed(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
@@ -178,6 +182,8 @@ const ApiKeysPage = ({ token, lang }) => {
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [logsFor, setLogsFor] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
+  const [alertData, setAlertData] = useState(null);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -198,9 +204,14 @@ const ApiKeysPage = ({ token, lang }) => {
     fetchAll();
   };
   const remove = async (k) => {
-    if (!confirm(`确认删除 Key "${k.name}"？此操作不可撤销。`)) return;
-    await fetch(`${API_BASE_URL}/api/keys/${k.id}`, { method: 'DELETE', headers: authHeaders(token) });
-    fetchAll();
+    setConfirmData({
+      title: '确认删除',
+      message: `确认删除 Key "${k.name}"？此操作不可撤销，且正在使用此 Key 的程序将无法继续调用。`,
+      onConfirm: async () => {
+        await fetch(`${API_BASE_URL}/api/keys/${k.id}`, { method: 'DELETE', headers: authHeaders(token) });
+        fetchAll();
+      }
+    });
   };
 
   return (
@@ -268,6 +279,23 @@ const ApiKeysPage = ({ token, lang }) => {
 
       {showCreate && <CreateKeyModal isOpen={showCreate} onClose={() => setShowCreate(false)} token={token} models={models} onCreated={fetchAll} />}
       {logsFor && <LogsPanel token={token} keyId={logsFor.keyId} onClose={() => setLogsFor(null)} />}
+
+      <ConfirmDialog 
+        isOpen={!!confirmData}
+        onClose={() => setConfirmData(null)}
+        onConfirm={confirmData?.onConfirm || (() => {})}
+        title={confirmData?.title}
+        message={confirmData?.message}
+        type="danger"
+      />
+
+      <AlertDialog 
+        isOpen={!!alertData} 
+        onClose={() => setAlertData(null)} 
+        title={alertData?.title} 
+        message={alertData?.message} 
+        type={alertData?.type} 
+      />
     </div>
   );
 };

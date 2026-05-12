@@ -18,6 +18,7 @@ class AuthedKey:
         self.allowed_models = key_record.get("allowed_models") or []
         self.quota_limit = key_record.get("quota_limit")
         self.quota_used = int(key_record.get("quota_used", 0))
+        self.quota_reserved = int(key_record.get("quota_reserved", 0))
         self.disabled = bool(key_record.get("disabled", False))
         self.name = key_record.get("name", "")
 
@@ -29,7 +30,7 @@ class AuthedKey:
     def remaining_key_quota(self) -> Optional[int]:
         if self.quota_limit is None:
             return None
-        return max(0, int(self.quota_limit) - self.quota_used)
+        return max(0, int(self.quota_limit) - self.quota_used - self.quota_reserved)
 
 
 async def require_api_key(authorization: Optional[str] = Header(default=None)) -> AuthedKey:
@@ -47,7 +48,8 @@ async def require_api_key(authorization: Optional[str] = Header(default=None)) -
     # key 级配额硬上限
     quota_limit = rec.get("quota_limit")
     quota_used = int(rec.get("quota_used", 0))
-    if quota_limit is not None and quota_used >= int(quota_limit):
+    quota_reserved = int(rec.get("quota_reserved", 0))
+    if quota_limit is not None and (quota_used + quota_reserved) >= int(quota_limit):
         raise HTTPException(402, "API key quota exhausted")
 
     return AuthedKey(rec)

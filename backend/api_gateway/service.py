@@ -214,11 +214,29 @@ def call_image_model(
         cost = 1
     log_entry["quota_cost"] = cost
 
+    if key_id:
+        try:
+            storage.reserve_key_quota(key_id, cost)
+        except KeyError:
+            log_entry.update(status="rejected", error="API key not found", finished_at=time.time())
+            storage.append_log(log_entry)
+            raise ServiceError("API key not found", 401)
+        except PermissionError as e:
+            log_entry.update(status="rejected", error=str(e), finished_at=time.time())
+            storage.append_log(log_entry)
+            raise ServiceError(str(e), 403)
+        except ValueError as e:
+            log_entry.update(status="rejected", error=str(e), finished_at=time.time())
+            storage.append_log(log_entry)
+            raise ServiceError(str(e), 402)
+
     try:
-        remaining = deps.deduct_quota(username, cost)
+        remaining = deps.deduct_quota(username, cost, model=model_id)
     except Exception as e:
         status_code = getattr(e, "status_code", 402)
         detail = getattr(e, "detail", str(e))
+        if key_id:
+            storage.release_key_quota_reservation(key_id, cost)
         log_entry.update(status="rejected", error=f"quota: {detail}",
                          finished_at=time.time())
         storage.append_log(log_entry)
@@ -230,6 +248,8 @@ def call_image_model(
         adapter_cls = get_adapter(adapter_type)
     except Exception as e:
         deps.refund_quota(username, cost)
+        if key_id:
+            storage.release_key_quota_reservation(key_id, cost)
         log_entry.update(status="error", error=str(e), finished_at=time.time())
         storage.append_log(log_entry)
         raise ServiceError(str(e), 500)
@@ -252,6 +272,8 @@ def call_image_model(
             result = adapter_cls().generate(ctx)
     except UpstreamBusyError as be:
         deps.refund_quota(username, cost)
+        if key_id:
+            storage.release_key_quota_reservation(key_id, cost)
         log_entry.update(status="rejected", error=str(be),
                          http_status=be.status_code,
                          finished_at=time.time())
@@ -259,6 +281,8 @@ def call_image_model(
         raise ServiceError(str(be), be.status_code)
     except AdapterError as ae:
         deps.refund_quota(username, cost)
+        if key_id:
+            storage.release_key_quota_reservation(key_id, cost)
         log_entry.update(status="failed", error=str(ae),
                          http_status=getattr(ae, "status_code", 500),
                          finished_at=time.time())
@@ -266,6 +290,8 @@ def call_image_model(
         raise ServiceError(str(ae), getattr(ae, "status_code", 502))
     except Exception as e:
         deps.refund_quota(username, cost)
+        if key_id:
+            storage.release_key_quota_reservation(key_id, cost)
         log_entry.update(status="error", error=str(e),
                          trace=traceback.format_exc()[-2000:],
                          finished_at=time.time())
@@ -283,7 +309,7 @@ def call_image_model(
 
     if key_id:
         try:
-            storage.record_key_usage(key_id, cost)
+            storage.finalize_key_usage(key_id, cost)
         except Exception:
             pass
 

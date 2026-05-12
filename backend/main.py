@@ -13,7 +13,7 @@ import string
 import socket
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib3.connection import HTTPConnection
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 
 # 全局开启 TCP Keep-Alive，防止长时间生成（如 150s+）时被 NAT/防火墙强制断开连接导致 RemoteDisconnected
@@ -45,14 +45,57 @@ try:
 except ImportError:
     from sms_service import send_verification_code, generate_code
 
+# 导入限流器
+try:
+    from backend.rate_limiter import (
+        limiter, get_client_ip,
+        LOGIN_IP_LIMIT, LOGIN_USER_LIMIT,
+        SMS_IP_LIMIT, SMS_PHONE_LIMIT,
+        VERIFY_IP_LIMIT,
+        CREATE_USER_LIMIT, CREATE_IP_LIMIT,
+        UPLOAD_USER_LIMIT, UPLOAD_IP_LIMIT,
+        FEEDBACK_IP_LIMIT, ADMIN_IP_LIMIT,
+    )
+except ImportError:
+    from rate_limiter import (
+        limiter, get_client_ip,
+        LOGIN_IP_LIMIT, LOGIN_USER_LIMIT,
+        SMS_IP_LIMIT, SMS_PHONE_LIMIT,
+        VERIFY_IP_LIMIT,
+        CREATE_USER_LIMIT, CREATE_IP_LIMIT,
+        UPLOAD_USER_LIMIT, UPLOAD_IP_LIMIT,
+        FEEDBACK_IP_LIMIT, ADMIN_IP_LIMIT,
+    )
+
 # --- 1. 初始化配置 ---
 load_dotenv()
 
+APP_ENV = (os.getenv("APP_ENV") or os.getenv("ENV") or "development").strip().lower()
+IS_PRODUCTION = APP_ENV in {"prod", "production"}
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "default_secret_key")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 
 TT_API_KEY = os.getenv("TT_API_KEY")
 TUZI_API_KEY = os.getenv("TUZI_API_KEY")
+CORS_ALLOW_ORIGINS = [x.strip() for x in (os.getenv("CORS_ALLOW_ORIGINS") or "").split(",") if x.strip()]
+MAX_UPLOAD_BYTES = int(os.getenv("MAX_UPLOAD_BYTES", str(20 * 1024 * 1024)))
+ALLOWED_UPLOAD_MIME_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+}
+ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+
+if IS_PRODUCTION and (not SECRET_KEY or SECRET_KEY == "default_secret_key" or len(SECRET_KEY) < 32):
+    raise RuntimeError("JWT_SECRET_KEY must be explicitly configured in production and be at least 32 characters")
+
+if IS_PRODUCTION and not CORS_ALLOW_ORIGINS:
+    raise RuntimeError("CORS_ALLOW_ORIGINS must be configured in production")
+
+allow_origins = CORS_ALLOW_ORIGINS or ["*"]
+allow_credentials = allow_origins != ["*"]
 
 # 使用脚本所在目录的绝对路径，确保无论从哪里启动都能找到数据文件
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -71,6 +114,7 @@ class SendCodeRequest(BaseModel):
 class VerifyCodeRequest(BaseModel):
     phone: str
     code: str
+    invite_code: Optional[str] = None  # 可选邀请码，填写有效邀请码赠送积分
 
 class AdminCreateUserRequest(BaseModel):
     initial_quota: int = 50
@@ -112,8 +156,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=True,
+    allow_origins=allow_origins,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -288,13 +332,16 @@ def upload_bytes_to_oss(file_bytes, file_ext=".jpg"):
     else: return f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{filename}"
 
 # --- 配额原子操作（防止并发超用）---
-db_lock = threading.Lock()
+db_lock = threading.RLock()
 
-def deduct_quota_atomic(username: str, amount: int = 1) -> int:
+# quota_logs 最大保留条数，超过从头裁剪
+MAX_QUOTA_LOGS = 10000
+
+def deduct_quota_atomic(username: str, amount: int = 1, source: str = "platform", model: str = None) -> int:
     """
-    原子性预扣分：检查配额并立即扣除 amount 点
-    返回扣除后的剩余配额
-    如果配额不足，抛出 HTTPException
+    原子性预扣分 + 记日志：检查配额 → 扣除 → 写日志 → 一次 save_db。
+    source: "platform" 表示平台创作消耗, "api" 表示 API 调用消耗
+    返回扣除后的剩余配额。如果配额不足，抛出 HTTPException。
     """
     with db_lock:
         db = load_db()
@@ -304,25 +351,91 @@ def deduct_quota_atomic(username: str, amount: int = 1) -> int:
         if user["quota"] < amount:
             raise HTTPException(status_code=403, detail="配额不足")
         user["quota"] -= amount
+        remaining = user["quota"]
+
+        # 同一把锁内写日志，避免二次 load_db + save_db
+        if "quota_logs" not in db:
+            db["quota_logs"] = []
+        reason = "API调用消耗" if source == "api" else "创作消耗"
+        db["quota_logs"].append({
+            "id": str(uuid.uuid4()),
+            "username": username,
+            "operator": "system",
+            "amount": -amount,
+            "balance_after": remaining,
+            "reason": reason,
+            "type": "consume",
+            "source": source,
+            "model": model,
+            "timestamp": time.time()
+        })
+        # 裁剪过长日志
+        if len(db["quota_logs"]) > MAX_QUOTA_LOGS:
+            db["quota_logs"] = db["quota_logs"][-MAX_QUOTA_LOGS:]
         save_db(db)
-        return user["quota"]
+        return remaining
 
 def refund_quota(username: str, amount: int = 1):
     """
-    回滚配额：任务失败时返还 amount 点配额
+    回滚配额 + 记日志：返还积分 → 写日志 → 一次 save_db。
     """
     with db_lock:
         db = load_db()
         user = db["users"].get(username)
         if user:
             user["quota"] += amount
+            # 同一把锁内写日志
+            if "quota_logs" not in db:
+                db["quota_logs"] = []
+            db["quota_logs"].append({
+                "id": str(uuid.uuid4()),
+                "username": username,
+                "operator": "system",
+                "amount": amount,
+                "balance_after": user["quota"],
+                "reason": "任务失败，积分退回",
+                "type": "refund",
+                "timestamp": time.time()
+            })
+            # 裁剪过长日志
+            if len(db["quota_logs"]) > MAX_QUOTA_LOGS:
+                db["quota_logs"] = db["quota_logs"][-MAX_QUOTA_LOGS:]
             save_db(db)
             print(f"✅ 已回滚配额 {amount} 点给用户 {username}")
+
+
+def _validate_upload(file: UploadFile, file_bytes: bytes) -> str:
+    content_type = (file.content_type or "").lower().strip()
+    ext = (os.path.splitext(file.filename or "")[1] or "").lower()
+
+    if len(file_bytes) == 0:
+        raise HTTPException(400, "上传文件为空")
+    if len(file_bytes) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"文件过大，限制 {MAX_UPLOAD_BYTES // (1024 * 1024)}MB")
+    if content_type not in ALLOWED_UPLOAD_MIME_TYPES:
+        raise HTTPException(415, f"不支持的文件类型: {content_type or 'unknown'}")
+    if ext and ext not in ALLOWED_UPLOAD_EXTS:
+        raise HTTPException(415, f"不支持的文件扩展名: {ext}")
+
+    if ext:
+        return ext
+    if content_type == "image/png":
+        return ".png"
+    if content_type == "image/webp":
+        return ".webp"
+    if content_type in {"image/heic", "image/heif"}:
+        return ".heic"
+    return ".jpg"
 
 # --- 4. 路由 ---
 
 @app.post("/auth/token")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends()):
+    client_ip = get_client_ip(request)
+    # 限流：IP 维度 + 用户名维度
+    limiter.check("login_ip", client_ip, *LOGIN_IP_LIMIT, "登录请求过于频繁")
+    limiter.check("login_user", form_data.username, *LOGIN_USER_LIMIT, "该账号登录尝试过多，请稍后再试")
+
     db = load_db()
     user = db["users"].get(form_data.username)
     if not user or not user.get("hash") or not verify_password(form_data.password, user["hash"]): raise HTTPException(400, "账号或密码错误")
@@ -331,8 +444,14 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
     return {"access_token": create_access_token({"sub": form_data.username}), "token_type": "bearer", "username": form_data.username, "quota": user["quota"], "role": user.get("role", "user")}
 
 @app.post("/auth/send-code")
-async def send_code(request: SendCodeRequest):
+async def send_code(request: SendCodeRequest, raw_request: Request = None):
     """发送短信验证码（需要滑块验证）"""
+    if raw_request:
+        client_ip = get_client_ip(raw_request)
+        # 限流：IP 维度 + 手机号维度
+        limiter.check("sms_ip", client_ip, *SMS_IP_LIMIT, "短信发送请求过于频繁")
+        limiter.check("sms_phone", request.phone.strip(), *SMS_PHONE_LIMIT, "该手机号发送验证码过于频繁")
+
     phone = request.phone.strip()
     
     # 验证滑块 token
@@ -367,8 +486,12 @@ async def send_code(request: SendCodeRequest):
     return {"message": "验证码已发送", "expires_in": CODE_EXPIRE_SECONDS}
 
 @app.post("/auth/verify-code")
-async def verify_code(request: VerifyCodeRequest):
+async def verify_code(request: VerifyCodeRequest, raw_request: Request = None):
     """验证码登录/注册"""
+    if raw_request:
+        client_ip = get_client_ip(raw_request)
+        limiter.check("verify_ip", client_ip, *VERIFY_IP_LIMIT, "验证请求过于频繁")
+
     phone = request.phone.strip()
     code = request.code.strip()
     
@@ -400,29 +523,51 @@ async def verify_code(request: VerifyCodeRequest):
     db = load_db()
     
     if phone not in db["users"]:
-        # 新用户注册（一次性赠送初始积分）
-        INITIAL_QUOTA_FOR_NEW_USER = 50
+        # 新用户注册
+        # 检查邀请码：只有填写了有效邀请码才赠送积分
+        INITIAL_QUOTA_FOR_NEW_USER = 0
+        invite_code_used = None
+        if request.invite_code and request.invite_code.strip():
+            invite_code_str = request.invite_code.strip().upper()
+            invite_codes = db.get("invite_codes", [])
+            matched_code = None
+            for ic in invite_codes:
+                if ic["code"] == invite_code_str and not ic.get("used"):
+                    matched_code = ic
+                    break
+            if matched_code:
+                INITIAL_QUOTA_FOR_NEW_USER = 50
+                matched_code["used"] = True
+                matched_code["used_by"] = phone
+                matched_code["used_at"] = time.time()
+                invite_code_used = invite_code_str
+        
         db["users"][phone] = {
             "phone": phone,
             "quota": INITIAL_QUOTA_FOR_NEW_USER,
             "role": "user",
             "created_at": time.time()
         }
-        # 记录初始积分日志，与 admin_grant 保持一致，便于对账
-        if "quota_logs" not in db:
-            db["quota_logs"] = []
-        db["quota_logs"].append({
-            "id": str(uuid.uuid4()),
-            "username": phone,
-            "operator": "system",
-            "amount": INITIAL_QUOTA_FOR_NEW_USER,
-            "balance_after": INITIAL_QUOTA_FOR_NEW_USER,
-            "reason": "新用户注册赠送积分",
-            "type": "signup_bonus",
-            "timestamp": time.time()
-        })
+        
+        # 记录初始积分日志（仅在有赠送时记录）
+        if INITIAL_QUOTA_FOR_NEW_USER > 0:
+            if "quota_logs" not in db:
+                db["quota_logs"] = []
+            db["quota_logs"].append({
+                "id": str(uuid.uuid4()),
+                "username": phone,
+                "operator": "system",
+                "amount": INITIAL_QUOTA_FOR_NEW_USER,
+                "balance_after": INITIAL_QUOTA_FOR_NEW_USER,
+                "reason": f"新用户注册赠送积分（邀请码: {invite_code_used}）",
+                "type": "signup_bonus",
+                "timestamp": time.time()
+            })
         save_db(db)
-        print(f"✅ 新用户注册: {phone}（初始积分 {INITIAL_QUOTA_FOR_NEW_USER}）")
+        if invite_code_used:
+            print(f"✅ 新用户注册: {phone}（邀请码 {invite_code_used}，赠送积分 {INITIAL_QUOTA_FOR_NEW_USER}）")
+        else:
+            print(f"✅ 新用户注册: {phone}（无有效邀请码，不赠送积分）")
     
     user = db["users"][phone]
     token = create_access_token({"sub": phone})
@@ -447,12 +592,17 @@ async def get_user(u: str = Depends(get_current_user)):
     }
 
 @app.post("/api/upload")
-async def upload_image(file: UploadFile = File(...), u: str = Depends(get_current_user)):
+async def upload_image(request: Request, file: UploadFile = File(...), u: str = Depends(get_current_user)):
+    client_ip = get_client_ip(request)
+    limiter.check("upload_user", u, *UPLOAD_USER_LIMIT, "上传过于频繁")
+    limiter.check("upload_ip", client_ip, *UPLOAD_IP_LIMIT, "上传过于频繁")
     try:
         file_content = await file.read()
-        ext = os.path.splitext(file.filename)[1] or ".jpg"
+        ext = _validate_upload(file, file_content)
         oss_url = upload_bytes_to_oss(file_content, ext)
         return {"status": "success", "url": oss_url}
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Upload Fail: {e}")
         raise HTTPException(500, f"上传失败: {str(e)}")
@@ -482,11 +632,16 @@ async def delete_history_item(item_id: str, u: str = Depends(get_current_user)):
 
 @app.post("/api/generate")
 def generate_image(
+    request: Request,
     prompt: str = Form(...),
     style: str = Form(...),
     image_urls_json: str = Form(...), 
     username: str = Depends(get_current_user)
 ):
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "创作请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "创作请求过于频繁")
+
     try:
         from backend.api_gateway.pricing import resolve_model_cost
         from backend.api_gateway.service import run_model_raw, ServiceError
@@ -498,7 +653,7 @@ def generate_image(
     cost = resolve_model_cost(model, default=1)
 
     # 预扣分（原子操作，防止并发超用）
-    remaining_quota = deduct_quota_atomic(username, cost)
+    remaining_quota = deduct_quota_atomic(username, cost, model=model)
     
     try:
         image_list = json.loads(image_urls_json)
@@ -586,6 +741,7 @@ def background_save_to_oss(username, record_id, temp_url):
 
 @app.post("/api/retouch")
 async def retouch_image(
+    request: Request,
     background_tasks: BackgroundTasks,
     mode: str = Form(...),
     strength: str = Form(...),
@@ -594,6 +750,9 @@ async def retouch_image(
     username: str = Depends(get_current_user)
 ):
     """智能修图接口 - 异步优化版"""
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "修图请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "修图请求过于频繁")
     # 验证模式
     if mode not in RETOUCH_TEMPLATES:
         raise HTTPException(400, f"无效的修图模式: {mode}")
@@ -616,10 +775,10 @@ async def retouch_image(
     cost = resolve_model_cost(model, default=1)
 
     try:
-        remaining_quota = deduct_quota_atomic(username, cost)
+        remaining_quota = deduct_quota_atomic(username, cost, model=model)
     except TypeError:
         # Fallback if function only accepts 1 arg
-        remaining_quota = deduct_quota_atomic(username)
+        remaining_quota = deduct_quota_atomic(username, model=model)
     
     # 构造提示词
     base_prompt = RETOUCH_TEMPLATES[mode]
@@ -686,11 +845,16 @@ PORTRAIT_PROMPT = "Replace the face in Figure 1 with the face in Figure 2, keepi
 
 @app.post("/api/portrait")
 def portrait_generate(
+    request: Request,
     subject_url: str = Form(...),  # 本人照片
     target_url: str = Form(...),   # 目标写真/服装
     username: str = Depends(get_current_user)
 ):
     """人像写真接口"""
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "写真请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "写真请求过于频繁")
+
     try:
         from backend.api_gateway.pricing import resolve_model_cost
         from backend.api_gateway.service import run_model_raw, ServiceError
@@ -702,7 +866,7 @@ def portrait_generate(
     cost = resolve_model_cost(model, default=1)
 
     # 预扣分
-    remaining_quota = deduct_quota_atomic(username, cost)
+    remaining_quota = deduct_quota_atomic(username, cost, model=model)
 
     try:
         result = run_model_raw(
@@ -752,6 +916,7 @@ def portrait_generate(
 
 @app.post("/api/create")
 def basic_create(
+    request: Request,
     background_tasks: BackgroundTasks,
     prompt: str = Form(...),              # 必填：文本提示词
     image_urls_json: str = Form("[]"),    # 选填：参考图片URL列表（JSON数组）
@@ -762,6 +927,10 @@ def basic_create(
     username: str = Depends(get_current_user)
 ):
     """基础创作接口 - 异步后台任务版（支持长时间生成）"""
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "创作请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "创作请求过于频繁")
+
     if not (1 <= n <= 10):
         raise HTTPException(400, "生成数量 n 必须介于 1 和 10 之间")
     if quality.lower() not in ["auto", "low", "medium", "high", "4k", "hd"]:
@@ -788,7 +957,7 @@ def basic_create(
     total_cost = cost_per_item * n
     
     # 预扣分 (按照生成张数扣除积分)
-    remaining_quota = deduct_quota_atomic(username, amount=total_cost)
+    remaining_quota = deduct_quota_atomic(username, amount=total_cost, model=model)
     
     task_id = str(uuid.uuid4())
     # batch_id: 同一批次 N 张共享的逻辑 ID，供前端把 N 个占位 task 与服务端返回的 N 张对齐
@@ -1076,6 +1245,7 @@ def _pro_call_single(prompt: str, image_list: list, size: str, upstream_model: s
 
 @app.post("/api/create/pro")
 def basic_create_pro(
+    request: Request,
     background_tasks: BackgroundTasks,
     prompt: str = Form(...),
     image_urls_json: str = Form("[]"),
@@ -1089,6 +1259,10 @@ def basic_create_pro(
     - n 支持 1-10，后台并发 n 次 TTAPI submit+poll
     - 入口立即返回 taskId/batchId，前端走 /api/create/status 轮询，和 /api/create 对齐
     """
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "创作请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "创作请求过于频繁")
+
     if not (1 <= n <= 10):
         raise HTTPException(400, "生成数量 n 必须介于 1 和 10 之间")
 
@@ -1122,7 +1296,7 @@ def basic_create_pro(
             raise HTTPException(403, f"积分不足，本次需要 {total_cost} 积分")
 
     # 预扣总积分
-    remaining_after = deduct_quota_atomic(username, amount=total_cost)
+    remaining_after = deduct_quota_atomic(username, amount=total_cost, model="gpt-image-2-pro")
 
     task_id = str(uuid.uuid4())
     batch_id = str(uuid.uuid4())
@@ -1374,6 +1548,7 @@ def _build_mj_prompt(prompt: str, image_list: list, aspect_ratio: str, mj_versio
 
 @app.post("/api/create/mj")
 def basic_create_mj(
+    request: Request,
     background_tasks: BackgroundTasks,
     prompt: str = Form(""),
     image_urls_json: str = Form("[]"),
@@ -1387,6 +1562,10 @@ def basic_create_mj(
     - 按 mode 计费：relax 2 / fast 3 / turbo 5
     - n 由前端控制批量次数（前端多次调此端点），此接口一次请求 = 一次 imagine = 4 张
     """
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "创作请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "创作请求过于频繁")
+
     try:
         from backend.api_gateway.pricing import resolve_model_cost, resolve_model_config
     except ImportError:
@@ -1419,7 +1598,7 @@ def basic_create_mj(
             raise HTTPException(401, "用户异常")
         if user.get("quota", 0) < cost:
             raise HTTPException(403, f"积分不足，本次需要 {cost} 积分")
-    remaining_after = deduct_quota_atomic(username, amount=cost)
+    remaining_after = deduct_quota_atomic(username, amount=cost, model="midjourney")
 
     task_id = str(uuid.uuid4())
     batch_id = str(uuid.uuid4())
@@ -1630,11 +1809,16 @@ def background_generate_video(
 
 @app.post("/api/video")
 def video_generate(
+    request: Request,
     background_tasks: BackgroundTasks,
     prompt: str = Form(...),
     image_urls_json: str = Form("[]"),
     username: str = Depends(get_current_user)
 ):
+    client_ip = get_client_ip(request)
+    limiter.check("create_user", username, *CREATE_USER_LIMIT, "视频生成请求过于频繁")
+    limiter.check("create_ip", client_ip, *CREATE_IP_LIMIT, "视频生成请求过于频繁")
+
     try:
         from backend.api_gateway.pricing import resolve_model_cost
         from backend.api_gateway.storage import get_model
@@ -1648,7 +1832,7 @@ def video_generate(
         raise HTTPException(503, f"视频模型 {model} 尚未在管理后台配置")
     cost = resolve_model_cost(model, default=5)
 
-    deduct_quota_atomic(username, cost)
+    deduct_quota_atomic(username, cost, model=model)
 
     try:
         image_list = json.loads(image_urls_json)
@@ -1712,8 +1896,12 @@ def save_feedback(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 @app.post("/api/feedback")
-async def submit_feedback(request: FeedbackRequest):
+async def submit_feedback(request: FeedbackRequest, raw_request: Request = None):
     """提交用户反馈"""
+    if raw_request:
+        client_ip = get_client_ip(raw_request)
+        limiter.check("feedback_ip", client_ip, *FEEDBACK_IP_LIMIT, "反馈提交过于频繁")
+
     phone = request.phone.strip()
     content = request.content.strip()
     
@@ -2008,6 +2196,20 @@ async def admin_reset_password(username: str, request: AdminPasswordRequest, adm
             raise HTTPException(404, "用户不存在")
         
         user["hash"] = pwd_context.hash(request.new_password)
+
+        # 审计日志
+        if "quota_logs" not in db:
+            db["quota_logs"] = []
+        db["quota_logs"].append({
+            "id": str(uuid.uuid4()),
+            "username": username,
+            "operator": admin,
+            "amount": 0,
+            "reason": f"管理员 {admin} 重置密码",
+            "type": "admin_action",
+            "action": "reset_password",
+            "timestamp": time.time()
+        })
         save_db(db)
     
     return {"message": f"用户 {username} 密码已重置"}
@@ -2024,74 +2226,125 @@ async def admin_toggle_status(username: str, admin: str = Depends(get_admin_user
             raise HTTPException(400, "不能禁用自己")
         
         user["disabled"] = not user.get("disabled", False)
+        new_status = "禁用" if user["disabled"] else "启用"
+
+        # 审计日志
+        if "quota_logs" not in db:
+            db["quota_logs"] = []
+        db["quota_logs"].append({
+            "id": str(uuid.uuid4()),
+            "username": username,
+            "operator": admin,
+            "amount": 0,
+            "reason": f"管理员 {admin} {new_status}用户",
+            "type": "admin_action",
+            "action": f"user_{new_status}",
+            "timestamp": time.time()
+        })
         save_db(db)
     
     return {
         "username": username,
         "disabled": user["disabled"],
-        "message": f"用户已{'禁用' if user['disabled'] else '启用'}"
+        "message": f"用户已{new_status}"
     }
 
-# --- 自动记录积分消耗到 quota_logs ---
-_original_deduct_quota_atomic = deduct_quota_atomic
-_original_refund_quota = refund_quota
 
-def deduct_quota_atomic_with_log(username: str, amount: int = 1, source: str = "platform") -> int:
-    """带日志的原子扣分
-    source: "platform" 表示平台创作消耗, "api" 表示 API 调用消耗
-    """
-    remaining = _original_deduct_quota_atomic(username, amount)
-    # 记录消耗日志
-    try:
-        reason = "API调用消耗" if source == "api" else "创作消耗"
-        with db_lock:
-            db = load_db()
-            if "quota_logs" not in db:
-                db["quota_logs"] = []
-            db["quota_logs"].append({
+# ==========================================
+# 🎟️ 邀请码管理
+# ==========================================
+
+class InviteCodeBatchRequest(BaseModel):
+    count: int = 1  # 批量生成数量，默认1个，最多50个
+
+@app.post("/api/admin/invite-codes/generate")
+async def admin_generate_invite_codes(request: InviteCodeBatchRequest, admin: str = Depends(get_admin_user)):
+    """管理员批量生成邀请码"""
+    count = min(max(request.count, 1), 50)  # 限制 1~50
+    with db_lock:
+        db = load_db()
+        if "invite_codes" not in db:
+            db["invite_codes"] = []
+        
+        new_codes = []
+        for _ in range(count):
+            # 生成 8 位大写字母+数字邀请码
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            # 确保不重复
+            existing = {ic["code"] for ic in db["invite_codes"]}
+            while code in existing:
+                code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            
+            invite_entry = {
                 "id": str(uuid.uuid4()),
-                "username": username,
-                "operator": "system",
-                "amount": -amount,
-                "balance_after": remaining,
-                "reason": reason,
-                "type": "consume",
-                "source": source,
-                "timestamp": time.time()
-            })
-            save_db(db)
-    except:
-        pass  # 日志记录失败不影响主流程
-    return remaining
+                "code": code,
+                "created_by": admin,
+                "created_at": time.time(),
+                "used": False,
+                "used_by": None,
+                "used_at": None
+            }
+            db["invite_codes"].append(invite_entry)
+            new_codes.append(invite_entry)
+        
+        save_db(db)
+    
+    return {
+        "codes": [{"id": c["id"], "code": c["code"]} for c in new_codes],
+        "message": f"成功生成 {count} 个邀请码"
+    }
 
-def refund_quota_with_log(username: str, amount: int = 1):
-    """带日志的积分回滚（退回）"""
-    _original_refund_quota(username, amount)
-    # 记录退回日志
-    try:
-        with db_lock:
-            db = load_db()
-            user = db["users"].get(username)
-            if user:
-                if "quota_logs" not in db:
-                    db["quota_logs"] = []
-                db["quota_logs"].append({
-                    "id": str(uuid.uuid4()),
-                    "username": username,
-                    "operator": "system",
-                    "amount": amount,
-                    "balance_after": user["quota"],
-                    "reason": "任务失败，积分退回",
-                    "type": "refund",
-                    "timestamp": time.time()
-                })
-                save_db(db)
-    except:
-        pass
+@app.get("/api/admin/invite-codes")
+async def admin_list_invite_codes(
+    page: int = 1,
+    page_size: int = 20,
+    status: str = "",  # "used" / "unused" / "" (all)
+    admin: str = Depends(get_admin_user)
+):
+    """管理员查看邀请码列表"""
+    db = load_db()
+    codes = db.get("invite_codes", [])
+    
+    # 过滤
+    if status == "used":
+        codes = [c for c in codes if c.get("used")]
+    elif status == "unused":
+        codes = [c for c in codes if not c.get("used")]
+    
+    # 按创建时间倒序
+    codes.sort(key=lambda x: x.get("created_at", 0), reverse=True)
+    
+    total = len(codes)
+    start = (page - 1) * page_size
+    end = start + page_size
+    
+    return {
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "codes": codes[start:end]
+    }
 
-# 替换原函数
-deduct_quota_atomic = deduct_quota_atomic_with_log
-refund_quota = refund_quota_with_log
+@app.delete("/api/admin/invite-codes/{code_id}")
+async def admin_delete_invite_code(code_id: str, admin: str = Depends(get_admin_user)):
+    """管理员删除未使用的邀请码"""
+    with db_lock:
+        db = load_db()
+        codes = db.get("invite_codes", [])
+        target = None
+        for c in codes:
+            if c["id"] == code_id:
+                target = c
+                break
+        if not target:
+            raise HTTPException(404, "邀请码不存在")
+        if target.get("used"):
+            raise HTTPException(400, "已使用的邀请码不能删除")
+        codes.remove(target)
+        save_db(db)
+    
+    return {"message": "邀请码已删除"}
+
 
 # ==========================================
 # 🔌 API Gateway 接入（sk-xxx 对外 API + 模型注册表）
@@ -2159,6 +2412,111 @@ except Exception as _gw_err:
     print(f"❌ API Gateway 挂载失败: {_gw_err}")
     import traceback as _tb
     _tb.print_exc()
+
+# ==========================================
+# 🧹 后台定时清理任务
+# ==========================================
+
+# ON_QUEUE 任务超时阈值（秒）：超过此时间仍为 ON_QUEUE 的任务标记为 TIMEOUT 并退款
+TASK_TIMEOUT_SECONDS = int(os.getenv("TASK_TIMEOUT_SECONDS", "1800"))  # 默认 30 分钟
+
+def _cleanup_stale_tasks():
+    """扫描所有用户历史，清理超时的 ON_QUEUE 任务：标记 TIMEOUT + 退款"""
+    try:
+        from api_gateway.pricing import resolve_model_cost
+    except ImportError:
+        try:
+            from backend.api_gateway.pricing import resolve_model_cost
+        except ImportError:
+            resolve_model_cost = lambda *a, **kw: 1
+
+    try:
+        now = time.time()
+        refund_list = []  # [(username, amount, task_id), ...]
+
+        with db_lock:
+            db = load_db()
+            for username, history in db.get("history", {}).items():
+                if not isinstance(history, list):
+                    continue
+                for item in history:
+                    if item.get("status") != "ON_QUEUE":
+                        continue
+                    ts = item.get("timestamp", 0)
+                    if now - ts < TASK_TIMEOUT_SECONDS:
+                        continue
+                    # 超时：标记 TIMEOUT
+                    item["status"] = "TIMEOUT"
+                    # 计算应退积分
+                    model = item.get("model", "gpt-image-2")
+                    batch_total = item.get("batch_total", 1)
+                    try:
+                        cost_per = resolve_model_cost(model, default=1)
+                    except Exception:
+                        cost_per = 1
+                    refund_amount = cost_per * batch_total
+                    refund_list.append((username, refund_amount, item.get("id", "?")))
+
+            if refund_list:
+                # 退款（在同一把锁内完成，避免重复 save）
+                for username, amount, task_id in refund_list:
+                    user = db["users"].get(username)
+                    if user:
+                        user["quota"] += amount
+                        if "quota_logs" not in db:
+                            db["quota_logs"] = []
+                        db["quota_logs"].append({
+                            "id": str(uuid.uuid4()),
+                            "username": username,
+                            "operator": "system",
+                            "amount": amount,
+                            "balance_after": user["quota"],
+                            "reason": f"任务超时(>{TASK_TIMEOUT_SECONDS}s)，积分退回",
+                            "type": "timeout_refund",
+                            "task_id": task_id,
+                            "timestamp": time.time()
+                        })
+                        print(f"⏰ 任务 {task_id[:8]} 超时，退回 {amount} 积分给 {username}")
+                save_db(db)
+    except Exception as e:
+        print(f"⚠️ 清理超时任务出错: {e}")
+
+
+def _cleanup_expired_codes():
+    """清理内存中的过期验证码，防止内存泄漏"""
+    now = time.time()
+    expired = [
+        phone for phone, data in verification_codes.items()
+        if now - data.get("timestamp", 0) > CODE_EXPIRE_SECONDS + 60  # 多留 1 分钟缓冲
+    ]
+    for phone in expired:
+        del verification_codes[phone]
+    if expired:
+        print(f"🧹 已清理 {len(expired)} 个过期验证码")
+
+
+def _background_cleanup_loop():
+    """后台清理线程主循环（每 60 秒一轮）"""
+    while True:
+        time.sleep(60)
+        try:
+            _cleanup_stale_tasks()
+            _cleanup_expired_codes()
+        except Exception as e:
+            print(f"⚠️ 后台清理出错: {e}")
+
+
+# 启动时立即清理一次（处理进程重启时遗留的 ON_QUEUE 任务）
+try:
+    _cleanup_stale_tasks()
+except Exception as e:
+    print(f"⚠️ 启动清理出错: {e}")
+
+# 启动后台清理线程（daemon=True，主进程退出时自动终止）
+_cleanup_thread = threading.Thread(target=_background_cleanup_loop, daemon=True, name="bg-cleanup")
+_cleanup_thread.start()
+print("✅ 后台清理任务已启动（ON_QUEUE 超时清理 + 验证码过期清理）")
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

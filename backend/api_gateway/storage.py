@@ -119,6 +119,7 @@ def create_api_key(
             "allowed_models": allowed_models or [],  # [] 表示允许所有启用的模型
             "quota_limit": quota_limit,  # None 表示不限（只受用户余额限制）
             "quota_used": 0,
+            "quota_reserved": 0,
             "disabled": False,
             "created_at": time.time(),
             "last_used_at": None,
@@ -188,6 +189,69 @@ def record_key_usage(key_id: str, amount: int) -> None:
         _save_db(db)
 
 
+def reserve_key_quota(key_id: str, amount: int) -> Dict[str, Any]:
+    """原子预留 key 配额，避免并发请求同时穿透 quota_limit。
+
+    注意：这只能保证当前单进程下的原子性；多进程/多实例仍应迁移到数据库事务。
+    """
+    _ensure_wired()
+    with _db_lock:
+        db = _load_db()
+        _ensure_tables(db)
+        kdata = db["api_keys"].get(key_id)
+        if not kdata:
+            raise KeyError("key not found")
+        if kdata.get("disabled"):
+            raise PermissionError("API key disabled")
+
+        quota_limit = kdata.get("quota_limit")
+        quota_used = int(kdata.get("quota_used", 0))
+        quota_reserved = int(kdata.get("quota_reserved", 0))
+        amount = int(amount)
+
+        if quota_limit is not None and (quota_used + quota_reserved + amount) > int(quota_limit):
+            raise ValueError("API key quota exhausted")
+
+        kdata["quota_reserved"] = quota_reserved + amount
+        _save_db(db)
+        return {
+            "id": key_id,
+            "quota_limit": quota_limit,
+            "quota_used": quota_used,
+            "quota_reserved": kdata["quota_reserved"],
+        }
+
+
+def release_key_quota_reservation(key_id: str, amount: int) -> None:
+    _ensure_wired()
+    with _db_lock:
+        db = _load_db()
+        _ensure_tables(db)
+        kdata = db["api_keys"].get(key_id)
+        if not kdata:
+            return
+        current = int(kdata.get("quota_reserved", 0))
+        kdata["quota_reserved"] = max(0, current - int(amount))
+        _save_db(db)
+
+
+def finalize_key_usage(key_id: str, amount: int) -> None:
+    _ensure_wired()
+    with _db_lock:
+        db = _load_db()
+        _ensure_tables(db)
+        kdata = db["api_keys"].get(key_id)
+        if not kdata:
+            return
+        amount = int(amount)
+        current_reserved = int(kdata.get("quota_reserved", 0))
+        kdata["quota_reserved"] = max(0, current_reserved - amount)
+        kdata["quota_used"] = int(kdata.get("quota_used", 0)) + amount
+        kdata["last_used_at"] = time.time()
+        kdata["total_calls"] = int(kdata.get("total_calls", 0)) + 1
+        _save_db(db)
+
+
 # ========== API Logs ==========
 
 def append_log(entry: Dict[str, Any]) -> None:
@@ -235,7 +299,8 @@ def list_models(include_disabled: bool = False) -> List[Dict[str, Any]]:
             if not include_disabled and not mdata.get("enabled", True):
                 continue
             models.append({"id": mid, **mdata})
-        models.sort(key=lambda x: x.get("created_at") or 0)
+        # 排序：先按 order (从小到大)，没有 order 的按 created_at (从旧到新)
+        models.sort(key=lambda x: (x.get("order", 999999), x.get("created_at") or 0))
         return models
 
 
@@ -278,3 +343,15 @@ def delete_model(model_id: str) -> None:
         if model_id in db["models_registry"]:
             del db["models_registry"][model_id]
             _save_db(db)
+
+
+def reorder_models(model_ids: List[str]) -> None:
+    """批量更新模型的排序顺序"""
+    _ensure_wired()
+    with _db_lock:
+        db = _load_db()
+        _ensure_tables(db)
+        for i, mid in enumerate(model_ids):
+            if mid in db["models_registry"]:
+                db["models_registry"][mid]["order"] = i
+        _save_db(db)

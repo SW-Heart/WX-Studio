@@ -1,5 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useImperativeHandle, forwardRef } from 'react';
 import { ZoomIn, ZoomOut, Maximize, Grid3X3, MousePointer2, Hand, Download, Trash2, Maximize2, Layers, Lock, Unlock, Crop, Expand, X, Link2, Pencil, Type, Square, Upload, Eye, EyeOff, MoreHorizontal, Image as ImageIcon, Search, Check, PlusSquare, ChevronDown, AlignLeft, AlignCenter, AlignRight, Sliders, ArrowUp, Menu, ImagePlus, Video, Minus, ArrowUpRight, Circle, Triangle, Star, List, ListOrdered, Scissors } from 'lucide-react';
+import { AlertDialog } from './ui/Dialog';
 
 const GRID_SIZE = 30;
 const MIN_ZOOM = 0.1;
@@ -88,6 +89,7 @@ const CropModal = ({ node, onClose, onCropDone }) => {
   const [preset, setPreset] = useState(null);
   const [cropW, setCropW] = useState(0);
   const [cropH, setCropH] = useState(0);
+  const [alertData, setAlertData] = useState(null);
   const dragRef = useRef(null);
 
   const onImgLoad = (e) => {
@@ -147,14 +149,12 @@ const CropModal = ({ node, onClose, onCropDone }) => {
         onClose();
       } catch (err) {
         console.error("Canvas crop error:", err);
-        alert("裁剪失败：图片跨域限制导致无法截取。");
-        onClose();
+        setAlertData({ title: '裁剪失败', message: '图片跨域限制导致无法截取。', type: 'error' });
       }
     };
     img.onerror = () => {
       console.error("Failed to load image for cropping.");
-      alert("裁剪失败：图片加载错误（可能因为跨域安全限制）。");
-      onClose();
+      setAlertData({ title: '裁剪失败', message: '图片加载错误（可能因为跨域安全限制）。', type: 'error' });
     };
     img.src = node.image + (node.image.includes('?') ? '&' : '?') + 'cb=' + Date.now();
   };
@@ -203,8 +203,15 @@ const CropModal = ({ node, onClose, onCropDone }) => {
             <button onClick={handleDone} className="flex-1 px-4 py-2 bg-[#10B981] text-white rounded-xl text-sm font-medium hover:bg-[#059669]">完成</button>
           </div>
         </div>
+        </div>
+        <AlertDialog 
+          isOpen={!!alertData} 
+          onClose={() => { setAlertData(null); onClose(); }} 
+          title={alertData?.title} 
+          message={alertData?.message} 
+          type={alertData?.type} 
+        />
       </div>
-    </div>
   );
 };
 

@@ -5,8 +5,7 @@ import {
     ChevronLeft, ChevronRight, LogOut, Zap, Globe, Menu, X, PanelLeftClose, PanelLeft,
     MessageSquare, Send, Loader2, Film, Shield, Palette, Key, Cpu, Sparkles, Settings
 } from 'lucide-react';
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
+import { API_BASE_URL } from '../../config/app';
 
 // ==========================================
 // 🎯 Sidebar Context
@@ -242,6 +241,11 @@ const QuotaLogsModal = ({ isOpen, onClose, lang }) => {
                                     <div>
                                         <div className="text-sm text-white/90 font-medium flex items-center flex-wrap gap-1">
                                             {log.reason}
+                                            {log.model && (
+                                                <span className="ml-2 px-1.5 py-0.5 rounded-md bg-white/10 text-white/60 text-[10px] font-mono whitespace-nowrap border border-white/5">
+                                                    {log.model}
+                                                </span>
+                                            )}
                                             {typeBadge}
                                             {sourceBadge}
                                         </div>

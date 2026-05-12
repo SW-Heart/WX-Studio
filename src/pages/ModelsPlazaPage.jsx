@@ -35,7 +35,10 @@ const ModelLogo = ({ modelId, size = 20 }) => {
   if (modelId === 'midjourney') {
     return <img src={MidjourneyIcon} className={`w-${size/4} h-${size/4}`} style={{width: size, height: size}} alt="MJ" />;
   }
-  return <img src={ChatGptIcon} className="brightness-0 invert" style={{width: size, height: size}} alt="GPT" />;
+  if (modelId?.includes('banana')) {
+    return <span style={{fontSize: size * 0.8, lineHeight: 1}}>🍌</span>;
+  }
+  return <img src={ChatGptIcon} style={{width: size, height: size}} alt="GPT" />;
 };
 
 const sampleBody = (model) => {

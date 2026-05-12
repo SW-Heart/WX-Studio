@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Users, TrendingUp, Zap, ImageIcon, Plus, Search, RefreshCw, Loader2, X, Copy, Check, AlertCircle, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Users, TrendingUp, Zap, ImageIcon, Plus, Search, RefreshCw, Loader2, X, Copy, Check, AlertCircle, Shield, ChevronLeft, ChevronRight, Ticket, Trash2 } from 'lucide-react';
+import { AlertDialog, ConfirmDialog, PromptDialog } from '../components/ui/Dialog';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
@@ -22,6 +23,7 @@ const CreateUserModal = ({ isOpen, onClose, token, lang, onCreated }) => {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [alertData, setAlertData] = useState(null);
 
   if (!isOpen) return null;
 
@@ -37,7 +39,7 @@ const CreateUserModal = ({ isOpen, onClose, token, lang, onCreated }) => {
       if (!res.ok) throw new Error(data.detail || '创建失败');
       setResult(data);
       onCreated?.();
-    } catch (err) { alert(err.message); }
+    } catch (err) { setAlertData({ title: '创建失败', message: err.message, type: 'error' }); }
     finally { setLoading(false); }
   };
 
@@ -90,6 +92,14 @@ const CreateUserModal = ({ isOpen, onClose, token, lang, onCreated }) => {
             </div>
           </div>
         )}
+
+        <AlertDialog 
+          isOpen={!!alertData} 
+          onClose={() => setAlertData(null)} 
+          title={alertData?.title} 
+          message={alertData?.message} 
+          type={alertData?.type} 
+        />
       </div>
     </div>
   );
@@ -100,6 +110,7 @@ const QuotaModal = ({ isOpen, onClose, token, lang, targetUser, onDone }) => {
   const [amount, setAmount] = useState(100);
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
+  const [alertData, setAlertData] = useState(null);
 
   if (!isOpen || !targetUser) return null;
 
@@ -115,7 +126,7 @@ const QuotaModal = ({ isOpen, onClose, token, lang, targetUser, onDone }) => {
       if (!res.ok) throw new Error(data.detail || '操作失败');
       onDone?.();
       onClose();
-    } catch (err) { alert(err.message); }
+    } catch (err) { setAlertData({ title: '操作失败', message: err.message, type: 'error' }); }
     finally { setLoading(false); }
   };
 
@@ -145,6 +156,14 @@ const QuotaModal = ({ isOpen, onClose, token, lang, targetUser, onDone }) => {
             </button>
           </div>
         </div>
+
+        <AlertDialog 
+          isOpen={!!alertData} 
+          onClose={() => setAlertData(null)} 
+          title={alertData?.title} 
+          message={alertData?.message} 
+          type={alertData?.type} 
+        />
       </div>
     </div>
   );
@@ -160,6 +179,21 @@ const AdminPanel = ({ token, lang }) => {
   const [loading, setLoading] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [quotaTarget, setQuotaTarget] = useState(null);
+  const [alertData, setAlertData] = useState(null);
+  const [confirmData, setConfirmData] = useState(null);
+  const [promptData, setPromptData] = useState(null);
+
+  // Tab 切换
+  const [activeAdminTab, setActiveAdminTab] = useState('users');
+
+  // 邀请码状态
+  const [inviteCodes, setInviteCodes] = useState([]);
+  const [inviteTotal, setInviteTotal] = useState(0);
+  const [invitePage, setInvitePage] = useState(1);
+  const [inviteFilter, setInviteFilter] = useState('');
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [generateCount, setGenerateCount] = useState(1);
+  const [generating, setGenerating] = useState(false);
 
   const pageSize = 15;
 
@@ -184,23 +218,76 @@ const AdminPanel = ({ token, lang }) => {
     finally { setLoading(false); }
   };
 
-  const refreshAll = () => { fetchDashboard(); fetchUsers(); };
+  const fetchInviteCodes = async () => {
+    setInviteLoading(true);
+    try {
+      const params = new URLSearchParams({ page: invitePage.toString(), page_size: '20', status: inviteFilter });
+      const res = await fetch(`${API_BASE_URL}/api/admin/invite-codes?${params}`, { headers: { 'Authorization': `Bearer ${token}` } });
+      if (res.ok) {
+        const data = await res.json();
+        setInviteCodes(data.codes);
+        setInviteTotal(data.total);
+      }
+    } catch (err) { console.error(err); }
+    finally { setInviteLoading(false); }
+  };
+
+  const handleGenerateInviteCodes = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/invite-codes/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ count: generateCount })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || '生成失败');
+      setAlertData({ title: '生成成功', message: `已生成 ${data.codes.length} 个邀请码`, type: 'success' });
+      fetchInviteCodes();
+    } catch (err) { setAlertData({ title: '生成失败', message: err.message, type: 'error' }); }
+    finally { setGenerating(false); }
+  };
+
+  const handleDeleteInviteCode = async (codeId) => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/admin/invite-codes/${codeId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) fetchInviteCodes();
+      else { const d = await res.json(); setAlertData({ title: '删除失败', message: d.detail, type: 'error' }); }
+    } catch (err) { setAlertData({ title: '错误', message: err.message, type: 'error' }); }
+  };
+
+  const copyInviteCode = (code) => {
+    navigator.clipboard.writeText(code);
+    setAlertData({ title: '已复制', message: `邀请码 ${code} 已复制到剪贴板`, type: 'success' });
+  };
+
+  const refreshAll = () => { fetchDashboard(); fetchUsers(); fetchInviteCodes(); };
 
   useEffect(() => { if (token) refreshAll(); }, [token]);
   useEffect(() => { if (token) fetchUsers(); }, [page, search]);
+  useEffect(() => { if (token) fetchInviteCodes(); }, [invitePage, inviteFilter]);
 
   const handleResetPwd = async (username) => {
-    const pwd = prompt(lang === 'zh' ? `为 ${username} 设置新密码：` : `Set new password for ${username}:`);
-    if (!pwd) return;
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/admin/users/${username}/password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify({ new_password: pwd })
-      });
-      if (res.ok) { alert(lang === 'zh' ? '密码已重置' : 'Password reset'); }
-      else { const d = await res.json(); alert(d.detail); }
-    } catch (err) { alert(err.message); }
+    setPromptData({
+      title: lang === 'zh' ? '重置密码' : 'Reset Password',
+      message: lang === 'zh' ? `为 ${username} 设置新密码：` : `Set new password for ${username}:`,
+      placeholder: lang === 'zh' ? '输入新密码' : 'New password',
+      onConfirm: async (pwd) => {
+        if (!pwd) return;
+        try {
+          const res = await fetch(`${API_BASE_URL}/api/admin/users/${username}/password`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ new_password: pwd })
+          });
+          if (res.ok) { setAlertData({ title: '重置成功', message: lang === 'zh' ? '密码已重置' : 'Password reset', type: 'success' }); }
+          else { const d = await res.json(); setAlertData({ title: '重置失败', message: d.detail, type: 'error' }); }
+        } catch (err) { setAlertData({ title: '错误', message: err.message, type: 'error' }); }
+      }
+    });
   };
 
   const handleToggleStatus = async (username) => {
@@ -209,8 +296,8 @@ const AdminPanel = ({ token, lang }) => {
         method: 'POST', headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok) fetchUsers();
-      else { const d = await res.json(); alert(d.detail); }
-    } catch (err) { alert(err.message); }
+      else { const d = await res.json(); setAlertData({ title: '状态修改失败', message: d.detail, type: 'error' }); }
+    } catch (err) { setAlertData({ title: '错误', message: err.message, type: 'error' }); }
   };
 
   const totalPages = Math.ceil(totalUsers / pageSize);
@@ -252,107 +339,225 @@ const AdminPanel = ({ token, lang }) => {
           <StatCard icon={<TrendingUp size={20} className="text-white" />} label={lang === 'zh' ? '近7天充值' : '7d Added'} value={`+${dashboard?.recent_quota_added ?? 0}`} sub={`${lang === 'zh' ? '消耗' : 'Used'}: -${dashboard?.recent_quota_spent ?? 0}`} gradient="from-green-500 to-green-700" />
         </div>
 
-        {/* 用户管理 */}
-        <div className="bg-white/[0.02] border border-white/10 rounded-xl overflow-hidden">
-          {/* 工具栏 */}
-          <div className="p-4 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Users size={18} className="text-[#FF8A3D]" />
-              {lang === 'zh' ? '用户管理' : 'User Management'}
-              <span className="text-xs text-white/30 font-normal ml-1">({totalUsers})</span>
-            </h2>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <div className="relative flex-1 sm:flex-initial">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-                <input
-                  type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
-                  placeholder={lang === 'zh' ? '搜索用户...' : 'Search...'}
-                  className="h-9 bg-[#0a0a0a] border border-white/10 rounded-lg pl-9 pr-4 text-xs text-white focus:border-[#FF8A3D] focus:outline-none w-full sm:w-48"
-                />
+        {/* 管理中心 - Tab 切换 */}
+        <div className="bg-white/[0.02] border border-white/10 rounded-xl overflow-hidden mt-2">
+          {/* Tab 导航栏 */}
+          <div className="flex items-center px-4 border-b border-white/5 bg-white/[0.01]">
+            <button 
+              onClick={() => setActiveAdminTab('users')}
+              className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all border-b-2 ${activeAdminTab === 'users' ? 'border-[#FF8A3D] text-white' : 'border-transparent text-white/40 hover:text-white/60'}`}
+            >
+              <Users size={18} />
+              {lang === 'zh' ? '用户管理' : 'Users'}
+              <span className="text-[10px] opacity-40 ml-1 font-normal">({totalUsers})</span>
+            </button>
+            <button 
+              onClick={() => setActiveAdminTab('invites')}
+              className={`flex items-center gap-2 px-6 py-4 text-sm font-bold transition-all border-b-2 ${activeAdminTab === 'invites' ? 'border-[#FF8A3D] text-white' : 'border-transparent text-white/40 hover:text-white/60'}`}
+            >
+              <Ticket size={18} />
+              {lang === 'zh' ? '邀请码管理' : 'Invite Codes'}
+              <span className="text-[10px] opacity-40 ml-1 font-normal">({inviteTotal})</span>
+            </button>
+          </div>
+
+          {activeAdminTab === 'users' && (
+            <div className="animate-in fade-in slide-in-from-left-2 duration-300">
+              {/* 用户管理工具栏 */}
+              <div className="p-4 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#FF8A3D] animate-pulse" />
+                  <span className="text-xs text-white/40 uppercase tracking-widest font-bold">List View</span>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="relative flex-1 sm:flex-initial">
+                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
+                    <input
+                      type="text" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }}
+                      placeholder={lang === 'zh' ? '搜索用户...' : 'Search...'}
+                      className="h-9 bg-[#0a0a0a] border border-white/10 rounded-lg pl-9 pr-4 text-xs text-white focus:border-[#FF8A3D] focus:outline-none w-full sm:w-48"
+                    />
+                  </div>
+                  <button onClick={() => setShowCreate(true)} className="h-9 px-4 rounded-lg bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white text-xs font-bold flex items-center gap-1.5 hover:opacity-90 whitespace-nowrap">
+                    <Plus size={14} /> {lang === 'zh' ? '创建用户' : 'New User'}
+                  </button>
+                </div>
               </div>
-              <button onClick={() => setShowCreate(true)} className="h-9 px-4 rounded-lg bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white text-xs font-bold flex items-center gap-1.5 hover:opacity-90 whitespace-nowrap">
-                <Plus size={14} /> {lang === 'zh' ? '创建用户' : 'New User'}
-              </button>
+
+              {/* 用户表格 */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-white/40 text-xs border-b border-white/5">
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '用户名' : 'Username'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '角色' : 'Role'}</th>
+                      <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '积分' : 'Credits'}</th>
+                      <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '创作' : 'Works'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '创建时间' : 'Created'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '状态' : 'Status'}</th>
+                      <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '操作' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr><td colSpan={7} className="text-center py-12"><Loader2 size={24} className="mx-auto animate-spin text-[#FF8A3D]" /></td></tr>
+                    ) : users.length === 0 ? (
+                      <tr><td colSpan={7} className="text-center py-12 text-white/30">{lang === 'zh' ? '暂无数据' : 'No data'}</td></tr>
+                    ) : users.map((u, i) => (
+                      <tr key={u.username} className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? '' : 'bg-white/[0.01]'}`}>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#FF8A3D]/20 to-[#E65100]/20 border border-white/10 flex items-center justify-center">
+                              <span className="text-[9px] font-bold text-[#FF8A3D]">{u.username?.slice(0, 2)}</span>
+                            </div>
+                            <div>
+                              <p className="text-white text-xs font-medium">{u.username}</p>
+                              {u.phone && <p className="text-white/30 text-[10px]">{u.phone}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/5 text-white/40'}`}>
+                            {u.role}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <span className="text-[#FF8A3D] font-mono text-xs font-bold">{u.quota}</span>
+                        </td>
+                        <td className="py-3 px-4 text-right text-white/50 text-xs">{u.creation_count}</td>
+                        <td className="py-3 px-4 text-white/40 text-xs">{formatTime(u.created_at)}</td>
+                        <td className="py-3 px-4">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.disabled ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                            {u.disabled ? (lang === 'zh' ? '已禁用' : 'Disabled') : (lang === 'zh' ? '正常' : 'Active')}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => setQuotaTarget(u.username)} className="px-2 py-1 text-[10px] rounded bg-[#FF8A3D]/10 text-[#FF8A3D] hover:bg-[#FF8A3D]/20 transition-colors" title={lang === 'zh' ? '充值积分' : 'Add Credits'}>
+                              <Zap size={12} />
+                            </button>
+                            <button onClick={() => handleResetPwd(u.username)} className="px-2 py-1 text-[10px] rounded bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title={lang === 'zh' ? '重置密码' : 'Reset Password'}>
+                              {lang === 'zh' ? '密码' : 'Pwd'}
+                            </button>
+                            {u.role !== 'admin' && (
+                              <button onClick={() => handleToggleStatus(u.username)} className={`px-2 py-1 text-[10px] rounded transition-colors ${u.disabled ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}>
+                                {u.disabled ? (lang === 'zh' ? '启用' : 'Enable') : (lang === 'zh' ? '禁用' : 'Ban')}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 用户分页 */}
+              {totalPages > 1 && (
+                <div className="p-4 border-t border-white/5 flex items-center justify-between">
+                  <p className="text-xs text-white/30">{lang === 'zh' ? `共 ${totalUsers} 条` : `${totalUsers} total`}</p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 disabled:opacity-30"><ChevronLeft size={14} /></button>
+                    <span className="text-xs text-white/50 px-2">{page} / {totalPages}</span>
+                    <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 disabled:opacity-30"><ChevronRight size={14} /></button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
+          )}
 
-          {/* 表格 */}
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-white/40 text-xs border-b border-white/5">
-                  <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '用户名' : 'Username'}</th>
-                  <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '角色' : 'Role'}</th>
-                  <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '积分' : 'Credits'}</th>
-                  <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '创作' : 'Works'}</th>
-                  <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '创建时间' : 'Created'}</th>
-                  <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '状态' : 'Status'}</th>
-                  <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '操作' : 'Actions'}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} className="text-center py-12"><Loader2 size={24} className="mx-auto animate-spin text-[#FF8A3D]" /></td></tr>
-                ) : users.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-12 text-white/30">{lang === 'zh' ? '暂无数据' : 'No data'}</td></tr>
-                ) : users.map((u, i) => (
-                  <tr key={u.username} className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? '' : 'bg-white/[0.01]'}`}>
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-[#FF8A3D]/20 to-[#E65100]/20 border border-white/10 flex items-center justify-center">
-                          <span className="text-[9px] font-bold text-[#FF8A3D]">{u.username?.slice(0, 2)}</span>
-                        </div>
-                        <div>
-                          <p className="text-white text-xs font-medium">{u.username}</p>
-                          {u.phone && <p className="text-white/30 text-[10px]">{u.phone}</p>}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' : 'bg-white/5 text-white/40'}`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <span className="text-[#FF8A3D] font-mono text-xs font-bold">{u.quota}</span>
-                    </td>
-                    <td className="py-3 px-4 text-right text-white/50 text-xs">{u.creation_count}</td>
-                    <td className="py-3 px-4 text-white/40 text-xs">{formatTime(u.created_at)}</td>
-                    <td className="py-3 px-4">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${u.disabled ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
-                        {u.disabled ? (lang === 'zh' ? '已禁用' : 'Disabled') : (lang === 'zh' ? '正常' : 'Active')}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <button onClick={() => setQuotaTarget(u.username)} className="px-2 py-1 text-[10px] rounded bg-[#FF8A3D]/10 text-[#FF8A3D] hover:bg-[#FF8A3D]/20 transition-colors" title={lang === 'zh' ? '充值积分' : 'Add Credits'}>
-                          <Zap size={12} />
-                        </button>
-                        <button onClick={() => handleResetPwd(u.username)} className="px-2 py-1 text-[10px] rounded bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title={lang === 'zh' ? '重置密码' : 'Reset Password'}>
-                          {lang === 'zh' ? '密码' : 'Pwd'}
-                        </button>
-                        {u.role !== 'admin' && (
-                          <button onClick={() => handleToggleStatus(u.username)} className={`px-2 py-1 text-[10px] rounded transition-colors ${u.disabled ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20' : 'bg-red-500/10 text-red-400 hover:bg-red-500/20'}`}>
-                            {u.disabled ? (lang === 'zh' ? '启用' : 'Enable') : (lang === 'zh' ? '禁用' : 'Ban')}
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* 分页 */}
-          {totalPages > 1 && (
-            <div className="p-4 border-t border-white/5 flex items-center justify-between">
-              <p className="text-xs text-white/30">{lang === 'zh' ? `共 ${totalUsers} 条` : `${totalUsers} total`}</p>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 disabled:opacity-30"><ChevronLeft size={14} /></button>
-                <span className="text-xs text-white/50 px-2">{page} / {totalPages}</span>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 disabled:opacity-30"><ChevronRight size={14} /></button>
+          {activeAdminTab === 'invites' && (
+            <div className="animate-in fade-in slide-in-from-right-2 duration-300">
+              {/* 邀请码管理工具栏 */}
+              <div className="p-4 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-[#FF8A3D] animate-pulse" />
+                  <span className="text-xs text-white/40 uppercase tracking-widest font-bold">Generation</span>
+                </div>
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <select
+                    value={inviteFilter}
+                    onChange={e => { setInviteFilter(e.target.value); setInvitePage(1); }}
+                    className="h-9 bg-[#0a0a0a] border border-white/10 rounded-lg px-3 text-xs text-white focus:border-[#FF8A3D] focus:outline-none"
+                  >
+                    <option value="">{lang === 'zh' ? '全部' : 'All'}</option>
+                    <option value="unused">{lang === 'zh' ? '未使用' : 'Unused'}</option>
+                    <option value="used">{lang === 'zh' ? '已使用' : 'Used'}</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" value={generateCount} onChange={e => setGenerateCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+                      min={1} max={50}
+                      className="h-9 w-16 bg-[#0a0a0a] border border-white/10 rounded-lg px-2 text-xs text-white text-center focus:border-[#FF8A3D] focus:outline-none"
+                    />
+                    <button onClick={handleGenerateInviteCodes} disabled={generating} className="h-9 px-4 rounded-lg bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white text-xs font-bold flex items-center gap-1.5 hover:opacity-90 whitespace-nowrap">
+                      {generating ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
+                      {lang === 'zh' ? '生成邀请码' : 'Generate'}
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {/* 邀请码表格 */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-white/40 text-xs border-b border-white/5">
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '邀请码' : 'Code'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '状态' : 'Status'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '使用者' : 'Used By'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '创建时间' : 'Created'}</th>
+                      <th className="text-left py-3 px-4 font-medium">{lang === 'zh' ? '使用时间' : 'Used At'}</th>
+                      <th className="text-right py-3 px-4 font-medium">{lang === 'zh' ? '操作' : 'Actions'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inviteLoading ? (
+                      <tr><td colSpan={6} className="text-center py-12"><Loader2 size={24} className="mx-auto animate-spin text-[#FF8A3D]" /></td></tr>
+                    ) : inviteCodes.length === 0 ? (
+                      <tr><td colSpan={6} className="text-center py-12 text-white/30">{lang === 'zh' ? '暂无邀请码' : 'No invite codes'}</td></tr>
+                    ) : inviteCodes.map((ic, i) => (
+                      <tr key={ic.id} className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? '' : 'bg-white/[0.01]'}`}>
+                        <td className="py-3 px-4">
+                          <span className="font-mono text-xs text-white font-bold tracking-wider">{ic.code}</span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${ic.used ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
+                            {ic.used ? (lang === 'zh' ? '已使用' : 'Used') : (lang === 'zh' ? '未使用' : 'Available')}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-white/50 text-xs">{ic.used_by || '-'}</td>
+                        <td className="py-3 px-4 text-white/40 text-xs">{formatTime(ic.created_at)}</td>
+                        <td className="py-3 px-4 text-white/40 text-xs">{ic.used_at ? formatTime(ic.used_at) : '-'}</td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <button onClick={() => copyInviteCode(ic.code)} className="px-2 py-1 text-[10px] rounded bg-white/5 text-white/50 hover:bg-white/10 hover:text-white transition-colors" title={lang === 'zh' ? '复制' : 'Copy'}>
+                              <Copy size={12} />
+                            </button>
+                            {!ic.used && (
+                              <button onClick={() => handleDeleteInviteCode(ic.id)} className="px-2 py-1 text-[10px] rounded bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors" title={lang === 'zh' ? '删除' : 'Delete'}>
+                                <Trash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 邀请码分页 */}
+              {Math.ceil(inviteTotal / 20) > 1 && (
+                <div className="p-4 border-t border-white/5 flex items-center justify-between">
+                  <p className="text-xs text-white/30">{lang === 'zh' ? `共 ${inviteTotal} 条` : `${inviteTotal} total`}</p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setInvitePage(p => Math.max(1, p - 1))} disabled={invitePage <= 1} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 disabled:opacity-30"><ChevronLeft size={14} /></button>
+                    <span className="text-xs text-white/50 px-2">{invitePage} / {Math.ceil(inviteTotal / 20)}</span>
+                    <button onClick={() => setInvitePage(p => Math.min(Math.ceil(inviteTotal / 20), p + 1))} disabled={invitePage >= Math.ceil(inviteTotal / 20)} className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-white/50 disabled:opacity-30"><ChevronRight size={14} /></button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -361,6 +566,31 @@ const AdminPanel = ({ token, lang }) => {
       {/* 弹窗 */}
       <CreateUserModal isOpen={showCreate} onClose={() => setShowCreate(false)} token={token} lang={lang} onCreated={refreshAll} />
       <QuotaModal isOpen={!!quotaTarget} onClose={() => setQuotaTarget(null)} token={token} lang={lang} targetUser={quotaTarget} onDone={refreshAll} />
+
+      <AlertDialog 
+        isOpen={!!alertData} 
+        onClose={() => setAlertData(null)} 
+        title={alertData?.title} 
+        message={alertData?.message} 
+        type={alertData?.type} 
+      />
+
+      <ConfirmDialog 
+        isOpen={!!confirmData}
+        onClose={() => setConfirmData(null)}
+        onConfirm={confirmData?.onConfirm || (() => {})}
+        title={confirmData?.title}
+        message={confirmData?.message}
+      />
+
+      <PromptDialog 
+        isOpen={!!promptData}
+        onClose={() => setPromptData(null)}
+        onConfirm={promptData?.onConfirm || (() => {})}
+        title={promptData?.title}
+        message={promptData?.message}
+        placeholder={promptData?.placeholder}
+      />
     </div>
   );
 };
