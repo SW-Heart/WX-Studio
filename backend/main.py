@@ -522,7 +522,7 @@ def generate_image(
             raise RuntimeError("未获取到生成图片")
 
         record = {"id": str(uuid.uuid4()), "image": result_url, "prompt": prompt,
-                  "timestamp": datetime.now().timestamp(), "type": "product"}
+                  "timestamp": datetime.now().timestamp(), "type": "product", "model": model}
         with db_lock:
             db = load_db()
             if username not in db["history"]:
@@ -649,7 +649,8 @@ async def retouch_image(
             "image": result_url,
             "prompt": f"[{STRENGTH_MAPPING[strength]}] {mode}",
             "timestamp": datetime.now().timestamp(),
-            "type": "retouch"
+            "type": "retouch",
+            "model": model
         }
         with db_lock:
             db = load_db()
@@ -721,7 +722,8 @@ def portrait_generate(
             "image": result_url,
             "prompt": "[人像写真]",
             "timestamp": datetime.now().timestamp(),
-            "type": "portrait"
+            "type": "portrait",
+            "model": model
         }
         with db_lock:
             db = load_db()
@@ -802,10 +804,12 @@ def basic_create(
             "id": task_id,
             "image": None,
             "image_urls": [],
-            "prompt": f"[{create_type}] {prompt[:50]}{'...' if len(prompt) > 50 else ''}",
+            "prompt": prompt,
             "timestamp": datetime.now().timestamp(),
             "type": "create",
             "status": "ON_QUEUE",
+            "model": model,
+            "size": size or "auto",
             "batch_id": batch_id,
             "batch_total": n,
         })
@@ -1133,11 +1137,12 @@ def basic_create_pro(
             "id": task_id,
             "image": None,
             "image_urls": [],
-            "prompt": f"[{create_type}] {prompt[:50]}{'...' if len(prompt) > 50 else ''}",
+            "prompt": prompt,
             "timestamp": datetime.now().timestamp(),
             "type": "create",
             "status": "ON_QUEUE",
             "model": "gpt-image-2-pro",
+            "size": size or "auto",
             "batch_id": batch_id,
             "batch_total": n,
         })
@@ -1429,11 +1434,12 @@ def basic_create_mj(
             "id": task_id,
             "image": None,
             "image_urls": [],
-            "prompt": f"[{create_type}] {(prompt or '')[:50]}{'...' if len(prompt or '') > 50 else ''}",
+            "prompt": prompt or "",
             "timestamp": datetime.now().timestamp(),
             "type": "create",
             "status": "ON_QUEUE",
             "model": "midjourney",
+            "size": aspect_ratio or "1:1",
             "batch_id": batch_id,
             "batch_total": images_per_task,
         })
@@ -1664,6 +1670,7 @@ def video_generate(
             "prompt": prompt,
             "status": "ON_QUEUE",
             "image": None,
+            "model": model,
             "timestamp": datetime.now().timestamp()
         })
         save_db(db)

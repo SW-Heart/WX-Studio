@@ -4838,6 +4838,22 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
     finally { setDeleting(false); }
   };
 
+  const handleDownload = async (url) => {
+    if (!url) return;
+    const secureUrl = toSecureUrl(url);
+    try {
+      const res = await fetch(secureUrl);
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `OG_AI_${Date.now()}.png`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) {
+      window.open(secureUrl, '_blank');
+    }
+  };
+
   useEffect(() => {
     if (token) {
       fetchAllHistory();
@@ -4999,7 +5015,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
                     {copied ? (lang === 'zh' ? '已复制' : 'Copied') : (lang === 'zh' ? '复制' : 'Copy')}
                   </button>
                 </div>
-                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl text-sm text-white/80 leading-relaxed italic">
+                <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl text-sm text-white/80 leading-relaxed italic max-h-[200px] overflow-y-auto break-words whitespace-pre-wrap">
                   {selectedImage.prompt ? selectedImage.prompt.replace(/^\[.*?\]\s*/, '') : (lang === 'zh' ? '暂无描述' : 'No prompt')}
                 </div>
               </div>
@@ -5008,11 +5024,11 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-1">
                   <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '画幅比例' : 'Aspect Ratio'}</div>
-                  <div className="text-sm font-mono text-white/80">{selectedImage.ratio || selectedImage.aspect_ratio || '1:1'}</div>
+                  <div className="text-sm font-mono text-white/80">{selectedImage.ratio || selectedImage.aspect_ratio || selectedImage.size || '-'}</div>
                 </div>
                 <div className="p-4 bg-white/[0.03] border border-white/5 rounded-2xl space-y-1">
                   <div className="text-[10px] font-bold text-white/20 uppercase tracking-wider">{lang === 'zh' ? '分辨率' : 'Resolution'}</div>
-                  <div className="text-sm font-mono text-white/80">{selectedImage.size || selectedImage.resolution || '1024x1024'}</div>
+                  <div className="text-sm font-mono text-white/80">{selectedImage.size && selectedImage.size.includes('x') ? selectedImage.size : '-'}</div>
                 </div>
               </div>
 
@@ -5024,7 +5040,7 @@ const GalleryPage = ({ token, lang, onNavigate }) => {
                     <Sparkles size={20} className="text-[#FF8A3D]" />
                   </div>
                   <div>
-                    <div className="text-sm font-bold text-white">{selectedImage.model || 'GPT-Image-2'}</div>
+                    <div className="text-sm font-bold text-white">{selectedImage.model || '-'}</div>
                     <div className="text-[10px] text-white/30 uppercase tracking-tighter">AI Generation Engine</div>
                   </div>
                 </div>
