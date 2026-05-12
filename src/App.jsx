@@ -1401,6 +1401,8 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   const [resLevel, setResLevel] = useState('2K');
   const [quality, setQuality] = useState('auto');
   const [numImages, setNumImages] = useState(1);
+  const [mjMode, setMjMode] = useState('fast');
+  const [mjVersion, setMjVersion] = useState('v8.1');
 
   // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K
   const lockedTo1K = model === 'gpt-image-2';
@@ -1408,22 +1410,36 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
   }, [lockedTo1K, resLevel]);
 
-  // Nano Banana 2：三档分辨率 = 三个独立 model id（与 gpt-image-2 的锁 1K 不冲突）
+  // Nano Banana 2
   const isNanoBanana2 = model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k';
   const NANO_BANANA_2_COST_PER_IMAGE = 30;
 
+  // Pro Model
+  const PRO_COST_PER_IMAGE = 22;
+  const isProModel = model === 'gpt-image-2-pro';
+
+  // Midjourney
+  const isMjModel = model === 'midjourney';
+  const MJ_COST_BY_MODE = { relax: 22, fast: 42, turbo: 62 };
+  const MJ_VERSIONS = [
+    { id: 'v8.1', label: 'V8.1', sub: '最新' },
+    { id: 'v7',   label: 'V7',   sub: '稳定' },
+    { id: 'v6.1', label: 'V6.1', sub: '经典' },
+    { id: 'v5.2', label: 'V5.2', sub: '写实' },
+    { id: 'niji 6', label: 'Niji 6', sub: '动漫' },
+  ];
+  const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 42;
+
   // 单张积分价（和后端 pricing 保持一致）
-  // - gpt-image-2       → 7
-  // - gpt-image-2-high  → 13
-  // - nano-banana-2 *   → 30
   const costPerImage = (() => {
     if (isNanoBanana2) return NANO_BANANA_2_COST_PER_IMAGE;
+    if (isProModel) return PRO_COST_PER_IMAGE;
     if (model === 'gpt-image-2-high') return 13;
     return 7; // gpt-image-2
   })();
 
   const currentDimensions = calculateSize(aspectRatio, resLevel);
-  const pointsPerImage = costPerImage;
+  const pointsPerImage = isMjModel ? mjCostPerTask : costPerImage;
   const totalPoints = (numImages || 1) * pointsPerImage;
 
   const [result, setResult] = useState(null);
@@ -1630,7 +1646,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     });
 
     // 在画布上创建 N 个加载占位节点
-    const n = numImages || 1;
+    const n = isMjModel ? (numImages || 1) * 4 : (numImages || 1);
     // 动态获取当前画布视角的中心点
     const center = canvasRef.current?.getViewportCenter() || { x: 500, y: 300 };
     const positions = getNewNodePositions(n, canvasNodes, center);
@@ -1650,7 +1666,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
         type: 'create',
         status: 'pending',
         progress: 0,
-        slotIndex: i,
+        slotIndex: isMjModel ? (i % 4) : i,
         zIndex: 1,
       });
     }
@@ -1680,21 +1696,35 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     }, 1000);
 
     try {
-      // 1. 提交任务（后端立即返回 taskId）
+      // 1. 提交任务
       const formData = new FormData();
       formData.append('prompt', p);
       formData.append('image_urls_json', JSON.stringify(rImgs));
-      if (params.model) formData.append('model', params.model);
-      if (params.size) formData.append('size', params.size);
-      if (params.quality) formData.append('quality', params.quality);
-      if (params.n) formData.append('n', params.n.toString());
-      formData.append('type', 'create'); // 显式标记为自由创作类型
+      
+      let res;
+      if (params.model === 'midjourney') {
+        formData.append('aspect_ratio', aspectRatio === 'auto' ? '1:1' : aspectRatio);
+        formData.append('mj_mode', mjMode);
+        formData.append('mj_version', mjVersion);
+        res = await fetch(`${API_BASE_URL}/api/create/mj`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData,
+          keepalive: true
+        });
+      } else {
+        if (params.model) formData.append('model', params.model);
+        if (params.size) formData.append('size', params.size);
+        if (params.quality) formData.append('quality', params.quality);
+        if (params.n) formData.append('n', params.n.toString());
+        formData.append('type', 'create');
 
-      const res = await fetch(`${API_BASE_URL}/api/create`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
-        body: formData
-      });
+        res = await fetch(`${API_BASE_URL}/api/create`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+      }
 
       if (!res.ok) {
         let errMsg = 'Generation failed';
@@ -2021,10 +2051,21 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                       ${showParams ? 'bg-[#2a2a2e] border-white/20 text-white' : 'bg-[#222225] border-white/10 text-white/70 hover:bg-white/5'}`}
                   >
                     <span className="opacity-70">{aspectRatio === 'auto' ? '1:1' : aspectRatio}</span>
-                    <span className="opacity-40 mx-0.5">|</span>
-                    <span>{RES_LEVELS.find(r => r.id === resLevel)?.label[lang] || resLevel}</span>
-                    <span className="opacity-40 mx-0.5">|</span>
-                    <span className="opacity-70">{QUALITIES.find(q => q.id === quality)?.label[lang] || quality}</span>
+                    {!isMjModel ? (
+                      <>
+                        <span className="opacity-40 mx-0.5">|</span>
+                        <span>{RES_LEVELS.find(r => r.id === resLevel)?.label[lang] || resLevel}</span>
+                        <span className="opacity-40 mx-0.5">|</span>
+                        <span className="opacity-70">{QUALITIES.find(q => q.id === quality)?.label[lang] || quality}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="opacity-40 mx-0.5">|</span>
+                        <span className="opacity-70 capitalize">{mjMode === 'relax' ? 'Relax' : mjMode === 'fast' ? 'Fast' : 'Turbo'}</span>
+                        <span className="opacity-40 mx-0.5">|</span>
+                        <span className="opacity-70">{MJ_VERSIONS.find(v => v.id === mjVersion)?.label || mjVersion}</span>
+                      </>
+                    )}
                     <span className="opacity-40 mx-0.5">|</span>
                     <span className="text-[#00C4B6]">x{numImages || 1}</span>
                   </button>
@@ -2048,8 +2089,8 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                         </div>
                       </div>
 
-                      {/* 分辨率 - gpt-image-2 仅支持 1K，该模型下隐藏 */}
-                      {!lockedTo1K && (
+                      {/* 分辨率 - gpt-image-2 仅支持 1K，MJ 不支持，该模型下隐藏 */}
+                      {(!lockedTo1K && !isMjModel) && (
                         <div className="space-y-3 mb-6">
                           <label className="text-[11px] text-white/40">{lang === 'zh' ? '选择分辨率' : 'Resolution'}</label>
                           <div className="flex gap-2">
@@ -2064,36 +2105,66 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                       )}
 
                       {/* 尺寸预览 */}
-                      <div className="space-y-3 mb-6">
-                        <label className="text-[11px] text-white/40">{lang === 'zh' ? '尺寸' : 'Size'}</label>
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 bg-[#121212] rounded-lg px-3 py-2 flex items-center justify-between">
-                            <span className="text-white/30 text-xs">W</span>
-                            <span className="text-xs font-mono text-white/80">{currentDimensions.w || 'Auto'}</span>
+                      {!isMjModel && (
+                        <div className="space-y-3 mb-6">
+                          <label className="text-[11px] text-white/40">{lang === 'zh' ? '尺寸' : 'Size'}</label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 bg-[#121212] rounded-lg px-3 py-2 flex items-center justify-between">
+                              <span className="text-white/30 text-xs">W</span>
+                              <span className="text-xs font-mono text-white/80">{currentDimensions.w || 'Auto'}</span>
+                            </div>
+                            <div className="text-white/20 shrink-0"><X size={12}/></div>
+                            <div className="flex-1 bg-[#121212] rounded-lg px-3 py-2 flex items-center justify-between">
+                              <span className="text-white/30 text-xs">H</span>
+                              <span className="text-xs font-mono text-white/80">{currentDimensions.h || 'Auto'}</span>
+                            </div>
+                            <span className="text-white/30 text-[10px] font-bold shrink-0 ml-1">PX</span>
                           </div>
-                          <div className="text-white/20 shrink-0"><X size={12}/></div>
-                          <div className="flex-1 bg-[#121212] rounded-lg px-3 py-2 flex items-center justify-between">
-                            <span className="text-white/30 text-xs">H</span>
-                            <span className="text-xs font-mono text-white/80">{currentDimensions.h || 'Auto'}</span>
-                          </div>
-                          <span className="text-white/30 text-[10px] font-bold shrink-0 ml-1">PX</span>
                         </div>
-                      </div>
+                      )}
+
+                      {/* MJ 的模式和版本选择 */}
+                      {isMjModel && (
+                        <div className="space-y-6 mb-6">
+                          <div className="space-y-3">
+                            <label className="text-[11px] text-white/40">{lang === 'zh' ? 'MJ 模式' : 'Mode'}</label>
+                            <div className="flex bg-[#121212] rounded-lg p-1 h-[32px]">
+                              {['relax', 'fast', 'turbo'].map(m => (
+                                <button key={m} onClick={(e) => { e.stopPropagation(); setMjMode(m); }} className={`flex-1 rounded-md text-[11px] transition-colors ${mjMode === m ? 'bg-[#2c2c2e] text-white shadow-sm' : 'text-white/40 hover:text-white'}`}>
+                                  {m === 'relax' ? 'Relax' : m === 'fast' ? 'Fast' : 'Turbo'}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="space-y-3">
+                            <label className="text-[11px] text-white/40">{lang === 'zh' ? 'MJ 版本' : 'Version'}</label>
+                            <div className="flex bg-[#121212] rounded-lg p-1 h-[32px] overflow-x-auto custom-scrollbar">
+                              {MJ_VERSIONS.map(v => (
+                                <button key={v.id} onClick={(e) => { e.stopPropagation(); setMjVersion(v.id); }} className={`flex-1 min-w-[50px] rounded-md text-[11px] transition-colors whitespace-nowrap px-2 ${mjVersion === v.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'text-white/40 hover:text-white'}`}>
+                                  {v.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* 质量 & 数量 */}
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-3">
-                          <label className="text-[11px] text-white/40 block h-[16px] leading-[16px]">{lang === 'zh' ? '生成质量' : 'Quality'}</label>
-                          <div className="flex bg-[#121212] rounded-lg p-1 h-[32px]">
-                            {QUALITIES.map(q => (
-                              <button key={q.id} onClick={(e) => { e.stopPropagation(); setQuality(q.id); }} className={`flex-1 rounded-md text-[11px] transition-colors ${quality === q.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'text-white/40 hover:text-white'}`}>
-                                {q.label[lang]}
-                              </button>
-                            ))}
+                        {!isMjModel && (
+                          <div className="space-y-3">
+                            <label className="text-[11px] text-white/40 block h-[16px] leading-[16px]">{lang === 'zh' ? '生成质量' : 'Quality'}</label>
+                            <div className="flex bg-[#121212] rounded-lg p-1 h-[32px]">
+                              {QUALITIES.map(q => (
+                                <button key={q.id} onClick={(e) => { e.stopPropagation(); setQuality(q.id); }} className={`flex-1 rounded-md text-[11px] transition-colors ${quality === q.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'text-white/40 hover:text-white'}`}>
+                                  {q.label[lang]}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
                         
-                        <div className="space-y-3">
+                        <div className={`space-y-3 ${isMjModel ? 'col-span-2' : ''}`}>
                           <label className="text-[11px] text-white/40 block h-[16px] leading-[16px]">{lang === 'zh' ? '生成数量' : 'Count'}</label>
                           <div className="flex items-center justify-between bg-[#121212] rounded-lg p-1 h-[32px]">
                             <button 
@@ -2135,45 +2206,70 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                     ref={modelBtnRef}
                     onClick={() => setShowModel(!showModel)}
                     className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${showModel ? 'bg-[#2a2a2e] text-white shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
-                    title={isNanoBanana2 ? 'Nano Banana 2' : (model === 'gpt-image-2-high' ? 'GPT Image 2 High' : 'GPT Image 2')}
+                    title={isNanoBanana2 ? 'Nano Banana 2' : (isMjModel ? 'Midjourney' : (model === 'gpt-image-2-high' ? 'GPT Image 2 High' : (model === 'gpt-image-2-pro' ? 'GPT Image 2 Pro' : 'GPT Image 2')))}
                   >
                     {isNanoBanana2 ? (
                       <span className="text-base">🍌</span>
+                    ) : isMjModel ? (
+                      <img src={MidjourneyIcon} alt="MJ" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} />
                     ) : (
                       <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} style={{ filter: 'brightness(0) invert(1)' }} />
                     )}
                   </button>
                   {showModel && (
-                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[240px] bg-[#1c1c1e] border border-white/5 rounded-xl shadow-2xl p-1.5 animate-in slide-in-from-bottom-2 fade-in duration-200">
-                      <button onClick={() => { setModel('gpt-image-2'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
-                        <div className="flex items-center gap-2">
-                          <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
-                          <span className={model === 'gpt-image-2' ? "text-[#00C4B6]" : ""}>GPT Image 2</span>
-                        </div>
-                        {model === 'gpt-image-2' && <Check size={14} className="text-[#00C4B6]" />}
-                      </button>
-                      <button onClick={() => { setModel('gpt-image-2-high'); setShowModel(false); }} className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${model === 'gpt-image-2-high' ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}>
-                        <div className="flex items-center gap-2">
-                          <img src={ChatGptIcon} alt="GPT" className="w-4 h-4 opacity-100" style={{ filter: 'brightness(0) invert(1)' }} />
-                          <span className={model === 'gpt-image-2-high' ? "text-[#00C4B6]" : ""}>GPT Image 2 High</span>
-                        </div>
-                        {model === 'gpt-image-2-high' && <Check size={14} className="text-[#00C4B6]" />}
-                      </button>
-                      <button
-                        onClick={() => {
-                          // 切到 Nano Banana 2 时：默认选中 1K 档；实际 model id 在提交时按分辨率映射
-                          if (!isNanoBanana2) setResLevel('1K');
-                          setModel('nano-banana-2');
-                          setShowModel(false);
-                        }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-[13px] rounded-lg ${isNanoBanana2 ? 'text-white bg-[#2a2a2e]' : 'text-white/40 hover:bg-white/5'}`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-base">🍌</span>
-                          <span className={isNanoBanana2 ? 'text-[#FBBF24]' : ''}>Nano Banana 2</span>
-                        </div>
-                        {isNanoBanana2 && <Check size={14} className="text-[#FBBF24]" />}
-                      </button>
+                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[280px] bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200">
+                      {[
+                          { id: 'gpt-image-2', name: 'GPT Image 2' },
+                          { id: 'gpt-image-2-high', name: 'GPT Image 2 High', tag: '高分辨率' },
+                          { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', tag: '快速', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
+                          { id: 'nano-banana-2', name: 'Nano Banana 2', badge: 'NEW', minQuota: NANO_BANANA_2_COST_PER_IMAGE, desc: '1K/2K/4K · 30 积分/张' },
+                          { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
+                      ].map(m => {
+                        const disabled = m.minQuota !== undefined && quota < m.minQuota;
+                        const isActive = model === m.id || (m.id === 'nano-banana-2' && isNanoBanana2);
+                        return (
+                          <button
+                            key={m.id}
+                            disabled={disabled}
+                            onClick={() => {
+                              if (disabled) {
+                                showToast(`积分不足 ${m.minQuota}，无法使用 ${m.name}`, 'error');
+                                return;
+                              }
+                              if (m.id === 'nano-banana-2' && !isNanoBanana2) {
+                                setResLevel('1K');
+                              }
+                              setModel(m.id);
+                              setShowModel(false);
+                            }}
+                            className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isActive ? 'bg-white/[0.03]' : ''} ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {m.id === 'midjourney' ? (
+                                <img src={MidjourneyIcon} className="w-5 h-5" alt="midjourney" />
+                              ) : m.id === 'nano-banana-2' ? (
+                                <span className="text-lg leading-none">🍌</span>
+                              ) : (
+                                <img src={ChatGptIcon} className="w-5 h-5 brightness-0 invert" alt="gpt" />
+                              )}
+                              <div className="flex flex-col items-start gap-0.5">
+                                <div className="flex items-center gap-1.5">
+                                  <div className="text-xs font-bold text-white/80">{m.name}</div>
+                                  {m.tag && (
+                                    <span className={`text-[9px] font-bold px-1.5 py-[2px] rounded-md text-white shadow-sm border border-white/10 ${m.id === 'gpt-image-2-pro' ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-blue-500 to-indigo-500'}`}>
+                                      {m.tag}
+                                    </span>
+                                  )}
+                                </div>
+                                {disabled && (
+                                  <div className="text-[10px] text-white/40">积分不足</div>
+                                )}
+                              </div>
+                            </div>
+                            {isActive && <Check size={14} className="text-[#00C4B6]" />}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -4068,11 +4164,11 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                           <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)}></div>
                           <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
                             {[
-                              { id: 'gpt-image-2', name: 'GPT Image 2' },
-                              { id: 'gpt-image-2-high', name: 'GPT Image 2 High' },
-                              { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
-                              { id: 'nano-banana-2', name: 'Nano Banana 2', badge: 'NEW', minQuota: NANO_BANANA_2_COST_PER_IMAGE, desc: '1K/2K/4K · 30 积分/张' },
-                              { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
+                                { id: 'gpt-image-2', name: 'GPT Image 2' },
+                                { id: 'gpt-image-2-high', name: 'GPT Image 2 High', tag: '高分辨率' },
+                                { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', tag: '快速', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
+                                { id: 'nano-banana-2', name: 'Nano Banana 2', badge: 'NEW', minQuota: NANO_BANANA_2_COST_PER_IMAGE, desc: '1K/2K/4K · 30 积分/张' },
+                                { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
                             ].map(m => {
                               const disabled = m.minQuota !== undefined && quota < m.minQuota;
                               const isActive = model === m.id || (m.id === 'nano-banana-2' && isNanoBanana2);
@@ -4105,6 +4201,11 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                                     <div className="flex flex-col items-start gap-0.5">
                                       <div className="flex items-center gap-1.5">
                                         <div className="text-xs font-bold text-white/80">{m.name}</div>
+                                        {m.tag && (
+                                          <span className={`text-[9px] font-bold px-1.5 py-[2px] rounded-md text-white shadow-sm border border-white/10 ${m.id === 'gpt-image-2-pro' ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-blue-500 to-indigo-500'}`}>
+                                            {m.tag}
+                                          </span>
+                                        )}
                                       </div>
                                       {disabled && (
                                         <div className="text-[10px] text-white/40">积分不足</div>
