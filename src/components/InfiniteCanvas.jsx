@@ -10,7 +10,7 @@ const NODE_DEFAULT_H = 320;
 const NODE_GAP = 40;
 const NODE_MIN_SIZE = 60;
 
-const getNewNodePositions = (count, existingNodes, canvasCenter) => {
+const getNewNodePositions = (count, existingNodes, canvasCenter, nodeW = NODE_DEFAULT_W, nodeH = NODE_DEFAULT_H) => {
   const positions = [];
 
   // 查找现有节点中最靠右和最靠下的位置
@@ -19,7 +19,7 @@ const getNewNodePositions = (count, existingNodes, canvasCenter) => {
 
   existingNodes.forEach(n => {
     hasNodes = true;
-    maxX = Math.max(maxX, n.x + (n.w || NODE_DEFAULT_W));
+    maxX = Math.max(maxX, n.x + (n.w || nodeW));
   });
 
   // 策略：如果有节点，我们在最右侧节点的右边生成（保持一定的横向间距）
@@ -30,15 +30,15 @@ const getNewNodePositions = (count, existingNodes, canvasCenter) => {
   if (hasNodes && maxX > canvasCenter.x - 200) {
     startX = maxX + NODE_GAP;
   } else {
-    startX = canvasCenter.x - ((cols * (NODE_DEFAULT_W + NODE_GAP)) / 2);
+    startX = canvasCenter.x - ((cols * (nodeW + NODE_GAP)) / 2);
   }
 
-  const startY = canvasCenter.y - ((Math.ceil(count / cols) * (NODE_DEFAULT_H + NODE_GAP)) / 2);
+  const startY = canvasCenter.y - ((Math.ceil(count / cols) * (nodeH + NODE_GAP)) / 2);
 
   for (let i = 0; i < count; i++) {
     positions.push({
-      x: startX + (i % cols) * (NODE_DEFAULT_W + NODE_GAP),
-      y: startY + Math.floor(i / cols) * (NODE_DEFAULT_H + NODE_GAP)
+      x: startX + (i % cols) * (nodeW + NODE_GAP),
+      y: startY + Math.floor(i / cols) * (nodeH + NODE_GAP)
     });
   }
   return positions;

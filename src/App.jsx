@@ -1545,7 +1545,16 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       if (matches.length > 0) {
         const completedMatch = matches.find(m => m.image);
         if (completedMatch) {
-          taskManagerRef.current.completeTask(localTask.id, completedMatch.image);
+          // 如果是 MJ 任务，尝试收集所有 4 张图
+          const isMj = localTask.metadata?.model === 'midjourney';
+          if (isMj) {
+            const allImages = matches.filter(m => m.image).map(m => m.image).slice(0, 4);
+            if (allImages.length >= 1) {
+              taskManagerRef.current.completeTask(localTask.id, allImages);
+            }
+          } else {
+            taskManagerRef.current.completeTask(localTask.id, completedMatch.image);
+          }
         }
       } else if (Date.now() - localTask.startTime > 30 * 60 * 1000) {
         taskManagerRef.current.failTask(localTask.id, 'Timeout: Task not found on server');
@@ -1580,7 +1589,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
             ...node,
             progress: task.progress || node.progress,
             status: newStatus,
-            image: task.result || node.image,
+            image: Array.isArray(task.result) ? (task.result[node.slotIndex || 0] || node.image) : (task.result || node.image),
             error: task.error || node.error
           };
         }
@@ -1649,7 +1658,9 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     const n = isMjModel ? (numImages || 1) * 4 : (numImages || 1);
     // 动态获取当前画布视角的中心点
     const center = canvasRef.current?.getViewportCenter() || { x: 500, y: 300 };
-    const positions = getNewNodePositions(n, canvasNodes, center);
+    const nodeW = 512;
+    const nodeH = currentDimensions.w && currentDimensions.h ? 512 * (currentDimensions.h / currentDimensions.w) : 512;
+    const positions = getNewNodePositions(n, canvasNodes, center, nodeW, nodeH);
     const newNodes = [];
     for (let i = 0; i < n; i++) {
       newNodes.push({
@@ -1657,8 +1668,8 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
         taskId: taskId,
         x: positions[i].x,
         y: positions[i].y,
-        w: 512,
-        h: currentDimensions.w && currentDimensions.h ? 512 * (currentDimensions.h / currentDimensions.w) : 512,
+        w: nodeW,
+        h: nodeH,
         image: null,
         referImages: [...referImages],
         prompt: prompt,
@@ -1771,9 +1782,9 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
           if (statusData.status === 'SUCCESS') {
             clearInterval(progressInterval);
             const imageUrl = statusData.image_url;
-            const imageUrls = statusData.image_urls || [imageUrl];
+            const imageUrls = statusData.image_urls || (imageUrl ? [imageUrl] : []);
 
-            taskManager.completeTask(taskId, imageUrl);
+            taskManager.completeTask(taskId, imageUrls.length > 1 ? imageUrls : imageUrl);
             // 将每张图片分配到对应的画布节点
             setCanvasNodes(prev => prev.map(node => {
               if (node.taskId !== taskId) return node;
