@@ -53,6 +53,47 @@ def compute_cost(pricing: Dict[str, Any], *, n: int = 1, size: Optional[str] = N
     return int(pricing.get("cost", 1))
 
 
+def compute_token_cost(pricing: Dict[str, Any], usage: Dict[str, int]) -> int:
+    """根据实际 Token 用量计算积分消耗
+
+    pricing 示例: {"mode": "per_token", "input_m_cost": 5, "output_m_cost": 25, "exchange_rate": 100}
+    exchange_rate: 1 美元 = 多少积分（默认 100）
+    """
+    if (pricing or {}).get("mode") != "per_token":
+        return int(pricing.get("cost", 1))
+
+    prompt_tokens = usage.get("prompt_tokens", 0)
+    completion_tokens = usage.get("completion_tokens", 0)
+
+    # 解析缓存详情（兼容 OpenAI / Anthropic 格式）
+    details = usage.get("prompt_tokens_details") or {}
+    cache_hit_tokens = max(details.get("cached_tokens", 0), details.get("cache_read_tokens", 0))
+    cache_write_tokens = details.get("cache_creation_tokens", 0)
+    
+    # 基础 Input Token = 总 Input - 命中部分 - 新建缓存部分
+    base_input_tokens = max(0, prompt_tokens - cache_hit_tokens - cache_write_tokens)
+
+    # 价格提取
+    input_price = float(pricing.get("input_m_cost", 0))
+    output_price = float(pricing.get("output_m_cost", 0))
+    cache_write_price = float(pricing.get("cache_write_m_cost") if pricing.get("cache_write_m_cost") is not None else input_price)
+    cache_hit_price = float(pricing.get("cache_hit_m_cost", 0))
+    exchange_rate = float(pricing.get("exchange_rate", 100))
+
+    # 计算美金总额
+    total_dollars = (
+        (base_input_tokens / 1_000_000.0) * input_price + 
+        (completion_tokens / 1_000_000.0) * output_price +
+        (cache_write_tokens / 1_000_000.0) * cache_write_price +
+        (cache_hit_tokens / 1_000_000.0) * cache_hit_price
+    )
+    total_quota = total_dollars * exchange_rate
+
+    import math
+    # 积分是整数，向上取整保证至少扣除对应的最小份额
+    return max(1, math.ceil(total_quota))
+
+
 def resolve_model_cost(model_id: str, *, n: int = 1, size: Optional[str] = None,
                        mode: Optional[str] = None, default: int = 1) -> int:
     """handler 的便利方法：查 registry 后算价；模型不存在时返回 default"""

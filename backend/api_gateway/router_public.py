@@ -10,8 +10,13 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
+import json
+import httpx
+import uuid
+import time
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, BackgroundTasks
+from fastapi.responses import StreamingResponse, JSONResponse
 
 from . import storage
 from .auth import AuthedKey, require_api_key
@@ -132,3 +137,147 @@ def images_edits(request: Request, body: Dict[str, Any] = Body(...), authed: Aut
 @router.post("/videos")
 def videos(request: Request, body: Dict[str, Any] = Body(...), authed: AuthedKey = Depends(require_api_key)):
     return _call(authed, body, request)
+
+
+# ---------- /v1/chat/completions ----------
+
+@router.post("/chat/completions")
+async def chat_completions(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    body: Dict[str, Any] = Body(...),
+    authed: AuthedKey = Depends(require_api_key)
+):
+    model_id = body.get("model")
+    if not model_id:
+        raise HTTPException(400, "missing 'model'")
+    _ensure_model_allowed(authed, model_id)
+
+    if limiter and request:
+        client_ip = get_client_ip(request)
+        limiter.check("api_key", authed.id, *API_KEY_LIMIT, "API requests too frequent")
+        limiter.check("api_ip", client_ip, *API_IP_LIMIT, "API requests too frequent")
+
+    model = storage.get_model(model_id)
+    if not model or not model.get("enabled", True):
+        raise HTTPException(404, f"model '{model_id}' not found or disabled")
+
+    upstream_key = model.get("upstream_api_key") or ""
+    config = model.get("config") or {}
+    # 默认调用 OpenAI 官方接口，也可通过 config 配置上游 proxy (如 tuzi)
+    endpoint = config.get("endpoint", "https://api.openai.com/v1/chat/completions")
+    upstream_model = config.get("upstream_model") or model_id
+    
+    body["model"] = upstream_model
+    pricing = model.get("pricing") or {"mode": "per_token", "cost": 1}
+
+    headers = {
+        "Authorization": f"Bearer {upstream_key}",
+        "Content-Type": "application/json",
+    }
+    
+    from .pricing import compute_token_cost
+    from . import deps
+
+    start_t = time.time()
+
+    def finalize_usage(usage_data: dict, status: str = "success", error_msg: str = ""):
+        cost = 0
+        if usage_data:
+            cost = compute_token_cost(pricing, usage_data)
+            if cost > 0:
+                try:
+                    token_info = f" ({usage_data.get('total_tokens', 0)} Tk)" if usage_data.get("total_tokens") else ""
+                    deps.deduct_quota(authed.username, cost, model=model_id, reason=f"API调用消耗{token_info}")
+                    storage.record_key_usage(authed.id, cost)
+                except Exception as e:
+                    print(f"Chat completion cost deduct failed: {e}")
+        
+        # 提取 prompt 用于日志展示
+        messages = body.get("messages", [])
+        prompt_text = "chat completion"
+        if messages and isinstance(messages, list):
+            last_msg = messages[-1]
+            if isinstance(last_msg, dict) and "content" in last_msg:
+                content = last_msg["content"]
+                if isinstance(content, str):
+                    prompt_text = content[:200]
+                elif isinstance(content, list):
+                    prompt_text = "multimodal input"
+
+        # 记录 API log
+        log_entry = {
+            "id": uuid.uuid4().hex,
+            "username": authed.username,
+            "key_id": authed.id,
+            "model_id": model_id,
+            "source": "api",
+            "prompt": prompt_text,
+            "quota_cost": cost,
+            "usage": usage_data,
+            "status": status,
+            "error_msg": error_msg,
+            "created_at": time.time(),
+            "duration": round(time.time() - start_t, 3)
+        }
+        storage.append_log(log_entry)
+
+    is_stream = body.get("stream", False)
+    if is_stream:
+        # 要求流式返回提供 usage 数据（兼容部分现代上游）
+        body["stream_options"] = {"include_usage": True}
+
+    client = httpx.AsyncClient(timeout=300.0)
+
+    if not is_stream:
+        try:
+            resp = await client.post(endpoint, json=body, headers=headers)
+        except Exception as e:
+            finalize_usage(None, status="failed", error_msg=str(e))
+            raise HTTPException(502, f"Upstream error: {e}")
+            
+        if resp.status_code != 200:
+            err = resp.text
+            finalize_usage(None, status="failed", error_msg=err)
+            raise HTTPException(resp.status_code, err)
+            
+        data = resp.json()
+        usage = data.get("usage")
+        background_tasks.add_task(finalize_usage, usage)
+        return JSONResponse(content=data)
+        
+    else:
+        async def stream_generator():
+            usage_data = None
+            try:
+                async with client.stream("POST", endpoint, json=body, headers=headers) as resp:
+                    if resp.status_code != 200:
+                        text = await resp.aread()
+                        finalize_usage(None, status="failed", error_msg=text.decode())
+                        yield f"data: {json.dumps({'error': text.decode()})}\n\n"
+                        return
+
+                    async for chunk in resp.aiter_lines():
+                        if chunk:
+                            yield chunk + "\n"
+                            if chunk.startswith("data: ") and chunk != "data: [DONE]":
+                                try:
+                                    chunk_data = json.loads(chunk[6:])
+                                    if "usage" in chunk_data and chunk_data["usage"]:
+                                        usage_data = chunk_data["usage"]
+                                except Exception:
+                                    pass
+            except Exception as e:
+                finalize_usage(None, status="failed", error_msg=str(e))
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                return
+            finally:
+                await client.aclose()
+                if usage_data:
+                    finalize_usage(usage_data)
+                elif usage_data is None:
+                    # 如果正常结束但没拿到 usage_data，我们没法计费，但我们依然记录一条日志
+                    # 我们判断如果之前没有异常跳出，那就算 success
+                    finalize_usage(None)
+
+        return StreamingResponse(stream_generator(), media_type="text/event-stream")

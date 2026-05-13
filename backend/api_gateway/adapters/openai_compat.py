@@ -22,8 +22,8 @@ class OpenAICompatAdapter(BaseAdapter):
     @classmethod
     def describe(cls) -> Dict[str, Any]:
         return {
-            "display_name": "OpenAI-compatible /images/generations",
-            "supports": {"image": True, "video": False, "async": False},
+            "display_name": "OpenAI-compatible (/images or /chat)",
+            "supports": {"image": True, "video": False, "text": True, "async": False},
             "config_fields": [
                 {"key": "upstream_model", "type": "string", "required": True,
                  "default": "gpt-image-1"},

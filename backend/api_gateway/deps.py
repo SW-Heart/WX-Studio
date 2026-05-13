@@ -41,10 +41,10 @@ def set_deps(*,
     get_admin_user = get_admin_user_dep
 
 
-def deduct_quota(username: str, amount: int, model: str = None) -> int:
+def deduct_quota(username: str, amount: int, model: str = None, reason: str = None) -> int:
     if _deduct_quota is None:
         raise RuntimeError("api_gateway.deps not initialized")
-    return _deduct_quota(username, amount, source="api", model=model)
+    return _deduct_quota(username, amount, source="api", model=model, reason_override=reason)
 
 
 def refund_quota(username: str, amount: int) -> None:

@@ -77,6 +77,7 @@ const PricingEditor = ({ value, onChange }) => {
           <option value="per_image">per_image — 按 n 计价</option>
           <option value="tiered_pixels">tiered_pixels — 按分辨率分级</option>
           <option value="by_mode">by_mode — 按 mode 分级（MJ）</option>
+          <option value="per_token">per_token — 按 Token 计费</option>
         </select>
       </div>
 
@@ -85,6 +86,35 @@ const PricingEditor = ({ value, onChange }) => {
           <label className="text-[11px] text-white/40 mb-1 block">cost (credits)</label>
           <input type="number" value={v.cost ?? 1} onChange={e => update({ cost: parseInt(e.target.value || '1', 10) })}
                  className="w-full h-9 bg-[#0a0a0a] border border-white/10 rounded px-2 text-xs text-white" />
+        </div>
+      )}
+      {v.mode === 'per_token' && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[11px] text-white/40 mb-1 block">Input $/M Tokens</label>
+            <input type="number" step="0.01" value={v.input_m_cost ?? 0} onChange={e => update({ input_m_cost: parseFloat(e.target.value || '0') })}
+                   className="w-full h-8 bg-[#0a0a0a] border border-white/10 rounded px-2 text-xs text-white" />
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 mb-1 block">Output $/M Tokens</label>
+            <input type="number" step="0.01" value={v.output_m_cost ?? 0} onChange={e => update({ output_m_cost: parseFloat(e.target.value || '0') })}
+                   className="w-full h-8 bg-[#0a0a0a] border border-white/10 rounded px-2 text-xs text-white" />
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 mb-1 block">Cache Write $/M</label>
+            <input type="number" step="0.01" value={v.cache_write_m_cost ?? 0} onChange={e => update({ cache_write_m_cost: parseFloat(e.target.value || '0') })}
+                   className="w-full h-8 bg-[#0a0a0a] border border-white/10 rounded px-2 text-xs text-white" />
+          </div>
+          <div>
+            <label className="text-[11px] text-white/40 mb-1 block">Cache Hit $/M</label>
+            <input type="number" step="0.01" value={v.cache_hit_m_cost ?? 0} onChange={e => update({ cache_hit_m_cost: parseFloat(e.target.value || '0') })}
+                   className="w-full h-8 bg-[#0a0a0a] border border-white/10 rounded px-2 text-xs text-white" />
+          </div>
+          <div className="col-span-2">
+            <label className="text-[11px] text-white/40 mb-1 block">汇率 ($1=?积分)</label>
+            <input type="number" value={v.exchange_rate ?? 100} onChange={e => update({ exchange_rate: parseInt(e.target.value || '100', 10) })}
+                   className="w-full h-8 bg-[#0a0a0a] border border-white/10 rounded px-2 text-xs text-white" />
+          </div>
         </div>
       )}
       {v.mode === 'tiered_pixels' && renderTiers()}
@@ -232,6 +262,7 @@ const ModelModal = ({ isOpen, onClose, token, lang, adapters, initial, onSaved }
                 <div className="flex gap-1 mt-1">
                   {schema.supports.image && <Badge tone="info">image</Badge>}
                   {schema.supports.video && <Badge tone="info">video</Badge>}
+                  {schema.supports.text && <Badge tone="info">text</Badge>}
                   {schema.supports.async && <Badge tone="warn">async</Badge>}
                 </div>
               )}
@@ -266,6 +297,9 @@ const ModelModal = ({ isOpen, onClose, token, lang, adapters, initial, onSaved }
               </label>
               <label className="flex items-center gap-2 text-xs text-white/70">
                 <input type="checkbox" checked={Boolean(form.supports?.video)} onChange={e => setForm({ ...form, supports: { ...(form.supports || {}), video: e.target.checked } })} className="accent-[#FF8A3D]" /> video
+              </label>
+              <label className="flex items-center gap-2 text-xs text-white/70">
+                <input type="checkbox" checked={Boolean(form.supports?.text)} onChange={e => setForm({ ...form, supports: { ...(form.supports || {}), text: e.target.checked } })} className="accent-[#FF8A3D]" /> text
               </label>
             </div>
           </div>
@@ -457,6 +491,7 @@ const AdminModelsPage = ({ token, lang }) => {
                       <div className="flex gap-1">
                         {m.supports?.image && <Badge>image</Badge>}
                         {m.supports?.video && <Badge>video</Badge>}
+                        {m.supports?.text && <Badge>text</Badge>}
                       </div>
                     </td>
                     <td className="px-4 py-2.5">
@@ -466,7 +501,9 @@ const AdminModelsPage = ({ token, lang }) => {
                           ? Object.entries(m.pricing.by_mode || {}).map(([k, v]) => `${k}=${v}`).join(' / ')
                           : m.pricing?.mode === 'tiered_pixels'
                             ? (m.pricing.tiers || []).map(t => `${t.max_pixels || '∞'}→${t.cost}`).join(' / ')
-                            : (m.pricing?.cost ?? '?')}
+                            : m.pricing?.mode === 'per_token'
+                              ? `In:$${m.pricing.input_m_cost}/M Out:$${m.pricing.output_m_cost}/M`
+                              : (m.pricing?.cost ?? '?')}
                       </div>
                     </td>
                     <td className="px-4 py-2.5">

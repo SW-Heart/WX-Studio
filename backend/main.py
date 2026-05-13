@@ -337,7 +337,7 @@ db_lock = threading.RLock()
 # quota_logs 最大保留条数，超过从头裁剪
 MAX_QUOTA_LOGS = 10000
 
-def deduct_quota_atomic(username: str, amount: int = 1, source: str = "platform", model: str = None) -> int:
+def deduct_quota_atomic(username: str, amount: int = 1, source: str = "platform", model: str = None, reason_override: str = None) -> int:
     """
     原子性预扣分 + 记日志：检查配额 → 扣除 → 写日志 → 一次 save_db。
     source: "platform" 表示平台创作消耗, "api" 表示 API 调用消耗
@@ -356,7 +356,7 @@ def deduct_quota_atomic(username: str, amount: int = 1, source: str = "platform"
         # 同一把锁内写日志，避免二次 load_db + save_db
         if "quota_logs" not in db:
             db["quota_logs"] = []
-        reason = "API调用消耗" if source == "api" else "创作消耗"
+        reason = reason_override if reason_override else ("API调用消耗" if source == "api" else "创作消耗")
         db["quota_logs"].append({
             "id": str(uuid.uuid4()),
             "username": username,

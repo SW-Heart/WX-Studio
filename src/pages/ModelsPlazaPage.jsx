@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import ChatGptIcon from '../assets/ChatGPT.svg';
 import MidjourneyIcon from '../assets/midjourney.svg';
+import ClaudeIcon from '../assets/Claude.svg';
+import GeminiIcon from '../assets/gemini.svg';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 const authHeaders = (token) => ({ 'Authorization': `Bearer ${token}` });
@@ -17,6 +19,14 @@ const describePricing = (pricing, lang) => {
   const mode = pricing.mode || 'per_call';
   if (mode === 'per_call') return [`每次调用 ${pricing.cost ?? '?'} 积分`];
   if (mode === 'per_image') return [`每张 ${pricing.cost ?? '?'} 积分（按 n 计算）`];
+  if (mode === 'per_token') {
+    const lines = [
+      `输入: ¥${pricing.input_m_cost || 0} / M Tokens`,
+      `输出: ¥${pricing.output_m_cost || 0} / M Tokens`
+    ];
+    if (pricing.cache_hit_m_cost !== undefined) lines.push(`缓存命中: ¥${pricing.cache_hit_m_cost} / M Tokens`);
+    return lines;
+  }
   if (mode === 'by_mode') {
     return Object.entries(pricing.by_mode || {}).map(([k, v]) => `${k} 模式 · ${v} 积分/次`);
   }
@@ -35,6 +45,12 @@ const ModelLogo = ({ modelId, size = 20 }) => {
   if (modelId === 'midjourney') {
     return <img src={MidjourneyIcon} className={`w-${size/4} h-${size/4}`} style={{width: size, height: size}} alt="MJ" />;
   }
+  if (modelId?.includes('claude')) {
+    return <img src={ClaudeIcon} style={{width: size, height: size}} alt="Claude" />;
+  }
+  if (modelId?.includes('gemini')) {
+    return <img src={GeminiIcon} style={{width: size, height: size}} alt="Gemini" />;
+  }
   if (modelId?.includes('banana')) {
     return <span style={{fontSize: size * 0.8, lineHeight: 1}}>🍌</span>;
   }
@@ -43,6 +59,16 @@ const ModelLogo = ({ modelId, size = 20 }) => {
 
 const sampleBody = (model) => {
   const body = { model: model.id };
+  if (model.supports?.text) {
+    body.messages = [{ role: 'user', content: '你好' }];
+    for (const p of model.params_schema || []) {
+      if (p.name === 'model' || p.name === 'messages') continue;
+      if (p.required || p.example !== undefined) {
+        body[p.name] = p.example ?? p.default;
+      }
+    }
+    return body;
+  }
   for (const p of model.params_schema || []) {
     if (p.name === 'model') continue;
     if (p.required || p.example !== undefined) {
@@ -59,7 +85,10 @@ const sampleBody = (model) => {
   return body;
 };
 
-const endpointFor = (model) => model.supports?.video ? '/v1/videos' : '/v1/images/generations';
+const endpointFor = (model) => {
+  if (model.supports?.text) return '/v1/chat/completions';
+  return model.supports?.video ? '/v1/videos' : '/v1/images/generations';
+};
 
 // ---------- 中文参数描述映射（仅覆盖通用字段，size 等模型特有的由后端返回） ----------
 const zhParamDesc = {
@@ -69,6 +98,11 @@ const zhParamDesc = {
   n: '生成数量（1-10），每张独立计费',
   quality: '质量参数（可选），透传给上游模型',
   mode: '速度模式，影响价格（见计费规则）',
+  size: '输出尺寸。若超过 4.5M 像素将触发第二档计费（在分级计费模式下）。',
+  messages: '对话历史数组，包含角色和内容',
+  stream: '是否开启流式返回 (Server-Sent Events)',
+  temperature: '控制生成文本的随机性 (0.0 - 2.0)',
+  max_tokens: '限制单次生成的最大 Token 数量',
 };
 
 // ---------- Details Modal (Portal) ----------
@@ -157,7 +191,13 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(model.params_schema || []).map((p) => (
+                  {(model.supports?.text ? [
+                    { name: 'model', type: 'string', required: true, description: '模型 ID（使用卡片上显示的值）' },
+                    { name: 'messages', type: 'array', required: true, description: '消息历史列表，包含 role 和 content' },
+                    { name: 'stream', type: 'boolean', required: false, description: '是否使用 SSE 流式返回' },
+                    { name: 'temperature', type: 'number', required: false, description: '采样温度 (0.0 - 2.0)' },
+                    { name: 'max_tokens', type: 'number', required: false, description: '最大输出 Token 限制' }
+                  ] : (model.params_schema || [])).map((p) => (
                     <tr key={p.name} className="border-t border-white/5">
                       <td className="px-3 py-2 align-top">
                         <code className="text-white font-mono">{p.name}</code>
@@ -191,14 +231,25 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
 
           <section>
             <h4 className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2 flex items-center gap-1.5"><ArrowRight size={11} /> 返回格式</h4>
-            <pre className="bg-[#0a0a0a] border border-white/10 rounded-lg p-3 text-[11px] text-white/70 font-mono overflow-x-auto leading-relaxed whitespace-pre">{`{
+            <pre className="bg-[#0a0a0a] border border-white/10 rounded-lg p-3 text-[11px] text-white/70 font-mono overflow-x-auto leading-relaxed whitespace-pre">{model.supports?.text ? `{
+  "id": "chatcmpl-123",
+  "model": "${model.id}",
+  "choices": [
+    {
+      "index": 0,
+      "message": { "role": "assistant", "content": "你好！" },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
+}` : `{
   "created": 1710000000,
   "model": "${model.id}",
   "data": [ { "url": "https://..." } ],
   "usage": { "quota_cost": ${model.pricing?.cost || 1}, "quota_remaining": 99 }
 }`}</pre>
             <p className="text-[10px] text-white/50 mt-2 leading-relaxed">
-              ⏱ 该接口为同步调用（服务端内部完成轮询），响应时间取决于模型复杂度，通常 30~180 秒。请设置足够的超时时间（建议 ≥ 300s）。
+              {model.supports?.text ? '⏱ 支持流式调用（通过传参 stream: true 获取 Server-Sent Events 流数据）。' : '⏱ 该接口为同步调用（服务端内部完成轮询），响应时间取决于模型复杂度，通常 30~180 秒。请设置足够的超时时间（建议 ≥ 300s）。'}
             </p>
           </section>
         </div>
@@ -273,6 +324,7 @@ const ModelsPlazaPage = ({ token, lang }) => {
     return models.filter(m => {
       if (filter === 'image' && !m.supports?.image) return false;
       if (filter === 'video' && !m.supports?.video) return false;
+      if (filter === 'text' && !m.supports?.text) return false;
       if (!q) return true;
       return (m.id + ' ' + (m.display_name || '') + ' ' + (m.description || '')).toLowerCase().includes(q);
     });
@@ -282,6 +334,7 @@ const ModelsPlazaPage = ({ token, lang }) => {
     total: models.length,
     image: models.filter(m => m.supports?.image).length,
     video: models.filter(m => m.supports?.video).length,
+    text: models.filter(m => m.supports?.text).length,
   }), [models]);
 
   const filterBtn = (key, label) => (
@@ -307,7 +360,7 @@ const ModelsPlazaPage = ({ token, lang }) => {
           <button onClick={fetchModels} className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white/60"><RefreshCw size={15} /></button>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 mb-6 mt-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 mt-6">
           <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
             <p className="text-[10px] text-white/40 uppercase tracking-wider">可用模型</p>
             <p className="text-2xl font-bold text-white mt-1">{stats.total}</p>
@@ -320,6 +373,10 @@ const ModelsPlazaPage = ({ token, lang }) => {
             <p className="text-[10px] text-white/40 uppercase tracking-wider flex items-center gap-1"><Film size={10} className="text-red-400" /> 视频</p>
             <p className="text-2xl font-bold text-white mt-1">{stats.video}</p>
           </div>
+          <div className="bg-white/[0.03] border border-white/10 rounded-xl p-4">
+            <p className="text-[10px] text-white/40 uppercase tracking-wider flex items-center gap-1"><Cpu size={10} className="text-blue-400" /> 文本</p>
+            <p className="text-2xl font-bold text-white mt-1">{stats.text}</p>
+          </div>
         </div>
 
         <div className="flex items-center justify-between gap-3 mb-5 flex-wrap">
@@ -327,6 +384,7 @@ const ModelsPlazaPage = ({ token, lang }) => {
             {filterBtn('all', '全部')}
             {filterBtn('image', '图像')}
             {filterBtn('video', '视频')}
+            {filterBtn('text', '文本')}
           </div>
           <div className="relative flex-1 sm:flex-initial min-w-[200px]">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />

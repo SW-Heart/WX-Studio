@@ -146,13 +146,20 @@ const LogsPanel = ({ token, keyId, onClose }) => {
               <tbody>
                 {paged.map(log => (
                   <tr key={log.id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                    <td className="px-4 py-2.5 text-white/60 whitespace-nowrap">{fmtTime(log.started_at)}</td>
-                    <td className="px-4 py-2.5 text-white/80">{log.model}</td>
+                    <td className="px-4 py-2.5 text-white/60 whitespace-nowrap">{fmtTime(log.started_at || log.created_at)}</td>
+                    <td className="px-4 py-2.5 text-white/80">{log.model || log.model_id}</td>
                     <td className="px-4 py-2.5"><Badge tone={log.source === 'api' ? 'info' : 'default'}>{log.source || 'api'}</Badge></td>
                     <td className="px-4 py-2.5 text-right text-[#FF8A3D] font-mono">{log.quota_cost ?? 0}</td>
-                    <td className="px-4 py-2.5 text-right text-white/40">{log.latency ? `${log.latency}s` : '—'}</td>
+                    <td className="px-4 py-2.5 text-right text-white/40">{log.latency ?? log.duration ? `${log.latency ?? log.duration}s` : '—'}</td>
                     <td className="px-4 py-2.5">{log.status === 'success' ? <Badge tone="success">success</Badge> : log.status === 'pending' ? <Badge tone="warn">pending</Badge> : <Badge tone="danger">{log.status}</Badge>}</td>
-                    <td className="px-4 py-2.5 text-white/50 max-w-[200px] truncate" title={log.prompt_preview}>{log.prompt_preview}</td>
+                    <td className="px-4 py-2.5 text-white/50 max-w-[200px] truncate" title={log.prompt_preview || log.prompt}>
+                      {log.usage?.total_tokens ? (
+                        <div className="text-[10px] text-[#8B5CF6] font-mono mb-0.5">
+                          {log.usage.total_tokens} Tk ({log.usage.prompt_tokens} In, {log.usage.completion_tokens} Out)
+                        </div>
+                      ) : null}
+                      {log.prompt_preview || log.prompt}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -21,9 +21,9 @@ const GalleryPage = ({ token, lang }) => {
     { id: 'create', label: { zh: '自由创作', en: 'Create' } }
   ];
 
-  const fetchAllHistory = async () => {
+  const fetchAllHistory = async (isSilent = false) => {
     if (!token) return;
-    setLoading(true);
+    if (!isSilent && history.length === 0) setLoading(true);
     try {
       const data = await fetchUserHistory(token);
       setHistory(data);
@@ -68,7 +68,7 @@ const GalleryPage = ({ token, lang }) => {
   useEffect(() => {
     if (!token) return;
     fetchAllHistory();
-    const interval = setInterval(fetchAllHistory, 5000);
+    const interval = setInterval(() => fetchAllHistory(true), 5000);
     return () => clearInterval(interval);
   }, [token]);
 
