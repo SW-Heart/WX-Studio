@@ -933,7 +933,7 @@ def basic_create(
 
     if not (1 <= n <= 10):
         raise HTTPException(400, "生成数量 n 必须介于 1 和 10 之间")
-    if quality.lower() not in ["auto", "low", "medium", "high", "4k", "hd"]:
+    if quality.lower() not in ["auto", "low", "medium", "high", "1k", "2k", "4k", "hd"]:
         raise HTTPException(400, f"无效的质量参数: {quality}")
         
     # 解析图片列表

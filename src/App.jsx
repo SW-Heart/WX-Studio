@@ -25,6 +25,40 @@ import { PORTRAIT_TEMPLATES, TEMPLATES, TRANSLATIONS } from './config/studioData
 import { getCurrentPageFromLocation, navigateToPage } from './router/routes';
 import { isCompletedHistoryItem, toSecureUrl } from './utils/media';
 import { storage } from './utils/storage';
+import { useAvailableModels, priceFloor } from './hooks/useAvailableModels';
+
+// ==========================================
+// 🎛️ 模型 UI 特征表
+// ==========================================
+// 说明：只有已知"特殊模型"（需要三档分辨率、MJ 版本选择、Pro 数量上限等）在这里登记，
+// 新添加的通用模型不必登记，会走 fallback（单一模型 id + 基础参数）。
+// 「聚合 / 路由型」模型（adapter_type=alias）不需要在这里登记，前端会根据后端返回的
+// route 字段自动渲染档位按钮。
+const MODEL_UI_FEATURES = {
+  'gpt-image-2':       { lockedTo1K: true, maxCount: 50 },
+  'gpt-image-2-high':  { lockedTo1K: false, maxCount: 50 },
+  'gpt-image-2-pro':   { lockedTo1K: false, maxCount: 10, useProEndpoint: true },
+  'midjourney':        { isMj: true, maxCount: 5, imagesPerTask: 4 },
+};
+
+// 把 route 选项值（"1k" / "2k" / "4k"）转成 UI 上的展示标签（"1K" / "2K" / "4K"）
+const fmtRouteOption = (v) => (v || '').toUpperCase();
+
+const isMjId = (id) => id === 'midjourney';
+
+// 根据 id / display_name 推测 logo 图标（用于没有 logo_url 的老模型）
+const ModelInlineIcon = ({ model, size = 16, className = '' }) => {
+  if (model?.logo_url) {
+    return <img src={model.logo_url} style={{ width: size, height: size, objectFit: 'cover', borderRadius: size * 0.2 }} className={className} alt="" />;
+  }
+  const id = model?.id || '';
+  if (id === 'midjourney') return <img src={MidjourneyIcon} style={{ width: size, height: size }} className={className} alt="MJ" />;
+  if (id.includes('banana')) return <span style={{ fontSize: size, lineHeight: 1 }} className={className}>🍌</span>;
+  return <img src={ChatGptIcon} style={{ width: size, height: size }} className={className} alt="GPT" />;
+};
+
+// 模型列表去重（保险起见，理论上后端已经隐藏了非聚合的真实模型）
+const dedupeModelList = (models) => models;
 
 // ==========================================
 // 🎨 LOGO 组件 (图片版)
@@ -860,23 +894,35 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   const [mjMode, setMjMode] = useState('fast');
   const [mjVersion, setMjVersion] = useState('v8.1');
 
+  // 从后端拉取已上架到「无限画布」渠道的模型列表
+  const { models: availableModels } = useAvailableModels(token, 'canvas');
+  const modelList = React.useMemo(() => dedupeModelList(availableModels), [availableModels]);
+  const currentMeta = availableModels.find(m => m.id === model) || null;
+  // 聚合 / 路由型模型：后端给出 { by, options, default }
+  const currentRoute = currentMeta?.route || null;
+
   // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K
-  const lockedTo1K = model === 'gpt-image-2';
+  const lockedTo1K = MODEL_UI_FEATURES[model]?.lockedTo1K;
   useEffect(() => {
     if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
   }, [lockedTo1K, resLevel]);
 
-  // Nano Banana 2
-  const isNanoBanana2 = model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k';
-  const NANO_BANANA_2_COST_PER_IMAGE = 30;
+  // 兼容老 localStorage：如果 model 不在 availableModels 里，说明是旧 id 或被下架的模型，回退到第一个可用模型
+  useEffect(() => {
+    if (!availableModels.length) return;
+    if (!availableModels.find(m => m.id === model)) {
+      setModel(availableModels[0].id);
+    }
+  }, [availableModels.length]); // eslint-disable-line
 
-  // Pro Model
-  const PRO_COST_PER_IMAGE = 22;
+  // 单图基础价来自后端
   const isProModel = model === 'gpt-image-2-pro';
+  const PRO_COST_PER_IMAGE = availableModels.find(m => m.id === 'gpt-image-2-pro')?.pricing?.cost || 22;
 
-  // Midjourney
-  const isMjModel = model === 'midjourney';
-  const MJ_COST_BY_MODE = { relax: 22, fast: 42, turbo: 62 };
+  // Midjourney（按速度档计费）
+  const isMjModel = isMjId(model);
+  const mjPricing = availableModels.find(m => m.id === 'midjourney')?.pricing?.by_mode || { relax: 22, fast: 42, turbo: 62 };
+  const MJ_COST_BY_MODE = mjPricing;
   const MJ_VERSIONS = [
     { id: 'v8.1', label: 'V8.1', sub: '最新' },
     { id: 'v7',   label: 'V7',   sub: '稳定' },
@@ -886,12 +932,25 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   ];
   const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 42;
 
-  // 单张积分价（和后端 pricing 保持一致）
+  // 单张积分价（优先用后端 pricing，保留 gpt-image-2 / high 的内置 fallback）
   const costPerImage = (() => {
-    if (isNanoBanana2) return NANO_BANANA_2_COST_PER_IMAGE;
+    if (isMjModel) return mjCostPerTask;
+    // 通用：后端注册的模型的 cost（per_image / per_call）
+    const meta = availableModels.find(m => m.id === model);
+    const pricing = meta?.pricing;
+    if (pricing) {
+      if (pricing.mode === 'per_call' || pricing.mode === 'per_image') {
+        return Number(pricing.cost) || 1;
+      }
+      if (pricing.mode === 'by_mode') {
+        const vs = Object.values(pricing.by_mode || {}).map(Number).filter(x => !isNaN(x));
+        return vs.length ? Math.min(...vs) : 1;
+      }
+    }
+    // Fallback：维持老模型行为
     if (isProModel) return PRO_COST_PER_IMAGE;
     if (model === 'gpt-image-2-high') return 13;
-    return 7; // gpt-image-2
+    return 7;
   })();
 
   const currentDimensions = calculateSize(aspectRatio, resLevel);
@@ -1097,17 +1156,19 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
     localStorage.setItem('quota', optimisticQuota.toString());
     window.dispatchEvent(new CustomEvent('quota-updated', { detail: { quota: optimisticQuota } }));
 
-    // 直接使用用户在 UI 中选择的 model id（gpt-image-2 / gpt-image-2-high）
-    // Nano Banana 2：按用户选择的分辨率切换到对应的 model id（同家族三档）
+    // 模型 id 直接使用用户当前选择的（前端不做特殊映射）
+    // 聚合模型（带 route）会按用户选的档位把 quality 设成路由值（1k/2k/4k 等）
     let finalModel = model;
-    if (model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k') {
-      if (resLevel === '4K') finalModel = 'nano-banana-2-4k';
-      else if (resLevel === '2K') finalModel = 'nano-banana-2-2k';
-      else finalModel = 'nano-banana-2';
+    let finalQuality = quality;
+    if (currentRoute) {
+      // 默认按 resLevel 派生 quality；若 route_by 不是 quality，则把派生值塞到 ctx 对应字段
+      // 当前后端 route_by 主要是 quality，所以这里直接覆盖 quality。
+      const v = (resLevel || '').toLowerCase();
+      if (currentRoute.options.includes(v)) finalQuality = v;
     }
 
     const taskId = taskManager.createTask('create', prompt, {
-      referImages, model: finalModel, size: currentDimensions.str, quality, n: numImages
+      referImages, model: finalModel, size: currentDimensions.str, quality: finalQuality, n: numImages
     });
 
     // 在画布上创建 N 个加载占位节点
@@ -1145,7 +1206,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
       if (ta) ta.style.height = 'auto';
     }, 10);
 
-    executeCreateTask(taskId, prompt, referImages, { model: finalModel, size: currentDimensions.str, quality, n: numImages });
+    executeCreateTask(taskId, prompt, referImages, { model: finalModel, size: currentDimensions.str, quality: finalQuality, n: numImages });
     isSubmittingRef.current = false;
   };
 
@@ -1556,12 +1617,19 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
                         </div>
                       </div>
 
-                      {/* 分辨率 - gpt-image-2 仅支持 1K，MJ 不支持，该模型下隐藏 */}
+                      {/* 分辨率 - gpt-image-2 仅支持 1K，MJ 不支持，该模型下隐藏；
+                          聚合模型按路由表的可选档位渲染 */}
                       {(!lockedTo1K && !isMjModel) && (
                         <div className="space-y-3 mb-6">
-                          <label className="text-[11px] text-white/40">{lang === 'zh' ? '选择分辨率' : 'Resolution'}</label>
+                          <label className="text-[11px] text-white/40">
+                            {lang === 'zh' ? '选择分辨率' : 'Resolution'}
+                            {currentRoute && <span className="text-[10px] text-white/30 ml-2">由模型决定档位</span>}
+                          </label>
                           <div className="flex gap-2">
-                            {RES_LEVELS.map(res => (
+                            {(currentRoute
+                              ? currentRoute.options.map(o => RES_LEVELS.find(r => r.id === fmtRouteOption(o)) || { id: fmtRouteOption(o), label: { zh: fmtRouteOption(o), en: fmtRouteOption(o) } })
+                              : RES_LEVELS
+                            ).map(res => (
                               <button key={res.id} onClick={(e) => { e.stopPropagation(); setResLevel(res.id); }} className={`flex-1 py-2.5 rounded-xl text-[13px] transition-all flex items-center justify-center gap-1 ${resLevel === res.id ? 'bg-[#2c2c2e] text-white shadow-sm' : 'bg-transparent text-white/40 border border-white/5 hover:bg-white/5 hover:text-white'}`}>
                                 {res.label[lang]}
                                 {res.premium && <Sparkles size={12} className={resLevel === res.id ? "text-[#00C4B6]" : "text-[#00C4B6]/50"} />}
@@ -1669,71 +1737,55 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
               <div className="flex items-center gap-3">
                 {/* 模型选择 (Model) 移到了右侧 */}
                 <div className="relative z-50">
-                  <button 
+                  <button
                     ref={modelBtnRef}
                     onClick={() => setShowModel(!showModel)}
                     className={`flex items-center justify-center w-8 h-8 rounded-full transition-all ${showModel ? 'bg-[#2a2a2e] text-white shadow-sm' : 'bg-white/5 hover:bg-white/10 text-white/70'}`}
-                    title={isNanoBanana2 ? 'Nano Banana 2' : (isMjModel ? 'Midjourney' : (model === 'gpt-image-2-high' ? 'GPT Image 2 High' : (model === 'gpt-image-2-pro' ? 'GPT Image 2 Pro' : 'GPT Image 2')))}
+                    title={currentMeta?.display_name || model}
                   >
-                    {isNanoBanana2 ? (
-                      <span className="text-base">🍌</span>
-                    ) : isMjModel ? (
-                      <img src={MidjourneyIcon} alt="MJ" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} />
-                    ) : (
-                      <img src={ChatGptIcon} alt="GPT" className={`w-4 h-4 ${showModel ? 'opacity-100' : 'opacity-70'}`} />
-                    )}
+                    <ModelInlineIcon model={currentMeta || { id: model }} size={16} className={showModel ? 'opacity-100' : 'opacity-70'} />
                   </button>
                   {showModel && (
-                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[280px] bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200">
-                      {[
-                          { id: 'gpt-image-2', name: 'GPT Image 2' },
-                          { id: 'gpt-image-2-high', name: 'GPT Image 2 High', tag: '高分辨率' },
-                          { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', tag: '快速', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
-                          { id: 'nano-banana-2', name: 'Nano Banana 2', badge: 'NEW', minQuota: NANO_BANANA_2_COST_PER_IMAGE, desc: '1K/2K/4K · 30 积分/张' },
-                          { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
-                      ].map(m => {
-                        const disabled = m.minQuota !== undefined && quota < m.minQuota;
-                        const isActive = model === m.id || (m.id === 'nano-banana-2' && isNanoBanana2);
+                    <div ref={modelRef} className="absolute bottom-[calc(100%+8px)] right-0 w-[280px] bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-2 fade-in duration-200 max-h-[60vh] overflow-y-auto">
+                      {modelList.length === 0 ? (
+                        <div className="px-4 py-6 text-center text-[11px] text-white/40">暂无可用模型</div>
+                      ) : modelList.map(m => {
+                        const floor = priceFloor(m.pricing);
+                        const disabled = quota < floor;
+                        const isActive = model === m.id;
                         return (
                           <button
                             key={m.id}
                             disabled={disabled}
                             onClick={() => {
                               if (disabled) {
-                                showToast(`积分不足 ${m.minQuota}，无法使用 ${m.name}`, 'error');
+                                showToast(`积分不足 ${floor}，无法使用 ${m.display_name || m.id}`, 'error');
                                 return;
                               }
-                              if (m.id === 'nano-banana-2' && !isNanoBanana2) {
-                                setResLevel('1K');
+                              // 聚合模型：选中后默认走第一档（默认值）
+                              if (m.route && m.route.options.length) {
+                                const def = m.route.default || m.route.options[0];
+                                setResLevel(fmtRouteOption(def));
                               }
                               setModel(m.id);
                               setShowModel(false);
                             }}
                             className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isActive ? 'bg-white/[0.03]' : ''} ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'}`}
                           >
-                            <div className="flex items-center gap-3">
-                              {m.id === 'midjourney' ? (
-                                <img src={MidjourneyIcon} className="w-5 h-5" alt="midjourney" />
-                              ) : m.id === 'nano-banana-2' ? (
-                                <span className="text-lg leading-none">🍌</span>
-                              ) : (
-                                <img src={ChatGptIcon} className="w-5 h-5" alt="gpt" />
-                              )}
-                              <div className="flex flex-col items-start gap-0.5">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <ModelInlineIcon model={m} size={20} />
+                              <div className="flex flex-col items-start gap-0.5 min-w-0">
                                 <div className="flex items-center gap-1.5">
-                                  <div className="text-xs font-bold text-white/80">{m.name}</div>
-                                  {m.tag && (
-                                    <span className={`text-[9px] font-bold px-1.5 py-[2px] rounded-md text-white shadow-sm border border-white/10 ${m.id === 'gpt-image-2-pro' ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-blue-500 to-indigo-500'}`}>
-                                      {m.tag}
-                                    </span>
-                                  )}
+                                  <div className="text-xs font-bold text-white/80 truncate">{m.display_name || m.id}</div>
                                 </div>
-                                {disabled && (
-                                  <div className="text-[10px] text-white/40">积分不足</div>
+                                {disabled ? (
+                                  <div className="text-[10px] text-white/40">积分不足 {floor}</div>
+                                ) : (
+                                  <div className="text-[10px] text-white/30 font-mono truncate">{m.id}</div>
                                 )}
                               </div>
                             </div>
-                            {isActive && <Check size={14} className="text-[#00C4B6]" />}
+                            {isActive && <Check size={14} className="text-[#00C4B6] shrink-0" />}
                           </button>
                         );
                       })}
@@ -2734,12 +2786,28 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   const [resLevel, setResLevel] = useState('1K');
   const [quality, setQuality] = useState('auto');
 
-  // GPT Image 2 Pro：固定 22 积分/张
-  const PRO_COST_PER_IMAGE = 22;
+  // 从后端拉取已上架到「快速创作」渠道的模型列表
+  const { models: availableModels } = useAvailableModels(token, 'quick_create');
+  const modelList = React.useMemo(() => dedupeModelList(availableModels), [availableModels]);
+  const currentMeta = availableModels.find(m => m.id === model) || null;
+  // 聚合 / 路由型模型：后端给出 { by, options, default }
+  const currentRoute = currentMeta?.route || null;
+
+  // 兼容老 localStorage：如果 model 不在 availableModels 里，回退到第一个可用模型
+  useEffect(() => {
+    if (!availableModels.length) return;
+    if (!availableModels.find(m => m.id === model)) {
+      setModel(availableModels[0].id);
+    }
+  }, [availableModels.length]); // eslint-disable-line
+
+  // GPT Image 2 Pro：固定 22 积分/张（fallback 用后端 pricing）
   const isProModel = model === 'gpt-image-2-pro';
+  const PRO_COST_PER_IMAGE = availableModels.find(m => m.id === 'gpt-image-2-pro')?.pricing?.cost || 22;
 
   // Midjourney：按模式计费，每次生成 4 张子图
-  const MJ_COST_BY_MODE = { relax: 22, fast: 42, turbo: 62 };
+  const mjPricing = availableModels.find(m => m.id === 'midjourney')?.pricing?.by_mode || { relax: 22, fast: 42, turbo: 62 };
+  const MJ_COST_BY_MODE = mjPricing;
   const MJ_IMAGES_PER_TASK = 4;
   const MJ_VERSIONS = [
     { id: 'v8.1', label: 'V8.1', sub: '最新' },
@@ -2748,21 +2816,16 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
     { id: 'v5.2', label: 'V5.2', sub: '写实' },
     { id: 'niji 6', label: 'Niji 6', sub: '动漫' },
   ];
-  const isMjModel = model === 'midjourney';
+  const isMjModel = isMjId(model);
   const [mjMode, setMjMode] = useState('fast'); // relax / fast / turbo
   const [mjVersion, setMjVersion] = useState('v8.1');
   const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 42;
 
   // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K，同时在 UI 隐藏分辨率切换
-  // Pro / MJ 不锁 1K：Pro 支持任意 WxH；MJ 根本没分辨率选项（后面会整块隐藏）
-  const lockedTo1K = model === 'gpt-image-2';
+  const lockedTo1K = MODEL_UI_FEATURES[model]?.lockedTo1K;
   useEffect(() => {
     if (lockedTo1K && resLevel !== '1K') setResLevel('1K');
   }, [lockedTo1K, resLevel]);
-
-  // Nano Banana 2：三档分辨率 = 三个 model id，统一 30 积分/张
-  const isNanoBanana2 = model === 'nano-banana-2' || model === 'nano-banana-2-2k' || model === 'nano-banana-2-4k';
-  const NANO_BANANA_2_COST_PER_IMAGE = 30;
 
   // 积分不足时如果曾选中 Pro，自动回退到基础模型，避免卡住
   useEffect(() => {
@@ -2787,26 +2850,16 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   // 批量生成数量 (1 - 50)
   const [count, setCount] = useState(1);
   const MAX_COUNT = 50;
-  const PRO_MAX_COUNT = 10; // Pro 模型原生 n 上限
-  const MJ_MAX_COUNT = 5;   // MJ 一次出 4 张，count 代表批次数，限制 5（最多 20 张）
-  const NANO_BANANA_2_MAX_COUNT = 10; // 一次性最多 10 张（按 n 计费）
-  const effectiveMax = model === 'gpt-image-2-pro' ? PRO_MAX_COUNT
-                     : model === 'midjourney' ? MJ_MAX_COUNT
-                     : isNanoBanana2 ? NANO_BANANA_2_MAX_COUNT
-                     : MAX_COUNT;
+  const effectiveMax = MODEL_UI_FEATURES[model]?.maxCount || MAX_COUNT;
   const clampCount = (n) => Math.max(1, Math.min(effectiveMax, Math.floor(Number(n) || 1)));
   const [isBatchRunning, setIsBatchRunning] = useState(false);
 
   // 切到 Pro 时如果当前 count 超过 10，自动夹到 10；MJ 类似；Nano Banana 2 也限 10
   useEffect(() => {
-    if (model === 'gpt-image-2-pro' && Number(count) > PRO_MAX_COUNT) {
-      setCount(PRO_MAX_COUNT);
-    } else if (model === 'midjourney' && Number(count) > MJ_MAX_COUNT) {
-      setCount(MJ_MAX_COUNT);
-    } else if (isNanoBanana2 && Number(count) > NANO_BANANA_2_MAX_COUNT) {
-      setCount(NANO_BANANA_2_MAX_COUNT);
+    if (Number(count) > effectiveMax) {
+      setCount(effectiveMax);
     }
-  }, [model, count]);
+  }, [model, count, effectiveMax]);
 
   const [history, setHistory] = useState([]);
   const [activeHistoryId, setActiveHistoryId] = useState(null);
@@ -3055,10 +3108,9 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
 
     const total = clampCount(count);
     // 按模型算总积分：
-    // - Pro: 2/张；n 张
-    // - MJ:  按 mode 2/3/5 积分每"次"（每次出 4 张），共 total 次
-    // - Nano Banana 2: 30/张，n 张（不分 1K/2K/4K）
-    // - 其他: 4K=2/张，否则 1/张
+    // - Pro: 22/张；n 张
+    // - MJ:  按 mode 22/42/62 积分每"次"（每次出 4 张），共 total 次
+    // - 通用 / 聚合：按后端 pricing.cost × n
     if (mode === 'image' && model === 'gpt-image-2-pro') {
       const totalCost = total * PRO_COST_PER_IMAGE;
       if (quota < totalCost) {
@@ -3071,16 +3123,17 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
         showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error');
         return;
       }
-    } else if (mode === 'image' && isNanoBanana2) {
-      const totalCost = total * NANO_BANANA_2_COST_PER_IMAGE;
-      if (quota < totalCost) {
-        showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error');
-        return;
-      }
     } else {
-      // gpt-image-2 = 7 / gpt-image-2-high = 13（与分辨率无关，分辨率只影响可用尺寸）
-      // retouch/portrait/product 等后端都走 gpt-image-2，按 7 算
-      const pointsPerImage = mode === 'image' && model === 'gpt-image-2-high' ? 13 : 7;
+      // 通用 / 聚合模型：优先用后端 pricing；fallback 保留老的 7/13 积分规则
+      const meta = availableModels.find(m => m.id === model);
+      const pricing = meta?.pricing;
+      let pointsPerImage;
+      if (pricing && (pricing.mode === 'per_call' || pricing.mode === 'per_image')) {
+        pointsPerImage = Number(pricing.cost) || 1;
+      } else {
+        // retouch/portrait/product 等后端都走 gpt-image-2，按 7 算
+        pointsPerImage = mode === 'image' && model === 'gpt-image-2-high' ? 13 : 7;
+      }
       const totalCost = total * pointsPerImage;
       if (quota < totalCost) { showToast(`积分不足，需要 ${totalCost} 积分，当前 ${quota}`, 'error'); return; }
     }
@@ -3093,15 +3146,15 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
     }
 
     // 捕获当前参数快照，避免批量过程中用户修改状态导致串台
-    // Nano Banana 2：按用户选择的分辨率映射到具体的 model id（同家族三档）
+    // 聚合模型：保持 model id 不变；按 resLevel 派生 quality 给后端做路由
     let effectiveModel = model;
-    if (mode === 'image' && isNanoBanana2) {
-      if (resLevel === '4K') effectiveModel = 'nano-banana-2-4k';
-      else if (resLevel === '2K') effectiveModel = 'nano-banana-2-2k';
-      else effectiveModel = 'nano-banana-2';
+    let effectiveQuality = quality;
+    if (mode === 'image' && currentRoute) {
+      const v = (resLevel || '').toLowerCase();
+      if (currentRoute.options.includes(v)) effectiveQuality = v;
     }
     const snapshot = {
-      mode, referImages: [...referImages], model: effectiveModel, aspectRatio, resLevel, quality,
+      mode, referImages: [...referImages], model: effectiveModel, aspectRatio, resLevel, quality: effectiveQuality,
       retouchMode: mode === 'portrait' ? 'portrait' : retouchMode,
       strength, suggestion, productStyle, prompt, mjMode, mjVersion
     };
@@ -3617,80 +3670,62 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                     <SectionLabel icon={<Cpu size={14} />}>选择模型</SectionLabel>
                     <div className="relative group">
                       <div className="w-full bg-white/[0.03] border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white/80 flex items-center justify-between cursor-pointer hover:bg-white/[0.05] transition-all" onClick={() => setShowModelMenu(!showModelMenu)}>
-                        <div className="flex items-center gap-2">
-                          {model === 'midjourney' ? (
-                            <img src={MidjourneyIcon} className="w-4 h-4" alt="midjourney" />
-                          ) : isNanoBanana2 ? (
-                            <span className="text-base leading-none">🍌</span>
-                          ) : (
-                            <img src={ChatGptIcon} className="w-4 h-4" alt="gpt" />
-                          )}
-                          <span>
-                            {model === 'gpt-image-2' ? 'GPT Image 2'
-                              : model === 'gpt-image-2-high' ? 'GPT Image 2 High'
-                              : model === 'gpt-image-2-pro' ? 'GPT Image 2 Pro'
-                              : isNanoBanana2 ? `Nano Banana 2 ${resLevel}`
-                              : model === 'midjourney' ? `Midjourney ${(MJ_VERSIONS.find(v => v.id === mjVersion) || {}).label || ''}`.trim()
-                              : model}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ModelInlineIcon model={currentMeta || { id: model }} size={16} />
+                          <span className="truncate">
+                            {currentRoute
+                              ? `${currentMeta?.display_name || model} ${resLevel}`
+                              : isMjModel
+                                ? `${currentMeta?.display_name || 'Midjourney'} ${(MJ_VERSIONS.find(v => v.id === mjVersion) || {}).label || ''}`.trim()
+                                : (currentMeta?.display_name || model)}
                           </span>
                         </div>
-                        <ChevronDown size={14} className={`opacity-20 transition-transform ${showModelMenu ? 'rotate-180' : ''}`} />
+                        <ChevronDown size={14} className={`opacity-20 transition-transform shrink-0 ${showModelMenu ? 'rotate-180' : ''}`} />
                       </div>
-                      
+
                       {showModelMenu && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)}></div>
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
-                            {[
-                                { id: 'gpt-image-2', name: 'GPT Image 2' },
-                                { id: 'gpt-image-2-high', name: 'GPT Image 2 High', tag: '高分辨率' },
-                                { id: 'gpt-image-2-pro', name: 'GPT Image 2 Pro', tag: '快速', badge: 'Pro', minQuota: PRO_COST_PER_IMAGE },
-                                { id: 'nano-banana-2', name: 'Nano Banana 2', badge: 'NEW', minQuota: NANO_BANANA_2_COST_PER_IMAGE, desc: '1K/2K/4K · 30 积分/张' },
-                                { id: 'midjourney', name: 'Midjourney', badge: 'MJ', minQuota: Math.min(...Object.values(MJ_COST_BY_MODE)) },
-                            ].map(m => {
-                              const disabled = m.minQuota !== undefined && quota < m.minQuota;
-                              const isActive = model === m.id || (m.id === 'nano-banana-2' && isNanoBanana2);
+                          <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[60vh] overflow-y-auto">
+                            {modelList.length === 0 ? (
+                              <div className="px-4 py-6 text-center text-[11px] text-white/40">暂无可用模型</div>
+                            ) : modelList.map(m => {
+                              const floor = priceFloor(m.pricing);
+                              const disabled = quota < floor;
+                              const isActive = model === m.id;
                               return (
                                 <button
                                   key={m.id}
                                   disabled={disabled}
                                   onClick={() => {
                                     if (disabled) {
-                                      showToast(`积分不足 ${m.minQuota}，无法使用 ${m.name}`, 'error');
+                                      showToast(`积分不足 ${floor}，无法使用 ${m.display_name || m.id}`, 'error');
                                       return;
                                     }
-                                    // 切到 Nano Banana 2 时默认 1K，用户可在下方分辨率按钮切换
-                                    if (m.id === 'nano-banana-2' && !isNanoBanana2) {
-                                      setResLevel('1K');
+                                    // 聚合模型：选中后默认走第一档（默认值）
+                                    if (m.route && m.route.options.length) {
+                                      const def = m.route.default || m.route.options[0];
+                                      setResLevel(fmtRouteOption(def));
                                     }
                                     setModel(m.id);
                                     setShowModelMenu(false);
                                   }}
                                   className={`w-full px-4 py-3 flex items-center justify-between transition-colors ${isActive ? 'bg-white/[0.03]' : ''} ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-white/5'}`}
                                 >
-                                  <div className="flex items-center gap-3">
-                                    {m.id === 'midjourney' ? (
-                                      <img src={MidjourneyIcon} className="w-5 h-5" alt="midjourney" />
-                                    ) : m.id === 'nano-banana-2' ? (
-                                      <span className="text-lg leading-none">🍌</span>
-                                    ) : (
-                                      <img src={ChatGptIcon} className="w-5 h-5" alt="gpt" />
-                                    )}
-                                    <div className="flex flex-col items-start gap-0.5">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <ModelInlineIcon model={m} size={20} />
+                                    <div className="flex flex-col items-start gap-0.5 min-w-0">
                                       <div className="flex items-center gap-1.5">
-                                        <div className="text-xs font-bold text-white/80">{m.name}</div>
-                                        {m.tag && (
-                                          <span className={`text-[9px] font-bold px-1.5 py-[2px] rounded-md text-white shadow-sm border border-white/10 ${m.id === 'gpt-image-2-pro' ? 'bg-gradient-to-r from-orange-500 to-red-500' : 'bg-gradient-to-r from-blue-500 to-indigo-500'}`}>
-                                            {m.tag}
-                                          </span>
-                                        )}
+                                        <div className="text-xs font-bold text-white/80 truncate">{m.display_name || m.id}</div>
                                       </div>
-                                      {disabled && (
-                                        <div className="text-[10px] text-white/40">积分不足</div>
+                                      {disabled ? (
+                                        <div className="text-[10px] text-white/40">积分不足 {floor}</div>
+                                      ) : (
+                                        <div className="text-[10px] text-white/30 font-mono truncate">{m.id}</div>
                                       )}
                                     </div>
                                   </div>
-                                  {isActive && <Check size={14} className="text-orange-400" />}
+                                  {isActive && <Check size={14} className="text-orange-400 shrink-0" />}
                                 </button>
                               );
                             })}
@@ -3775,18 +3810,27 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                     </>
                   )}
 
-                  {/* 分辨率大按钮 - gpt-image-2 仅支持 1K，该模型下隐藏；Pro 支持任意 WxH 因此可选；MJ 不支持分辨率选择 */}
+                  {/* 分辨率大按钮 - gpt-image-2 仅支持 1K，该模型下隐藏；Pro 支持任意 WxH 因此可选；MJ 不支持分辨率选择；
+                       聚合模型按 route.options 渲染档位 */}
                   {!lockedTo1K && !isMjModel && (
                     <div className="space-y-3">
-                      <SectionLabel icon={<Maximize2 size={14} />}>选择分辨率</SectionLabel>
-                      <div className="grid grid-cols-3 gap-2">
-                        {['1K', '2K', '4K'].map(level => (
+                      <SectionLabel icon={<Maximize2 size={14} />}>
+                        选择分辨率
+                        {currentRoute && <span className="text-[10px] text-white/30 ml-2 font-normal">由模型决定档位</span>}
+                      </SectionLabel>
+                      <div className={`grid gap-2 ${
+                        currentRoute && currentRoute.options.length === 2 ? 'grid-cols-2'
+                        : currentRoute && currentRoute.options.length === 4 ? 'grid-cols-4'
+                        : currentRoute && currentRoute.options.length === 5 ? 'grid-cols-5'
+                        : 'grid-cols-3'
+                      }`}>
+                        {(currentRoute ? currentRoute.options.map(o => fmtRouteOption(o)) : ['1K', '2K', '4K']).map(level => (
                           <button
                             key={level}
                             onClick={() => setResLevel(level)}
                             className={`py-3 rounded-xl border font-bold text-xs transition-all flex items-center justify-center gap-2 ${resLevel === level ? 'bg-white/10 border-white/20 text-white' : 'bg-[#141414] border-transparent text-white/30 hover:text-white/50'}`}
                           >
-                            {level === '1K' ? '标清 1K' : level === '2K' ? '高清 2K' : <><span className="text-white">超清 4K</span><Sparkles size={12} className="text-[#00C4B6]" /></>}
+                            {level === '1K' ? '标清 1K' : level === '2K' ? '高清 2K' : level === '4K' ? <><span className="text-white">超清 4K</span><Sparkles size={12} className="text-[#00C4B6]" /></> : level}
                           </button>
                         ))}
                       </div>
@@ -3926,9 +3970,15 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                       }
                       const per = model === 'gpt-image-2-pro'
                         ? PRO_COST_PER_IMAGE
-                        : isNanoBanana2
-                          ? NANO_BANANA_2_COST_PER_IMAGE
-                          : model === 'gpt-image-2-high' ? 13 : 7;
+                        : (() => {
+                            // 通用 / 聚合模型：用后端 pricing
+                            const meta = availableModels.find(m => m.id === model);
+                            const pricing = meta?.pricing;
+                            if (pricing && (pricing.mode === 'per_call' || pricing.mode === 'per_image')) {
+                              return Number(pricing.cost) || 1;
+                            }
+                            return model === 'gpt-image-2-high' ? 13 : 7;
+                          })();
                       const totalCost = count * per;
                       return count > 1
                         ? `共 ${count} 张 · 消耗${totalCost}积分`

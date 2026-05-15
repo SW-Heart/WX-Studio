@@ -41,7 +41,12 @@ const describePricing = (pricing, lang) => {
   return [JSON.stringify(pricing)];
 };
 
-const ModelLogo = ({ modelId, size = 20 }) => {
+const ModelLogo = ({ model, size = 20 }) => {
+  const modelId = model?.id;
+  // 优先使用 admin 配置的 logo
+  if (model?.logo_url) {
+    return <img src={model.logo_url} style={{width: size, height: size, objectFit: 'cover', borderRadius: size * 0.2}} alt={model.display_name || modelId} />;
+  }
   if (modelId === 'midjourney') {
     return <img src={MidjourneyIcon} className={`w-${size/4} h-${size/4}`} style={{width: size, height: size}} alt="MJ" />;
   }
@@ -133,7 +138,7 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
         <div className="px-6 py-4 border-b border-white/10 flex items-start justify-between shrink-0">
           <div className="flex items-start gap-3 min-w-0">
             <div className="w-11 h-11 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center shrink-0">
-              <ModelLogo modelId={model.id} size={24} />
+              <ModelLogo model={model} size={24} />
             </div>
             <div className="min-w-0">
               <h3 className="text-lg font-bold text-white truncate">{model.display_name || model.id}</h3>
@@ -269,7 +274,7 @@ const ModelCard = ({ model, lang, onOpen }) => {
       className="group w-full text-left rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/15 active:border-white/10 p-4 transition-colors focus:outline-none flex items-center gap-4">
       {/* Logo */}
       <div className="shrink-0 w-12 h-12 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center">
-        <ModelLogo modelId={model.id} size={24} />
+        <ModelLogo model={model} size={24} />
       </div>
 
       {/* Info */}

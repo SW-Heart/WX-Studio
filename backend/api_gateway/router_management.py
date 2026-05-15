@@ -49,8 +49,10 @@ class UpsertModelReq(BaseModel):
     adapter_type: str
     upstream_api_key: Optional[str] = None
     display_name: Optional[str] = None
+    logo_url: Optional[str] = None
     channel: Optional[str] = None
     visible: Optional[bool] = True
+    published_to: Optional[List[str]] = None  # ["plaza", "quick_create", "canvas"]
     description: Optional[str] = ""
     enabled: Optional[bool] = True
     supports: Optional[Dict[str, bool]] = None
@@ -62,8 +64,10 @@ class PatchModelReq(BaseModel):
     adapter_type: Optional[str] = None
     upstream_api_key: Optional[str] = None
     display_name: Optional[str] = None
+    logo_url: Optional[str] = None
     channel: Optional[str] = None
     visible: Optional[bool] = None
+    published_to: Optional[List[str]] = None
     description: Optional[str] = None
     enabled: Optional[bool] = None
     supports: Optional[Dict[str, bool]] = None
@@ -136,17 +140,25 @@ def build_router(
         return {"logs": storage.list_logs(username=u, key_id=key_id, limit=min(500, max(1, limit)))}
 
     @router.get("/api/models/public")
-    def list_public_models(u: str = Depends(get_current_user)):
-        """供 API 管理页 / 模型广场展示可选模型（不含敏感字段，不暴露 adapter 类型/渠道）
+    def list_public_models(u: str = Depends(get_current_user),
+                           target: Optional[str] = None):
+        """供 API 管理页 / 模型广场 / 快速创作 / 无限画布 展示可选模型
+        （不含敏感字段，不暴露 adapter 类型/渠道）
 
-        只返回 enabled=True 且 visible!=False 的模型。
-        如果模型自身有 params_schema 字段则优先使用（admin 可自定义），否则回落到 adapter 默认。
+        - 只返回 enabled=True 且 visible!=False 的模型
+        - 支持 target 过滤（plaza / quick_create / canvas）；
+          模型未配置 published_to 时视为全渠道都上架（向后兼容老数据）
+        - 如果模型自身有 params_schema 字段则优先使用（admin 可自定义），否则回落到 adapter 默认
         """
         from .adapters import get_adapter
         from .config import get_public_api_base
         out = []
         for m in storage.list_models(include_disabled=False):
             if m.get("visible") is False:
+                continue
+            # 默认老数据在所有渠道可见
+            published_to = m.get("published_to") or ["plaza", "quick_create", "canvas"]
+            if target and target not in published_to:
                 continue
             # 优先用模型自身的 params_schema（admin 可在模型管理里自定义）
             params = m.get("params_schema")
@@ -155,13 +167,30 @@ def build_router(
                     params = get_adapter(m.get("adapter_type") or "").params_schema()
                 except Exception:
                     params = []
+            # alias 聚合模型：把路由规则透出给前端，让 UI 自动渲染档位选择
+            route = None
+            if (m.get("adapter_type") == "alias"):
+                cfg = m.get("config") or {}
+                route_map = cfg.get("route_map") or {}
+                if isinstance(route_map, dict) and route_map:
+                    route = {
+                        "by": cfg.get("route_by") or "quality",
+                        "options": list(route_map.keys()),
+                        "default": cfg.get("default_target") and next(
+                            (k for k, v in route_map.items() if v == cfg.get("default_target")),
+                            None
+                        ),
+                    }
             out.append({
                 "id": m["id"],
                 "display_name": m.get("display_name") or m["id"],
+                "logo_url": m.get("logo_url") or "",
                 "description": m.get("description", ""),
                 "supports": m.get("supports") or {},
                 "pricing": m.get("pricing") or {},
                 "params_schema": params,
+                "published_to": published_to,
+                "route": route,
             })
         return {"models": out, "api_base": get_public_api_base()}
 

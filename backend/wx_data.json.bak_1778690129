@@ -1,0 +1,2513 @@
+{
+  "users": {
+    "admin": {
+      "hash": "$pbkdf2-sha256$29000$eA8hRMhZK2VMqVVKyXkPwQ$TJR9mRr4uH4QH8XGXm2r7V2eAYfPHXZBivfmiH60U/4",
+      "quota": 9940,
+      "role": "admin"
+    },
+    "15269838276": {
+      "phone": "15269838276",
+      "quota": 9999,
+      "role": "user",
+      "created_at": 1765438980.002887
+    },
+    "17865566591": {
+      "phone": "17865566591",
+      "quota": 9993,
+      "role": "user",
+      "created_at": 1776853811.303893
+    },
+    "OGk86rvn": {
+      "hash": "$pbkdf2-sha256$29000$6t1ba.09h9B6DyEEYOw9Jw$DZWANdjW8o9kYmyCSugY9G6Lp4KEUjhjCc/nB3wivEo",
+      "quota": 50,
+      "role": "user",
+      "created_at": 1778588516.0132139,
+      "created_by": "admin"
+    }
+  },
+  "history": {
+    "15269838276": [
+      {
+        "id": "65170816-7191-4b34-aee8-a1ef93edef8e",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/2019ee3d-fc5a-40e1-8a7d-87dfa1fd3ac4.png",
+        "prompt": "[Medium] general",
+        "timestamp": 1765591222.845839,
+        "type": "retouch"
+      },
+      {
+        "id": "59148bf9-046a-46d0-b649-dea70760e89c",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/02e2e6e1-53b8-49ba-94fb-7386b48508a2.png",
+        "prompt": "[Medium] general",
+        "timestamp": 1765590955.562678,
+        "type": "retouch"
+      },
+      {
+        "id": "dc5cab63-e0cc-4f8b-be6b-f0f1c076c14e",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/a06386c1-cac8-4dfb-a1f8-13ea6286c560.png",
+        "prompt": "[Medium] general",
+        "timestamp": 1765590815.522867,
+        "type": "retouch"
+      },
+      {
+        "id": "cd6e6760-6e19-4127-a10a-e0ff210c7efc",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/843d73cd-dc94-4edf-8910-5f97c1b5c1a2.png",
+        "prompt": "[portrait]",
+        "timestamp": 1765449408.097986,
+        "type": "retouch"
+      },
+      {
+        "id": "41b3741a-306b-45d3-a20b-63b0dd618db9",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/8b32ce8f-87dd-4b6b-ba93-06de1682db4f.png",
+        "prompt": "[product]",
+        "timestamp": 1765450926.080534,
+        "type": "retouch"
+      },
+      {
+        "id": "71a52187-951f-48dc-825e-4aeb1f0eda8c",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/756ab8a9-6f39-4f56-9900-2e5cf20b278c.png",
+        "prompt": "[人像写真] 2K",
+        "timestamp": 1765463721.699893,
+        "type": "portrait"
+      },
+      {
+        "id": "264a682b-4db2-49a0-bd08-1ec71a4a9dc0",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/456505a6-b8f6-4c22-8a59-a58fd93c2899.png",
+        "prompt": "[人像写真] 2K",
+        "timestamp": 1765545005.40797,
+        "type": "portrait"
+      },
+      {
+        "id": "ef1ce7a8-21b0-41fa-8167-57bb4df8889f",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/3b9bb843-c4cf-4040-9fe7-19d6d9fdd2a4.png",
+        "prompt": "[人像写真] 2K",
+        "timestamp": 1765545174.715505,
+        "type": "portrait"
+      },
+      {
+        "id": "b37a8a03-8103-409d-a7f3-716b95c0e466",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/394e8a4c-a519-476b-869d-698b806df75c.png",
+        "prompt": "[人像写真] 2K",
+        "timestamp": 1765546829.905463,
+        "type": "portrait"
+      },
+      {
+        "id": "548c6258-c14c-4291-a5e1-e1f9056bd316",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/05ebd3e1-665b-4582-87a8-1d12a0f259af.png",
+        "prompt": "[general]",
+        "timestamp": 1765547767.384525,
+        "type": "retouch"
+      },
+      {
+        "id": "5cdf97ff-5b6e-4a43-944d-c67f6b9b4067",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/8ebf0541-d06f-47bf-a7a8-49c4c6d97668.png",
+        "prompt": "[text2img] 一只爬树的布偶猫",
+        "timestamp": 1765549754.788787,
+        "type": "create"
+      },
+      {
+        "id": "0d091c20-0fbd-4f83-8a8b-9c0c5a30fa6f",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/1cb2d504-7b54-47f4-bca9-83017aaadc00.png",
+        "prompt": "[general]",
+        "timestamp": 1765551628.102515,
+        "type": "retouch"
+      },
+      {
+        "id": "36af3851-da83-49ee-90a0-8ccd3854a427",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/c10377ad-285f-437c-8a14-1b4d0e5e3d63.png",
+        "prompt": "[portrait]",
+        "timestamp": 1765553622.107167,
+        "type": "retouch"
+      },
+      {
+        "id": "3ab247fc-21d2-4627-afa5-0abc9aa5913d",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/b66ff617-f855-4768-9140-d6c08d7f41d7.png",
+        "prompt": "[text2img] 小猫钓鱼",
+        "timestamp": 1765556551.50446,
+        "type": "create"
+      },
+      {
+        "id": "76b7b73e-86f8-4f93-8db4-1318ca3eb38b",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/57303e1c-0b49-4f51-a7e3-29648eefdd53.png",
+        "prompt": "[text2img] 小猫钓鱼",
+        "timestamp": 1765556563.84765,
+        "type": "create"
+      },
+      {
+        "id": "4cd6f938-2e20-427c-8a4d-d959aeb35140",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/356c952d-1c5a-4f42-8ae5-bf00e67a970a.png",
+        "prompt": "[text2img] 量子力学讲解插图",
+        "timestamp": 1765557135.618353,
+        "type": "create"
+      },
+      {
+        "id": "c22623e5-b2f2-4dd1-a3f7-c2d7d2fdab02",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/08db8c2b-f744-4755-9ee7-ef44fd2bdb9e.png",
+        "prompt": "[text2img] 量子力学讲解插图",
+        "timestamp": 1765557148.088147,
+        "type": "create"
+      },
+      {
+        "id": "85449ee8-064c-4b76-92bd-bcd865727b50",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/b16b2410-2cfd-4628-ab8b-0f43de4ef596.png",
+        "prompt": "[text2img] 生成大洋洲的地球俯瞰图",
+        "timestamp": 1765557766.531886,
+        "type": "create"
+      },
+      {
+        "id": "0ee773e2-f32c-4dc4-a552-29af2a6dee4a",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/8383ae88-8953-4acf-b557-7f8554b8c5dd.png",
+        "prompt": "[text2img] 太阳核聚变",
+        "timestamp": 1765558271.560302,
+        "type": "create"
+      },
+      {
+        "id": "e3fe71fa-1f71-4223-9da4-a5620be37018",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/b89edbc4-0e84-4f43-8435-c59348af11a9.png",
+        "prompt": "[text2img] 地球视角查看，中国区域",
+        "timestamp": 1765587987.333565,
+        "type": "create"
+      },
+      {
+        "id": "f2131db7-1a03-406e-b4a5-2906343953ca",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/2e5d0e8e-4493-4861-8606-d965727d1197.png",
+        "prompt": "[text2img] 从宇宙看向地球",
+        "timestamp": 1765589007.702246,
+        "type": "create"
+      },
+      {
+        "id": "6cf43cfe-28ad-424e-8494-3b2b3d4d73ba",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/a9da0c8e-abcb-4471-9280-faf37bedff2b.png",
+        "prompt": "[text2img] 小猫钓鱼",
+        "timestamp": 1765589308.685159,
+        "type": "create"
+      },
+      {
+        "id": "f880eb03-5794-4dd8-b035-8bffd8240d33",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/0691552a-af32-4375-ad0a-a0dcc4d5454c.png",
+        "prompt": "[text2img] 量子力学解释图",
+        "timestamp": 1765589738.116797,
+        "type": "create"
+      },
+      {
+        "id": "74fad43c-8276-450d-8aaf-5ef505e674b2",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/7f3f87fa-e5ec-411f-bea5-fd67881f1dd4.png",
+        "prompt": "[text2img] 量子力学",
+        "timestamp": 1765590229.309747,
+        "type": "create"
+      },
+      {
+        "id": "481e45ee-755d-4e70-a591-fdd7172609fe",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/c15f4c67-0318-456e-8e81-1de3c6cb4f91.png",
+        "prompt": "[text2img] 产品logo，是一个‘O’字母形状，颜色是橙色、紫色、蓝色、绿色作为logo配色，背景干净",
+        "timestamp": 1765630686.207964,
+        "type": "create"
+      },
+      {
+        "id": "d503d517-6a20-49f1-b5b0-4ba456fdcda4",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/6b7ae1a5-6b17-44da-b216-bfd5127b61b4.png",
+        "prompt": "[img2img(1)] 去除右下角的星星，其他区域保持不变",
+        "timestamp": 1765631589.93458,
+        "type": "create"
+      }
+    ],
+    "17865566591": [
+      {
+        "id": "be4e96cf-5543-4e9c-aa97-c2a7561f7f6b",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/8a84e435-a59f-476d-b1d9-aad6ae934b5a.png",
+        "prompt": "[img2img(1)] 让这个参考图的人放到80年代，推着自行车在厂房门口，80年代的摄影质量，老照片",
+        "timestamp": 1777134856.108137,
+        "type": "create"
+      },
+      {
+        "id": "3aa0054c-4022-4eb2-afb5-c1f7ffaa28c7",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 35mm color film photography with harsh direct on-c...",
+        "timestamp": 1777209969.653768,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "025f556e-6f93-482f-aa00-6c0d4fa45744",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 35mm color film photography with harsh direct on-c...",
+        "timestamp": 1777210198.98837,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "e2fc9991-e769-40f0-b175-c0eb998a6ba2",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 35mm color film photography with harsh direct on-c...",
+        "timestamp": 1777211275.010618,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "b49fe498-8ac1-4899-bfdc-6ece080efad8",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 35mm color film photography with harsh direct on-c...",
+        "timestamp": 1777211970.309335,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "6372caeb-0a70-4588-a2a4-3b14ac387dca",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/3a5d4188-20fe-497a-81c0-eed24a04ab1a.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/3a5d4188-20fe-497a-81c0-eed24a04ab1a.png"
+        ],
+        "prompt": "[text2img] 极简新中式美学风格，画面以淡雅的灰白色为底，呈现出一种纸艺剪影般的立体感。\r\n一条S形蜿蜒的裂痕状边...",
+        "timestamp": 1777212934.262935,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "38ca74c6-864f-4978-95fc-59d0db339140",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/8ede98c7-410e-4cf7-9be2-ed3f8b6c30d6.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/8ede98c7-410e-4cf7-9be2-ed3f8b6c30d6.png"
+        ],
+        "prompt": "[text2img] Soft poetic children's book illustration with wate...",
+        "timestamp": 1777213145.707831,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "83b69949-1029-444a-bc93-f21b8d4f4477",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/c83d36f0-f532-4efe-91ce-5797166eb848.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/c83d36f0-f532-4efe-91ce-5797166eb848.png"
+        ],
+        "prompt": "[text2img] Aspect Ratio: 9:16 Vertical\r\n\r\n【IDENTITY & REALISM...",
+        "timestamp": 1777216018.15823,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "063d1803-70ff-40de-80bb-7564f633d1a3",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/75383fe9-d8a0-45c7-8382-e5caff58ac37.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/75383fe9-d8a0-45c7-8382-e5caff58ac37.png"
+        ],
+        "prompt": "[text2img] 画一幅王者荣耀里面的后裔在抖音直播间直播售卖王者荣耀妲己的布娃娃",
+        "timestamp": 1777216226.582236,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "1ca8cc18-27d3-4c9a-b9cb-ed3a389e0667",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/c1a762b5-d32c-42d5-bf18-a4e8a6529165.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/c1a762b5-d32c-42d5-bf18-a4e8a6529165.png"
+        ],
+        "prompt": "[text2img] 中国杭州地铁上低头看手机的美丽女人，偷拍照片。",
+        "timestamp": 1777216671.769133,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "ade817e4-851e-4c21-a5ca-18e1d0aeae19",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/cdd889d5-10ef-4c6d-807b-cddf66e1fc03.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/cdd889d5-10ef-4c6d-807b-cddf66e1fc03.png"
+        ],
+        "prompt": "[text2img] 充满活力的特写编辑肖像，模特眼神犀利，头戴雕塑感帽子，色彩拼接丰 富，眼部焦点锐利，景深较浅，具有V...",
+        "timestamp": 1777277038.604736,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "a8192587-a9ce-4b96-9747-53eb115a2149",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] A gorgeous woman seen from behind, standing gracef...",
+        "timestamp": 1777284914.249915,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "41149cc2-e231-475b-b231-c4612426dcd9",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] A gorgeous woman seen from behind, standing gracef...",
+        "timestamp": 1777285142.15232,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "171fe88c-b4ea-48b4-b3f5-0eae31357c5f",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] A gorgeous woman seen from behind, standing gracef...",
+        "timestamp": 1777285748.879143,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "935022d7-28e3-42bf-91fb-7a62eeb6fa4e",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] A gorgeous woman seen from behind, standing gracef...",
+        "timestamp": 1777286138.789712,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "96c6c0af-2aeb-4901-9265-043152ad0a5c",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] A gorgeous woman seen from behind, standing gracef...",
+        "timestamp": 1777340276.76086,
+        "type": "create",
+        "status": "FAILED"
+      }
+    ],
+    "admin": [
+      {
+        "id": "41920153-e47c-405f-8091-db26d986bc0b",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/7fbe8d34-cca7-4d3a-aed5-fa62143bb4ec.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/7fbe8d34-cca7-4d3a-aed5-fa62143bb4ec.png"
+        ],
+        "prompt": "[text2img] Create a Science fiction movie poster",
+        "timestamp": 1777166171.388464,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "e3abe66a-7ace-43a7-84f3-cbe128162a7b",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/9a99eb06-6228-4114-a1d7-191e0b8cce83.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/9a99eb06-6228-4114-a1d7-191e0b8cce83.png"
+        ],
+        "prompt": "[text2img] A stunning 18-year-old Chinese girl with a youthfu...",
+        "timestamp": 1777178468.945007,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "4c8adcac-ba27-4463-b94d-bd8e35b5d697",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/f980e880-925f-461d-817e-3c37d8045fd3.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/f980e880-925f-461d-817e-3c37d8045fd3.png"
+        ],
+        "prompt": "[text2img] 派大星老师正在教海绵宝宝学习物理中的阿基米德原理，场景在教室，符合海绵宝宝动漫的场景和动画风格",
+        "timestamp": 1778327544.364399,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "7ed19dcf-58f2-48df-8d03-91cc20055426",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/ef12b5bb-929a-4b06-bd29-c79c9107f33e.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/ef12b5bb-929a-4b06-bd29-c79c9107f33e.png"
+        ],
+        "prompt": "[text2img] Moebius simple black and white illustration ",
+        "timestamp": 1778339875.615579,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "2e549bc1-6d6a-4cf4-93fb-c1d28a7a3a6f",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/d58e0091-ba77-4723-a4c3-d756b90a4b60.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/d58e0091-ba77-4723-a4c3-d756b90a4b60.png"
+        ],
+        "prompt": "[text2img] Moebius simple black and white illustration ",
+        "timestamp": 1778339875.626814,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "511f7ca6-1d46-42bf-9dd0-3685bc34375d",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 世界上最帅气的魔装机神风格天蝎座机甲设计草图，暗紫色风格。尖锐华丽，炫酷，有棱角，威武霸气，对称，夸...",
+        "timestamp": 1778342167.106117,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "70284f03-cb32-4339-b930-eb69c504bd30",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/3212ecff-1559-48e7-89f9-caab9e76a975.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/3212ecff-1559-48e7-89f9-caab9e76a975.png"
+        ],
+        "prompt": "[text2img] 世界上最帅气的魔装机神风格天蝎座机甲设计草图，暗紫色风格。尖锐华丽，炫酷，有棱角，威武霸气，对称，夸...",
+        "timestamp": 1778342167.109885,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "2e2574c2-56c8-473a-bca3-4d7efbe10a02",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 山海经怪物图鉴，随机一种怪物，外形+名称+介绍",
+        "timestamp": 1778345074.918078,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "b69f7588-d5ba-4f70-9ea4-5de139c90b53",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 山海经怪物图鉴，随机一种怪物，外形+名称+介绍",
+        "timestamp": 1778345074.920195,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "115da9d4-e40c-401f-877a-31b8731173cf",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 山海经怪物图鉴，随机一种怪物，外形+名称+介绍",
+        "timestamp": 1778345074.928049,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "5ac3d572-519b-4827-990c-bcfd822b0ba7",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/527c4c84-d092-4094-994e-7d7c2b723540.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/527c4c84-d092-4094-994e-7d7c2b723540.png"
+        ],
+        "prompt": "[text2img] 山海经怪兽图鉴，写实样貌+名字+简介。随机一种怪兽",
+        "timestamp": 1778345840.645425,
+        "type": "create",
+        "status": "SUCCESS"
+      },
+      {
+        "id": "6044a35b-0cdb-42e9-aaef-79e792f912d5",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 山海经怪兽图鉴，写实样貌+名字+简介。随机一种怪兽",
+        "timestamp": 1778345840.64665,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "509d3983-a65d-4ff3-b67b-7c7ee7d995dc",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 山海经怪兽图鉴，写实样貌+名字+简介。随机一种怪兽",
+        "timestamp": 1778345840.64837,
+        "type": "create",
+        "status": "FAILED"
+      },
+      {
+        "id": "0f794686-ec9a-447f-a586-3997a057e1aa",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/244c23a8-fa13-40e7-ac17-4f159c408d5f.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/244c23a8-fa13-40e7-ac17-4f159c408d5f.png"
+        ],
+        "prompt": "[text2img] 有特别可爱的头饰。全身，全身照，踮起脚尖，随机动作姿势。同色系，夸张的可爱的饰品。好看的毛绒绒服饰。...",
+        "timestamp": 1778347063.538793,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "96e7e7d2-4f44-47ee-a54c-c67bd7feb7e6",
+        "batch_total": 2,
+        "batch_index": 0
+      },
+      {
+        "id": "2f33ab20-ff44-4727-aecb-190d60152f32",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] 真实亚洲美女脚模拍摄图",
+        "timestamp": 1778347472.432928,
+        "type": "create",
+        "status": "FAILED",
+        "batch_id": "b9a987db-e253-4c6b-a78a-e4f582247567",
+        "batch_total": 2
+      },
+      {
+        "id": "45ec49d4-f446-4979-891c-27fd65df57c3",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/68764007-dbff-4f56-a000-b3d26e84049a.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/68764007-dbff-4f56-a000-b3d26e84049a.png",
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/959f9db3-0000-44fd-af5c-ecd2c64f973e.png"
+        ],
+        "prompt": "[text2img] 真实亚洲美女脚模拍摄图",
+        "timestamp": 1778348415.289007,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "4f296f85-e9cd-4901-bcec-d66f681d6afe",
+        "batch_total": 2,
+        "batch_index": 0
+      },
+      {
+        "id": "ca491853-fb8e-4640-b754-38b66ec0a40d",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/959f9db3-0000-44fd-af5c-ecd2c64f973e.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/959f9db3-0000-44fd-af5c-ecd2c64f973e.png"
+        ],
+        "prompt": "[text2img] 真实亚洲美女脚模拍摄图",
+        "timestamp": 1778348415.2900069,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "4f296f85-e9cd-4901-bcec-d66f681d6afe",
+        "batch_total": 2,
+        "batch_index": 1
+      },
+      {
+        "id": "066b639d-5b08-4b13-b625-c243db5902d3",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/be9b9306-de7d-4bae-8581-219d506ca95b.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/be9b9306-de7d-4bae-8581-219d506ca95b.png"
+        ],
+        "prompt": "[text2img] 性感女生在抖音做擦边直播",
+        "timestamp": 1778350904.571442,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "73353ad0-93cb-40d1-a45d-c266dd5591db",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "cc283517-1512-49b8-8942-78b3835032e3",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/51d5fcb8-4b4b-4ece-aba8-79d3459316b8.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/51d5fcb8-4b4b-4ece-aba8-79d3459316b8.png"
+        ],
+        "prompt": "[text2img] 性感女生写真，白色短裙，青春阳光，美丽",
+        "timestamp": 1778351164.178675,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "53cc0334-d065-405f-aabc-7130c061377e",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "f55aa387-13b6-47d4-9d3d-67ed8e52d7af",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/acfe52eb-6955-478b-aa24-2148e73649dd.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/acfe52eb-6955-478b-aa24-2148e73649dd.png"
+        ],
+        "prompt": "[text2img-pro] 巨物恐惧，黑暗深海底，一只巨型发光的竖瞳眼睛从深渊凝视微小潜水员，整个眼球布满整个屏幕，强烈巨物恐惧...",
+        "timestamp": 1778382475.486329,
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "gpt-image-2-pro",
+        "batch_id": "9bee0fbb-0057-46a3-89e1-35288612b7e1",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "42659200-b22d-4d57-bb28-dbfdb7f55631",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/a87ede85-a5a8-49fb-a19e-a810f196a90d.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/a87ede85-a5a8-49fb-a19e-a810f196a90d.png"
+        ],
+        "prompt": "[text2img-pro] 做一个宣传GPT Image 2 的图，价格低至0.05元/张，高并发，极致稳定。用在咸鱼当作商品宣...",
+        "timestamp": 1778383753.589527,
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "gpt-image-2-pro",
+        "batch_id": "09ee7a11-1e48-414e-a9fc-e9a056672ea9",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "b6efa4d0-0a2b-460a-bf76-a3b22c76bb54",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[img2img-pro(2)] 把这两个家具放在一个场景中，高端中式场景摄影",
+        "timestamp": 1778384184.60145,
+        "type": "create",
+        "status": "FAILED",
+        "model": "gpt-image-2-pro",
+        "batch_id": "f6e2a0c6-a1b5-463d-bc81-99c6b48c6b40",
+        "batch_total": 1
+      },
+      {
+        "id": "c723480d-c537-4f59-9448-4d6931733841",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/5f1cf382-516f-498a-a7d0-437e9137b639.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/5f1cf382-516f-498a-a7d0-437e9137b639.png"
+        ],
+        "prompt": "[img2img-pro(2)] 把这两个家具放在一个场景中，高端中式场景摄影",
+        "timestamp": 1778384383.005384,
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "gpt-image-2-pro",
+        "batch_id": "46b5834c-3635-4059-bb6f-63ac094e6d67",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "e93f593f-9460-4ed0-8ac4-4e150c2b8cdb",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[mj-relax] female evil creature completely formed of old root...",
+        "timestamp": 1778396072.658777,
+        "type": "create",
+        "status": "FAILED",
+        "model": "midjourney",
+        "batch_id": "c6c4bcb5-0044-4027-bdcb-53d8c46922eb",
+        "batch_total": 4
+      },
+      {
+        "id": "2b9925fb-b4ae-4cae-b232-4ec76f82785d",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/7c924754-57fb-4438-8cbb-d7fc47312853.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/7c924754-57fb-4438-8cbb-d7fc47312853.png",
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/fb606b50-3179-449d-807a-c409149696c2.png",
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/dceb51fd-8cf5-44a7-92f1-5184ff522729.png",
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/40315206-6da8-458d-8efc-c14c362524e9.png"
+        ],
+        "prompt": "[mj-relax] female evil creature completely formed of old root...",
+        "timestamp": 1778396191.261271,
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "midjourney",
+        "batch_id": "fa2e0e27-9f9d-40aa-b3c4-23c791078406",
+        "batch_total": 4,
+        "batch_index": 0
+      },
+      {
+        "prompt": "[mj-relax] female evil creature completely formed of old root...",
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "midjourney",
+        "batch_id": "fa2e0e27-9f9d-40aa-b3c4-23c791078406",
+        "batch_total": 4,
+        "id": "1cece7b6-86fe-4b71-b5ec-119b57812139",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/fb606b50-3179-449d-807a-c409149696c2.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/fb606b50-3179-449d-807a-c409149696c2.png"
+        ],
+        "timestamp": 1778396191.262271,
+        "batch_index": 1
+      },
+      {
+        "prompt": "[mj-relax] female evil creature completely formed of old root...",
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "midjourney",
+        "batch_id": "fa2e0e27-9f9d-40aa-b3c4-23c791078406",
+        "batch_total": 4,
+        "id": "5d8e1f3f-85d8-4f57-a171-b1577739de49",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/dceb51fd-8cf5-44a7-92f1-5184ff522729.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/dceb51fd-8cf5-44a7-92f1-5184ff522729.png"
+        ],
+        "timestamp": 1778396191.263271,
+        "batch_index": 2
+      },
+      {
+        "prompt": "[mj-relax] female evil creature completely formed of old root...",
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "midjourney",
+        "batch_id": "fa2e0e27-9f9d-40aa-b3c4-23c791078406",
+        "batch_total": 4,
+        "id": "80bd5010-ab56-4eea-aeb5-354685ed8269",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/40315206-6da8-458d-8efc-c14c362524e9.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/40315206-6da8-458d-8efc-c14c362524e9.png"
+        ],
+        "timestamp": 1778396191.264271,
+        "batch_index": 3
+      },
+      {
+        "id": "e7e0f1eb-19a1-4910-a6c4-420f81a0761d",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/38ffd9bf-861e-40a9-a9e1-b3c8831874e9.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/38ffd9bf-861e-40a9-a9e1-b3c8831874e9.png"
+        ],
+        "prompt": "[text2img] two stylized children characters standing side by ...",
+        "timestamp": 1778558026.266376,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "d92c0386-1385-4185-ae54-2ec8c206bb79",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "d17eae6c-74ad-4afa-b268-cb1ef166c321",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/33ece766-808e-44ff-8183-def2fcb26e8a.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/33ece766-808e-44ff-8183-def2fcb26e8a.png"
+        ],
+        "prompt": "[text2img] two stylized children characters standing side by ...",
+        "timestamp": 1778558111.659953,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "8b5ecee2-3487-45a1-a64c-26ee24857818",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "de0cbbaf-6fdb-4c99-a52b-068ebadb3af1",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/0c19d7ae-1162-4489-9d22-452bda68ffc9.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/0c19d7ae-1162-4489-9d22-452bda68ffc9.png"
+        ],
+        "prompt": "[text2img] two stylized children characters standing side by ...",
+        "timestamp": 1778558310.934705,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "cdd44453-28c5-4357-ab45-ce230a3b7191",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "2a86f7a7-37e2-4500-af82-5489dfa07415",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] two stylized children characters standing side by ...",
+        "timestamp": 1778558529.711264,
+        "type": "create",
+        "status": "TIMEOUT",
+        "batch_id": "0f4abd61-dd0f-4754-9d32-63b93151a6db",
+        "batch_total": 1
+      },
+      {
+        "id": "de95d323-690c-40ba-ba91-d76d8995bf03",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/07d8f80d-c908-4758-ad67-5b88d16b0748.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/07d8f80d-c908-4758-ad67-5b88d16b0748.png"
+        ],
+        "prompt": "[text2img] 3D, hyperrealistic, cinematic, modern times, blond...",
+        "timestamp": 1778558578.93517,
+        "type": "create",
+        "status": "SUCCESS",
+        "batch_id": "3751d05c-9a71-48df-813d-4f47ce7c8b1e",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "4694b0b4-1040-45e2-80ea-e6fde65fc020",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] Closeup Photo of young Diego Luna, 20-year-old man...",
+        "timestamp": 1778558948.874406,
+        "type": "create",
+        "status": "FAILED",
+        "batch_id": "b1cc23d7-0e3b-40f0-90e1-aad21958b760",
+        "batch_total": 1
+      },
+      {
+        "id": "ae3bd1d2-aa15-44cb-8d91-bf5d872aa438",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] Photo, young Asian woman with sleek black hair pul...",
+        "timestamp": 1778559077.437442,
+        "type": "create",
+        "status": "FAILED",
+        "batch_id": "0b63e780-bcf7-40f7-af6d-7a15cb0a7558",
+        "batch_total": 1
+      },
+      {
+        "id": "6a209c9b-a2a3-4871-aa71-8bff4a3c06ae",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] Photo, young Asian woman with sleek black hair pul...",
+        "timestamp": 1778559126.714408,
+        "type": "create",
+        "status": "FAILED",
+        "batch_id": "a6728bb3-c8a0-4a89-b7c7-e77e77999010",
+        "batch_total": 1
+      },
+      {
+        "id": "828870f7-c721-486b-9a9a-0c1ea071cf1c",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] Photo, young Asian woman with sleek black hair pul...",
+        "timestamp": 1778559523.743274,
+        "type": "create",
+        "status": "FAILED",
+        "batch_id": "8fd00666-65f2-42a6-89cf-f5286e576447",
+        "batch_total": 1
+      },
+      {
+        "id": "f6d225f2-11f0-43f5-a3b5-fa6e15bf8c7b",
+        "image": null,
+        "image_urls": [],
+        "prompt": "[text2img] Photo, young Asian woman with sleek black hair pul...",
+        "timestamp": 1778560084.691266,
+        "type": "create",
+        "status": "FAILED",
+        "batch_id": "b80974d9-5557-4822-b8ca-bec18949502d",
+        "batch_total": 1
+      },
+      {
+        "id": "3d457a42-9ef2-4d5d-ba1c-b9997570754c",
+        "image": "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/909e19fd-4c6e-4a55-a899-f4765f1e4733.png",
+        "image_urls": [
+          "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/909e19fd-4c6e-4a55-a899-f4765f1e4733.png"
+        ],
+        "prompt": "全身照，双腿双脚自然，双眼正视正前方，液态金属二郎神，俊美男子，华贵气质，泛着银辉光纹皮肤，周身如水银流淌星河旋舞披风，头戴繁复华丽古风头饰，黑色流苏，身穿极繁层次银白铠甲，手执龙胆亮银枪，红色细节刻纹立体，精美霸气姿势，飘逸战斗华服，全身像身后叠层巨型立体轮环旋背景夜晚末世，能量涌动虚化意识流粒子流精致华丽一圈圈由小到大叠加的能量光环，8k超清画质，超细腻质感，3D渲染，银色为主。128k超清画质，超细",
+        "timestamp": 1778576181.242189,
+        "type": "create",
+        "status": "SUCCESS",
+        "model": "gpt-image-2",
+        "size": "768x1360",
+        "batch_id": "739e6383-776e-4fb6-b937-a2fb3f53ff95",
+        "batch_total": 1,
+        "batch_index": 0
+      },
+      {
+        "id": "ce04f398-2524-453c-8f9c-0161c905698c",
+        "image": null,
+        "image_urls": [],
+        "prompt": "基于这张图，改成一个黄金色铠甲的人物，脸型要不同",
+        "timestamp": 1778576375.868598,
+        "type": "create",
+        "status": "FAILED",
+        "model": "gpt-image-2",
+        "size": "768x1360",
+        "batch_id": "e76fd314-0327-4a10-99ee-6c8f30a6847b",
+        "batch_total": 1
+      }
+    ]
+  },
+  "quota_logs": [
+    {
+      "id": "e0858310-c333-44b7-be5b-67784d5ff723",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777134614.44496
+    },
+    {
+      "id": "80cf0ddb-1bfc-4fca-9a3b-caec501d4b4e",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777134646.1464372
+    },
+    {
+      "id": "cdfc8604-c0ed-42b8-a38c-28201348b9c5",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777134780.981185
+    },
+    {
+      "id": "0b35e7a3-2391-4804-9081-1a61f0dc7d17",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9997,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777136103.119395
+    },
+    {
+      "id": "6827cccc-489f-4cdc-a1c7-93c83efab1da",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9996,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777136105.232447
+    },
+    {
+      "id": "ae39ad71-4ea0-418d-9ebb-90b84fdce5bd",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9995,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777136107.848763
+    },
+    {
+      "id": "9c0a56f2-cb74-4966-8e4b-27672281ed80",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777137342.9484532
+    },
+    {
+      "id": "65edaf70-a020-4e1d-b7fb-68e4e868c5b2",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777137349.302685
+    },
+    {
+      "id": "dcce6293-8fac-4397-95e4-03a419875563",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777137570.554964
+    },
+    {
+      "id": "89d09eec-5108-405c-91f6-7164a1e34a7e",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777137742.2954948
+    },
+    {
+      "id": "37899423-1c47-4417-8d74-d79e18c3a339",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9997,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777166171.387876
+    },
+    {
+      "id": "f7dbf06c-f13a-40f3-9bbd-ef9abbe1ef5e",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9995,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777167294.250916
+    },
+    {
+      "id": "101b482f-405b-49a8-a5b7-6e9b7887a00b",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9996,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777178468.943421
+    },
+    {
+      "id": "5dc858b3-32b8-497a-b9c9-c2e196c5b869",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777209969.6524339
+    },
+    {
+      "id": "63bf1376-c233-4c44-9303-cc15d1fe87fb",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777210198.9877372
+    },
+    {
+      "id": "22417154-c8aa-475e-90b8-fc21374be454",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777211275.009992
+    },
+    {
+      "id": "1d468054-7c3d-4d3b-8e02-0dedcc90bb31",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9999,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777211970.308844
+    },
+    {
+      "id": "2167ce7b-1144-4a59-a8aa-6a50a10690b7",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9999,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777212934.262348
+    },
+    {
+      "id": "ae2dd667-c6a4-493f-8de8-8f800997dcfa",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9998,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777213145.705426
+    },
+    {
+      "id": "5f164ff2-a35c-4e0c-9b95-ecda082c7d45",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9997,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777216018.157604
+    },
+    {
+      "id": "aaa411bb-d025-4cf5-9ccc-b5f5a7781e16",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9996,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777216226.5816169
+    },
+    {
+      "id": "3daec935-ea84-4852-89a2-7aa4ec168113",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9995,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777216671.7686431
+    },
+    {
+      "id": "997a6884-0302-4371-9662-12e8b0e0581c",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9994,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777277038.604108
+    },
+    {
+      "id": "a573f53f-cf1c-4e72-888d-b5b9b72f6a42",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777284914.249125
+    },
+    {
+      "id": "3518bd2a-cc4d-45fc-91a2-8b8fafb30429",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777285142.150603
+    },
+    {
+      "id": "1f74b75e-0f5f-49e6-a60f-cdb1b8631c75",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777285748.878037
+    },
+    {
+      "id": "3e725497-bfdc-4719-8170-bafdcaa5d9ba",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777286138.789108
+    },
+    {
+      "id": "e0c2befb-8b49-4d6b-abb5-7a4cd696620e",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1777340276.7599082
+    },
+    {
+      "id": "2f2b9c53-562f-4e1a-8226-01d4f3890004",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9995,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778327544.3633301
+    },
+    {
+      "id": "217172b2-7ef6-40b6-93e5-86e593802ad0",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778339875.608643
+    },
+    {
+      "id": "1b617b47-efa3-4275-8a90-9889df24d6a7",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9994,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778339875.610189
+    },
+    {
+      "id": "a546f1da-8a25-4a8f-af16-6d3c11d0f613",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9992,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778339875.622017
+    },
+    {
+      "id": "df1207f2-cad1-43b9-bd15-9f026054e204",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9991,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778342167.103842
+    },
+    {
+      "id": "b7018aa9-1e1c-452a-8f1d-c8545e3f6f9c",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9990,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778342167.105029
+    },
+    {
+      "id": "02f1476a-85c8-4b34-a986-dad06a8656f5",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9991,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778342288.2702851
+    },
+    {
+      "id": "96a2aeb7-2037-4b4b-bc5d-734478972556",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9988,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778345074.913841
+    },
+    {
+      "id": "2ace4805-b60d-47cc-bc6a-59ee067f416b",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9989,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778345074.915991
+    },
+    {
+      "id": "efe7efa2-1719-4125-85f0-a5e008155627",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9990,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778345074.916877
+    },
+    {
+      "id": "394f5904-a005-43ca-b2f2-4de887aa95a0",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9989,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778345195.811647
+    },
+    {
+      "id": "51adaedb-06c7-4bb6-b646-c5204173ba10",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9990,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778345196.348404
+    },
+    {
+      "id": "7860a7d6-d4c5-4073-bcd2-2e7344502cbf",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9991,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778345198.8759198
+    },
+    {
+      "id": "c14a6ce8-f4f7-447f-9d2c-dba554c0d376",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9988,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778345840.6411011
+    },
+    {
+      "id": "321c8f8d-54ba-4603-b704-60c640f17142",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9989,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778345840.642244
+    },
+    {
+      "id": "62fe8f8b-cf3e-44c2-9c71-eeffe2a89e0d",
+      "username": "admin",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9990,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778345840.644346
+    },
+    {
+      "id": "e671c317-716a-45e6-857b-8a69e2c45be5",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9989,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778345961.760727
+    },
+    {
+      "id": "48fe916f-18cc-4e68-805b-e539aff68286",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9990,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778345962.189413
+    },
+    {
+      "id": "0acb7d65-fee1-4a56-8240-3a908620aaa5",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9988,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778347063.5211709
+    },
+    {
+      "id": "69aadf7e-54f0-436e-bd36-e0dcbbb8d77d",
+      "username": "admin",
+      "operator": "system",
+      "amount": 1,
+      "balance_after": 9989,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778347166.0213912
+    },
+    {
+      "id": "d9342d94-eced-45b5-8031-e5aeb327de3d",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9987,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778347472.4314802
+    },
+    {
+      "id": "02d6e4a7-0d35-4959-bb27-f6ef9d1b2898",
+      "username": "admin",
+      "operator": "system",
+      "amount": 2,
+      "balance_after": 9989,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778347594.1433249
+    },
+    {
+      "id": "8b0d5540-9527-40bd-9152-6de1b0ca1a3d",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9987,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778348415.286218
+    },
+    {
+      "id": "3c283ab0-643b-4b6d-a7e7-b5435dc78b34",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9985,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778350904.5676959
+    },
+    {
+      "id": "c19f1349-e5c7-4b79-81a0-66cea7f1df79",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9983,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778351164.172253
+    },
+    {
+      "id": "edf48845-e236-4d45-ac75-6f72c03c03f2",
+      "username": "admin",
+      "operator": "system",
+      "amount": -10,
+      "balance_after": 9973,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778380023.204614
+    },
+    {
+      "id": "a770e81a-4993-4b03-b872-bb05c2062471",
+      "username": "admin",
+      "operator": "system",
+      "amount": 10,
+      "balance_after": 9983,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778380026.045964
+    },
+    {
+      "id": "f1e3ab4f-b59f-41ee-a9ab-ab18fb74e5fd",
+      "username": "admin",
+      "operator": "system",
+      "amount": -10,
+      "balance_after": 9973,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778380275.038309
+    },
+    {
+      "id": "526806a7-17da-4e20-84d5-949d972559b1",
+      "username": "admin",
+      "operator": "system",
+      "amount": 10,
+      "balance_after": 9983,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778380281.5547369
+    },
+    {
+      "id": "8e490f6e-1c91-4411-874c-66f8b365ad81",
+      "username": "admin",
+      "operator": "system",
+      "amount": -10,
+      "balance_after": 9973,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778380601.118418
+    },
+    {
+      "id": "f30787b5-3651-4b8d-89bd-3e1ba3791068",
+      "username": "admin",
+      "operator": "system",
+      "amount": 10,
+      "balance_after": 9983,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778380662.309788
+    },
+    {
+      "id": "2dbfda0c-d549-498a-8f02-7de5ecb39d66",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9981,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778382475.48525
+    },
+    {
+      "id": "0a3f09ca-3b9b-4fe4-a890-5f879927e5b1",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9979,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778383753.584888
+    },
+    {
+      "id": "d2445723-40be-4ff4-8503-9a6994ceb2c8",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9977,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778384184.5976
+    },
+    {
+      "id": "f7f7cfb4-4d27-4167-a88a-7545406901e8",
+      "username": "admin",
+      "operator": "system",
+      "amount": 2,
+      "balance_after": 9979,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778384300.74485
+    },
+    {
+      "id": "93eddc12-304e-4676-8355-57790a935a19",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9977,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778384383.004073
+    },
+    {
+      "id": "b73085e1-2339-4004-b1b7-eb0db743b3d8",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9975,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778396072.657836
+    },
+    {
+      "id": "04db2083-3ca0-4c9e-a07b-65b4a17d851c",
+      "username": "admin",
+      "operator": "system",
+      "amount": 2,
+      "balance_after": 9977,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778396073.894645
+    },
+    {
+      "id": "78f043cf-1630-46f4-8a35-8d63866ffe6d",
+      "username": "admin",
+      "operator": "system",
+      "amount": -2,
+      "balance_after": 9975,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778396191.257736
+    },
+    {
+      "id": "6043e644-02ee-41d5-b202-4ae429b4f9cc",
+      "username": "17865566591",
+      "operator": "system",
+      "amount": -1,
+      "balance_after": 9993,
+      "reason": "创作消耗",
+      "type": "consume",
+      "timestamp": 1778475161.432631
+    },
+    {
+      "id": "fc7608bc-6e79-4e70-a2bf-aa4f6e0dc435",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9968,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778558026.262656
+    },
+    {
+      "id": "fdf77042-b56f-450a-a6f8-5d26625e9085",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9961,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778558111.654835
+    },
+    {
+      "id": "ba44144e-59c4-484e-ba71-05c84824e147",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9954,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778558310.929604
+    },
+    {
+      "id": "f0a85476-3f69-4357-906c-127b7131d4e1",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9947,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778558529.707653
+    },
+    {
+      "id": "3079c6c5-5858-417c-9331-04699569c681",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9940,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778558578.931366
+    },
+    {
+      "id": "fb632d0f-cb58-4cb0-97f2-252218e62c38",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9933,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778558948.8699021
+    },
+    {
+      "id": "12969d59-11eb-472a-8e56-1785bee39f8e",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9940,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778558950.688843
+    },
+    {
+      "id": "e7c2c26d-7787-4919-89d0-cbf89584ffbd",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9933,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778559077.431396
+    },
+    {
+      "id": "4b53fd34-8063-49ce-8edb-f89722d24bd8",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9940,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778559078.2184498
+    },
+    {
+      "id": "73c46f26-d532-4bec-9f84-967281895068",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9933,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778559126.710169
+    },
+    {
+      "id": "ddb327ae-0114-4063-aab8-8997bd5e29eb",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9940,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778559127.454883
+    },
+    {
+      "id": "0d7b0e1f-bed2-4c4a-bc21-b64a62f0a746",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9933,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778559523.738925
+    },
+    {
+      "id": "86fa2c40-b3d8-4b88-aadd-b173a12d7330",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9940,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778559644.527462
+    },
+    {
+      "id": "b9f8b1f6-97c0-4e33-b891-3bde2be50a00",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9933,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "timestamp": 1778560084.686479
+    },
+    {
+      "id": "6c89015d-8c3b-4a74-a4b7-0110de96c9e5",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9940,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778560205.459212
+    },
+    {
+      "id": "dca37dba-ce77-48e6-bd37-10dc1e94d92a",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9933,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "model": "gpt-image-2",
+      "timestamp": 1778576181.236741
+    },
+    {
+      "id": "051a8d44-1406-40cf-9f84-57cd744a7a5a",
+      "username": "admin",
+      "operator": "system",
+      "amount": -7,
+      "balance_after": 9926,
+      "reason": "创作消耗",
+      "type": "consume",
+      "source": "platform",
+      "model": "gpt-image-2",
+      "timestamp": 1778576375.863347
+    },
+    {
+      "id": "5888bb2d-d2b1-4eab-b03f-b2f29c7cf164",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9933,
+      "reason": "任务失败，积分退回",
+      "type": "refund",
+      "timestamp": 1778576497.1264598
+    },
+    {
+      "id": "3b8c3cb5-c2cb-4208-a80f-e3319dfd6e07",
+      "username": "admin",
+      "operator": "system",
+      "amount": 7,
+      "balance_after": 9940,
+      "reason": "任务超时(>1800s)，积分退回",
+      "type": "timeout_refund",
+      "task_id": "2a86f7a7-37e2-4500-af82-5489dfa07415",
+      "timestamp": 1778585515.173755
+    },
+    {
+      "id": "5e0b188f-078f-412b-b45e-d2fca194e297",
+      "username": "OGk86rvn",
+      "operator": "admin",
+      "amount": 50,
+      "reason": "新用户初始积分",
+      "type": "admin_grant",
+      "timestamp": 1778588516.01342
+    }
+  ],
+  "api_keys": {
+    "13c539f04f48427aa9819b0c29a79bbb": {
+      "username": "17865566591",
+      "name": "测试1",
+      "key_hash": "b76327826a163a88e49f4d6a3af766970e5c8deffd7415a47e6098dd9dfc81a1",
+      "prefix": "sk-rBfgf",
+      "allowed_models": [],
+      "quota_limit": 100,
+      "quota_used": 1,
+      "disabled": false,
+      "created_at": 1778474988.319392,
+      "last_used_at": 1778475197.237942,
+      "total_calls": 1
+    }
+  },
+  "api_logs": [
+    {
+      "id": "002540c2ad3541989664f291acb6d79c",
+      "username": "17865566591",
+      "key_id": "13c539f04f48427aa9819b0c29a79bbb",
+      "source": "api",
+      "model": "gpt-image-2",
+      "prompt_preview": "a cat sitting on a book, studio lighting",
+      "size": null,
+      "n": 1,
+      "mode": null,
+      "status": "success",
+      "started_at": 1778475161.4293172,
+      "quota_cost": 1,
+      "quota_remaining_after_deduct": 9993,
+      "image_count": 1,
+      "urls": [
+        "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/a6239675-bb50-457a-b66a-2dccd34e0788.png"
+      ],
+      "upstream_extra": {
+        "job_id": "331930f0-2636-4760-9ad8-86c30a31e17a"
+      },
+      "finished_at": 1778475197.24196,
+      "latency": 35.813
+    },
+    {
+      "id": "056ccfad204b40caa7980b74c551261e",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "two stylized children characters standing side by side, minimalist designer toy aesthetic, soft matte vinyl texture, cute melancholic expression, oversized round yellow #FFC300 sunglasses, blue #00356",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778558026.270439,
+      "status": "success",
+      "image_count": 1,
+      "urls": [
+        "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/38ffd9bf-861e-40a9-a9e1-b3c8831874e9.png"
+      ],
+      "upstream_extra": {
+        "job_id": "625ea6e4-9a7c-41f1-a4c8-59c817427d3d"
+      },
+      "finished_at": 1778558074.666375,
+      "latency": 48.396
+    },
+    {
+      "id": "c4c3c8b770134a4b81c4916800464d96",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "two stylized children characters standing side by side, minimalist designer toy aesthetic, soft matte vinyl texture, cute melancholic expression, oversized round yellow #FFC300 sunglasses, blue #00356",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778558111.6647308,
+      "status": "success",
+      "image_count": 1,
+      "urls": [
+        "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/33ece766-808e-44ff-8183-def2fcb26e8a.png"
+      ],
+      "upstream_extra": {
+        "job_id": "b6b8827e-b422-45bb-a693-15b6d3f71d6d"
+      },
+      "finished_at": 1778558153.597701,
+      "latency": 41.933
+    },
+    {
+      "id": "77da8f5b15d44806b20d0f7d2a8d39bc",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "two stylized children characters standing side by side, minimalist designer toy aesthetic, soft matte vinyl texture, cute melancholic expression, oversized round yellow #FFC300 sunglasses, blue #00356",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778558310.9405901,
+      "status": "success",
+      "image_count": 1,
+      "urls": [
+        "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/0c19d7ae-1162-4489-9d22-452bda68ffc9.png"
+      ],
+      "upstream_extra": {
+        "job_id": "b8a8df3f-af76-48df-aed6-df9aed47a0ed"
+      },
+      "finished_at": 1778558385.632939,
+      "latency": 74.692
+    },
+    {
+      "id": "79a45eceb2c64017ac49ea97467c8d38",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "3D, hyperrealistic, cinematic, modern times, blonde giantess standing in times square looking down at tiny cars and buses",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778558578.9394088,
+      "status": "success",
+      "image_count": 1,
+      "urls": [
+        "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/07d8f80d-c908-4758-ad67-5b88d16b0748.png"
+      ],
+      "upstream_extra": {
+        "job_id": "f1300ba2-3e4b-4acd-a20b-74f04771b253"
+      },
+      "finished_at": 1778558622.530564,
+      "latency": 43.591
+    },
+    {
+      "id": "70f801c92947466783bd11e7fcf7b940",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "Closeup Photo of young Diego Luna, 20-year-old man, mid-length hair, muscular bodybuilder. Large biceps. At golden hour in a beautiful summer meadow field under a tree. Nordic meadow. Dark blue and br",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778558948.8793652,
+      "status": "failed",
+      "error": "Tuzi HTTP 401: {\"error\":{\"code\":\"\",\"message\":\"Invalid Token (request id: 20260512120910665295804cZod2Ho7)\",\"type\":\"rix_api_error\"}}",
+      "http_status": 500,
+      "finished_at": 1778558950.6713212
+    },
+    {
+      "id": "dca3b49d70cf427086e7cb6cc13dd0c0",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "Photo, young Asian woman with sleek black hair pulled back, porcelain skin, traditional Chinese opera inspired makeup with strong graphic thin straight eyebrows and cinnabar red lips, jade stud earrin",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778559077.4419909,
+      "status": "failed",
+      "error": "Tuzi HTTP 401: {\"error\":{\"code\":\"\",\"message\":\"Invalid Token (request id: 20260512121118169242031CTpNNt3o)\",\"type\":\"rix_api_error\"}}",
+      "http_status": 500,
+      "finished_at": 1778559078.201983
+    },
+    {
+      "id": "a3aaa30907184606af6e450dd839718c",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "Photo, young Asian woman with sleek black hair pulled back, porcelain skin, traditional Chinese opera inspired makeup with strong graphic thin straight eyebrows and cinnabar red lips, jade stud earrin",
+      "size": "1024x1024",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778559126.7188601,
+      "status": "failed",
+      "error": "Tuzi HTTP 401: {\"error\":{\"code\":\"\",\"message\":\"Invalid Token (request id: 20260512121207429498844D5I62lWP)\",\"type\":\"rix_api_error\"}}",
+      "http_status": 500,
+      "finished_at": 1778559127.443425
+    },
+    {
+      "id": "6830523fcdd144fba86814ef40ef564c",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "Photo, young Asian woman with sleek black hair pulled back, porcelain skin, traditional Chinese opera inspired makeup with strong graphic thin straight eyebrows and cinnabar red lips, jade stud earrin",
+      "size": "768x1360",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778559523.749724,
+      "status": "failed",
+      "error": "Tuzi request failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "http_status": 500,
+      "finished_at": 1778559644.50395
+    },
+    {
+      "id": "3d9f4a301192439abefc321fea24609d",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "Photo, young Asian woman with sleek black hair pulled back, porcelain skin, traditional Chinese opera inspired makeup with strong graphic thin straight eyebrows and cinnabar red lips, jade stud earrin",
+      "size": "768x1360",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778560084.6975732,
+      "status": "failed",
+      "error": "Tuzi request failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "http_status": 500,
+      "finished_at": 1778560205.4357498
+    },
+    {
+      "id": "e61bfb1061cf474e8b3f7ccb1e5e28fb",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "全身照，双腿双脚自然，双眼正视正前方，液态金属二郎神，俊美男子，华贵气质，泛着银辉光纹皮肤，周身如水银流淌星河旋舞披风，头戴繁复华丽古风头饰，黑色流苏，身穿极繁层次银白铠甲，手执龙胆亮银枪，红色细节刻纹立体，精美霸气姿势，飘逸战斗华服，全身像身后叠层巨型立体轮环旋背景夜晚末世，能量涌动虚化意识流粒子流精致华丽一圈圈由小到大叠加的能量光环，8k超清画质，超细腻质感，3D渲染，银色为主。128k超清画",
+      "size": "768x1360",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778576181.2487261,
+      "status": "success",
+      "image_count": 1,
+      "urls": [
+        "https://ai-shot.oss-cn-hangzhou.aliyuncs.com/uploads/909e19fd-4c6e-4a55-a899-f4765f1e4733.png"
+      ],
+      "upstream_extra": {},
+      "finished_at": 1778576223.090393,
+      "latency": 41.842
+    },
+    {
+      "id": "1bc78a2623ce4751b4467988cadac71a",
+      "username": "admin",
+      "key_id": null,
+      "source": "product:/api/create",
+      "model": "gpt-image-2",
+      "prompt_preview": "基于这张图，改成一个黄金色铠甲的人物，脸型要不同",
+      "size": "768x1360",
+      "n": 1,
+      "mode": null,
+      "started_at": 1778576375.874779,
+      "status": "failed",
+      "error": "Tuzi request failed: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response'))",
+      "http_status": 500,
+      "finished_at": 1778576497.101548
+    }
+  ],
+  "models_registry": {
+    "gpt-image-2": {
+      "adapter_type": "tuzi-image",
+      "upstream_api_key": "sk-pB4HTnKHHVPp9t20wpdLiLk4tz0MTF4BxC2j7UIwT7LetWF2",
+      "description": "基础生图模型，支持图生图与多尺寸输出",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "per_image",
+        "cost": 7
+      },
+      "config": {
+        "upstream_model": "gpt-image-2",
+        "concurrent_n": true
+      },
+      "updated_at": 1778559023.615284,
+      "updated_by": "admin",
+      "created_at": 1778472543.926324,
+      "created_by": "system",
+      "display_name": "GPT Image 2",
+      "channel": "ttapi",
+      "visible": true,
+      "params_schema": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "description": "模型 ID（使用卡片上显示的值）"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "文本提示词，描述你想生成的内容",
+          "example": "一只猫坐在书上，影棚灯光"
+        },
+        {
+          "name": "image",
+          "type": "string[] | string",
+          "required": false,
+          "description": "参考图 URL（支持传入 1 张或多张 HTTPS 链接，用于图生图）"
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "required": false,
+          "description": "输出尺寸。该模型仅支持 1K 分辨率，如 1024x1024、1536x1024 等（总像素不超过约 1M）。",
+          "example": "1024x1024"
+        },
+        {
+          "name": "n",
+          "type": "number",
+          "required": false,
+          "default": 1,
+          "description": "生成数量（1-10），每张独立计费"
+        }
+      ],
+      "order": 0
+    },
+    "gpt-image-2-pro": {
+      "adapter_type": "ttapi-image",
+      "upstream_api_key": "d6b0660c-6f2e-4cee-a64d-764960fd71c6",
+      "description": "Pro 专业级生图模型（异步，支持任意尺寸）",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "per_image",
+        "cost": 22
+      },
+      "config": {
+        "upstream_model": "gpt-image-2-plus"
+      },
+      "updated_at": 1778516437.2846432,
+      "updated_by": "system-migration",
+      "created_at": 1778472543.929448,
+      "created_by": "system",
+      "display_name": "GPT Image 2 Pro",
+      "channel": "ttapi",
+      "visible": true,
+      "order": 2
+    },
+    "midjourney": {
+      "adapter_type": "ttapi-mj",
+      "upstream_api_key": "d6b0660c-6f2e-4cee-a64d-764960fd71c6",
+      "description": "Midjourney 图像生成，每次输出 4 张子图",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "by_mode",
+        "by_mode": {
+          "relax": 22,
+          "fast": 42,
+          "turbo": 62
+        }
+      },
+      "config": {
+        "mode": "fast",
+        "poll_timeout": 1200,
+        "max_images": 4
+      },
+      "updated_at": 1778516437.286122,
+      "updated_by": "system-migration",
+      "created_at": 1778472543.930636,
+      "created_by": "system",
+      "display_name": "Midjourney",
+      "channel": "ttapi",
+      "visible": true,
+      "order": 3
+    },
+    "veo3.1-4k": {
+      "adapter_type": "tuzi-video",
+      "upstream_api_key": "sk-pB4HTnKHHVPp9t20wpdLiLk4tz0MTF4BxC2j7UIwT7LetWF2",
+      "description": "Tuzi 视频生成（异步）",
+      "enabled": false,
+      "supports": {
+        "video": true
+      },
+      "pricing": {
+        "mode": "per_call",
+        "cost": 5
+      },
+      "config": {
+        "upstream_model": "veo3.1-4k",
+        "use_multipart": true
+      },
+      "updated_at": 1778517373.9880261,
+      "updated_by": "admin",
+      "created_at": 1778472543.932974,
+      "created_by": "system",
+      "display_name": "Veo 3.1 (4K)",
+      "channel": "tuzi-default",
+      "visible": false,
+      "order": 7
+    },
+    "gpt-image-2-high": {
+      "adapter_type": "tuzi-image",
+      "upstream_api_key": "sk-pB4HTnKHHVPp9t20wpdLiLk4tz0MTF4BxC2j7UIwT7LetWF2",
+      "description": "高清生图模型，4K 以上尺寸自动加价",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "per_image",
+        "cost": 13
+      },
+      "config": {
+        "upstream_model": "gpt-image-2",
+        "concurrent_n": true
+      },
+      "updated_by": "admin",
+      "created_by": "system",
+      "display_name": "GPT Image 2 High",
+      "channel": "ttapi",
+      "updated_at": 1778559032.929037,
+      "created_at": 1778480522.723854,
+      "visible": true,
+      "order": 1
+    },
+    "nano-banana-2": {
+      "adapter_type": "tuzi-image",
+      "upstream_api_key": "sk-pB4HTnKHHVPp9t20wpdLiLk4tz0MTF4BxC2j7UIwT7LetWF2",
+      "display_name": "Nano Banana 2 (1K)",
+      "channel": "tuzi-default",
+      "visible": true,
+      "description": "Gemini 3.1 Flash Image Preview · 1K 标清输出（30 积分/张）",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "per_image",
+        "cost": 30
+      },
+      "config": {
+        "upstream_model": "gemini-3.1-flash-image-preview",
+        "fixed_quality": "1k",
+        "size_as_ratio": true,
+        "concurrent_n": true
+      },
+      "params_schema": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "description": "模型 ID（使用卡片上显示的值）"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "文本提示词，最长 1000 字符",
+          "example": "一只猫坐在书上，影棚灯光"
+        },
+        {
+          "name": "image",
+          "type": "string[] | string",
+          "required": false,
+          "description": "参考图 URL（支持传入 1 张或多张 HTTPS 链接，用于图生图）"
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "required": false,
+          "description": "画幅比例。可传 1x1 / 16x9 / 9x16 / 3x4 / 4x3 等；也可传 WxH 像素尺寸，服务端会就近转换为比例",
+          "example": "1x1"
+        },
+        {
+          "name": "n",
+          "type": "number",
+          "required": false,
+          "default": 1,
+          "description": "生成数量（1-10），每张独立计费（30 积分/张）"
+        }
+      ],
+      "updated_at": 1778514278.724612,
+      "updated_by": "system",
+      "created_at": 1778514278.7246132,
+      "created_by": "system",
+      "order": 4
+    },
+    "nano-banana-2-2k": {
+      "adapter_type": "tuzi-image",
+      "upstream_api_key": "sk-pB4HTnKHHVPp9t20wpdLiLk4tz0MTF4BxC2j7UIwT7LetWF2",
+      "display_name": "Nano Banana 2 (2K)",
+      "channel": "tuzi-default",
+      "visible": true,
+      "description": "Gemini 3.1 Flash Image Preview · 2K 高清输出（30 积分/张）",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "per_image",
+        "cost": 30
+      },
+      "config": {
+        "upstream_model": "gemini-3.1-flash-image-preview",
+        "fixed_quality": "2k",
+        "size_as_ratio": true,
+        "concurrent_n": true
+      },
+      "params_schema": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "description": "模型 ID（使用卡片上显示的值）"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "文本提示词，最长 1000 字符",
+          "example": "一只猫坐在书上，影棚灯光"
+        },
+        {
+          "name": "image",
+          "type": "string[] | string",
+          "required": false,
+          "description": "参考图 URL（支持传入 1 张或多张 HTTPS 链接，用于图生图）"
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "required": false,
+          "description": "画幅比例。可传 1x1 / 16x9 / 9x16 / 3x4 / 4x3 等；也可传 WxH 像素尺寸，服务端会就近转换为比例",
+          "example": "1x1"
+        },
+        {
+          "name": "n",
+          "type": "number",
+          "required": false,
+          "default": 1,
+          "description": "生成数量（1-10），每张独立计费（30 积分/张）"
+        }
+      ],
+      "updated_at": 1778514278.7266681,
+      "updated_by": "system",
+      "created_at": 1778514278.7266681,
+      "created_by": "system",
+      "order": 5
+    },
+    "nano-banana-2-4k": {
+      "adapter_type": "tuzi-image",
+      "upstream_api_key": "sk-pB4HTnKHHVPp9t20wpdLiLk4tz0MTF4BxC2j7UIwT7LetWF2",
+      "display_name": "Nano Banana 2 (4K)",
+      "channel": "tuzi-default",
+      "visible": true,
+      "description": "Gemini 3.1 Flash Image Preview · 4K 超清输出（30 积分/张）",
+      "enabled": true,
+      "supports": {
+        "image": true
+      },
+      "pricing": {
+        "mode": "per_image",
+        "cost": 30
+      },
+      "config": {
+        "upstream_model": "gemini-3.1-flash-image-preview",
+        "fixed_quality": "4k",
+        "size_as_ratio": true,
+        "concurrent_n": true
+      },
+      "params_schema": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "description": "模型 ID（使用卡片上显示的值）"
+        },
+        {
+          "name": "prompt",
+          "type": "string",
+          "required": true,
+          "description": "文本提示词，最长 1000 字符",
+          "example": "一只猫坐在书上，影棚灯光"
+        },
+        {
+          "name": "image",
+          "type": "string[] | string",
+          "required": false,
+          "description": "参考图 URL（支持传入 1 张或多张 HTTPS 链接，用于图生图）"
+        },
+        {
+          "name": "size",
+          "type": "string",
+          "required": false,
+          "description": "画幅比例。可传 1x1 / 16x9 / 9x16 / 3x4 / 4x3 等；也可传 WxH 像素尺寸，服务端会就近转换为比例",
+          "example": "1x1"
+        },
+        {
+          "name": "n",
+          "type": "number",
+          "required": false,
+          "default": 1,
+          "description": "生成数量（1-10），每张独立计费（30 积分/张）"
+        }
+      ],
+      "updated_at": 1778514278.727982,
+      "updated_by": "system",
+      "created_at": 1778514278.727982,
+      "created_by": "system",
+      "order": 6
+    },
+    "claude-opus-4-7": {
+      "id": "claude-opus-4-7",
+      "display_name": "Claude Opus 4.7",
+      "description": "Tuzi - 高级推理与长文本处理",
+      "enabled": true,
+      "adapter_type": "openai-compat",
+      "supports": {
+        "image": false,
+        "video": false,
+        "text": true
+      },
+      "upstream_api_key": "",
+      "config": {
+        "endpoint": "https://api.tu-zi.com/v1/chat/completions",
+        "upstream_model": "claude-opus-4-7"
+      },
+      "pricing": {
+        "mode": "per_token",
+        "input_m_cost": 5,
+        "output_m_cost": 25,
+        "cache_hit_m_cost": 0.5,
+        "exchange_rate": 100,
+        "cache_write_m_cost": 6.25
+      },
+      "params_schema": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "description": "模型 ID"
+        },
+        {
+          "name": "messages",
+          "type": "array",
+          "required": true,
+          "description": "对话历史数组",
+          "example": [
+            {
+              "role": "user",
+              "content": "你好"
+            }
+          ]
+        },
+        {
+          "name": "stream",
+          "type": "boolean",
+          "required": false,
+          "description": "是否开启流式返回",
+          "default": false
+        }
+      ],
+      "created_at": 1778670135.691477,
+      "created_by": "system",
+      "order": 10,
+      "updated_at": 1778689302.048465,
+      "updated_by": "admin",
+      "published_to": [
+        "plaza"
+      ]
+    },
+    "gpt-5.5": {
+      "id": "gpt-5.5",
+      "display_name": "GPT 5.5",
+      "description": "Tuzi - 旗舰逻辑与对话模型",
+      "enabled": true,
+      "adapter_type": "openai-compat",
+      "supports": {
+        "image": false,
+        "video": false,
+        "text": true
+      },
+      "upstream_api_key": "",
+      "config": {
+        "endpoint": "https://api.tu-zi.com/v1/chat/completions",
+        "upstream_model": "gpt-5.5"
+      },
+      "pricing": {
+        "mode": "per_token",
+        "input_m_cost": 5,
+        "output_m_cost": 30,
+        "exchange_rate": 100
+      },
+      "params_schema": [
+        {
+          "name": "model",
+          "type": "string",
+          "required": true,
+          "description": "模型 ID"
+        },
+        {
+          "name": "messages",
+          "type": "array",
+          "required": true,
+          "description": "对话历史数组",
+          "example": [
+            {
+              "role": "user",
+              "content": "你好"
+            }
+          ]
+        },
+        {
+          "name": "stream",
+          "type": "boolean",
+          "required": false,
+          "description": "是否开启流式返回",
+          "default": false
+        }
+      ],
+      "created_at": 1778670135.691478,
+      "created_by": "system",
+      "order": 11,
+      "published_to": [
+        "plaza"
+      ],
+      "updated_at": 1778689280.879114,
+      "updated_by": "admin"
+    },
+    "gemini-3.1-pro-preview": {
+      "id": "gemini-3.1-pro-preview",
+      "adapter_type": "openai-compat",
+      "upstream_api_key": "",
+      "display_name": "Gemini 3.1 Pro Preview",
+      "channel": "Tuzi",
+      "visible": true,
+      "description": "Google 最先进的大语言模型",
+      "enabled": true,
+      "supports": {
+        "text": true,
+        "image": false,
+        "video": false,
+        "async": false
+      },
+      "pricing": {
+        "mode": "per_token",
+        "input_m_cost": 2,
+        "output_m_cost": 12,
+        "exchange_rate": 100
+      },
+      "config": {
+        "upstream_model": "gemini-3.1-pro-preview",
+        "endpoint": "https://api.tu-zi.com/v1/chat/completions",
+        "timeout": 300
+      },
+      "published_to": [
+        "plaza"
+      ],
+      "updated_at": 1778689297.134876,
+      "updated_by": "admin",
+      "created_at": 1778689297.134878,
+      "created_by": "admin"
+    }
+  }
+}

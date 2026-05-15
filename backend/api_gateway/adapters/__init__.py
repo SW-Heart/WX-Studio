@@ -16,6 +16,7 @@ Admin 在后台新建模型时选一个 adapter_type，按 schema 填 config 即
 from typing import Dict, Type
 
 from .base import BaseAdapter, AdapterContext, AdapterResult
+from .alias import AliasAdapter
 from .ttapi_image import TTAPIImageAdapter
 from .ttapi_mj import TTAPIMidjourneyAdapter
 from .tuzi_image import TuziImageAdapter
@@ -24,6 +25,7 @@ from .openai_compat import OpenAICompatAdapter
 
 
 REGISTRY: Dict[str, Type[BaseAdapter]] = {
+    "alias": AliasAdapter,
     "ttapi-image": TTAPIImageAdapter,
     "ttapi-mj": TTAPIMidjourneyAdapter,
     "tuzi-image": TuziImageAdapter,

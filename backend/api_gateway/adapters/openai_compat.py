@@ -23,14 +23,25 @@ class OpenAICompatAdapter(BaseAdapter):
     def describe(cls) -> Dict[str, Any]:
         return {
             "display_name": "OpenAI-compatible (/images or /chat)",
+            "display_name_zh": "OpenAI 兼容（图像 / 对话）",
+            "description_zh": "对接任何严格遵循 OpenAI 协议的上游（/v1/images/generations 或 /v1/chat/completions），同步返回。",
             "supports": {"image": True, "video": False, "text": True, "async": False},
             "config_fields": [
                 {"key": "upstream_model", "type": "string", "required": True,
-                 "default": "gpt-image-1"},
+                 "default": "gpt-image-1",
+                 "label_zh": "上游模型名",
+                 "help_zh": "上游实际模型 ID",
+                 "placeholder": "gpt-image-1", "group": "upstream"},
                 {"key": "endpoint", "type": "string", "required": True,
-                 "default": cls.DEFAULT_ENDPOINT},
+                 "default": cls.DEFAULT_ENDPOINT,
+                 "label_zh": "请求地址",
+                 "help_zh": "完整的 OpenAI 兼容端点 URL",
+                 "group": "upstream"},
                 {"key": "timeout", "type": "number", "required": False,
-                 "default": cls.DEFAULT_TIMEOUT},
+                 "default": cls.DEFAULT_TIMEOUT,
+                 "label_zh": "请求超时（秒）",
+                 "help_zh": "HTTP 请求的最长等待时间",
+                 "group": "advanced"},
             ],
         }
 
