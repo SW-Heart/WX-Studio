@@ -21,6 +21,7 @@ from fastapi.responses import StreamingResponse, JSONResponse
 from . import storage
 from .auth import AuthedKey, require_api_key
 from .service import ServiceError, call_image_model
+from . import anthropic_compat as anthro
 
 try:
     from backend.rate_limiter import limiter, get_client_ip, API_KEY_LIMIT, API_IP_LIMIT
@@ -281,3 +282,230 @@ async def chat_completions(
                     finalize_usage(None)
 
         return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+
+# ---------- /v1/messages（Anthropic 兼容，供 Claude Code 等使用） ----------
+
+@router.post("/messages")
+async def anthropic_messages(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    body: Dict[str, Any] = Body(...),
+    authed: AuthedKey = Depends(require_api_key),
+):
+    """Anthropic Messages API 兼容端点。
+
+    - 上游原生支持 /v1/messages 的模型（如 Tuzi 上的 Claude）走"透传"
+    - 其他模型（GPT/Gemini）做 Anthropic ↔ OpenAI 协议转换后走 /v1/chat/completions
+
+    认证支持 `Authorization: Bearer sk-...` 和 `x-api-key: sk-...` 两种风格。
+    """
+    model_id = body.get("model")
+    if not model_id:
+        raise HTTPException(400, "missing 'model'")
+    _ensure_model_allowed(authed, model_id)
+
+    if limiter and request:
+        client_ip = get_client_ip(request)
+        limiter.check("api_key", authed.id, *API_KEY_LIMIT, "API requests too frequent")
+        limiter.check("api_ip", client_ip, *API_IP_LIMIT, "API requests too frequent")
+
+    model = storage.get_model(model_id)
+    if not model or not model.get("enabled", True):
+        raise HTTPException(404, f"model '{model_id}' not found or disabled")
+
+    upstream_key = model.get("upstream_api_key") or ""
+    if not upstream_key:
+        raise HTTPException(500, f"model '{model_id}' missing upstream_api_key")
+
+    config = model.get("config") or {}
+    upstream_model = config.get("upstream_model") or model_id
+    pricing = model.get("pricing") or {"mode": "per_token", "cost": 1}
+    is_stream = bool(body.get("stream", False))
+    passthrough = anthro.is_passthrough_model(model)
+
+    from .pricing import compute_token_cost
+    from . import deps
+
+    start_t = time.time()
+
+    def finalize_usage(usage_data: Optional[dict], status: str = "success", error_msg: str = ""):
+        cost = 0
+        if usage_data:
+            cost = compute_token_cost(pricing, usage_data)
+            if cost > 0:
+                try:
+                    token_info = f" ({usage_data.get('total_tokens', 0)} Tk)" if usage_data.get("total_tokens") else ""
+                    deps.deduct_quota(authed.username, cost, model=model_id,
+                                      reason=f"API调用消耗{token_info}")
+                    storage.record_key_usage(authed.id, cost)
+                except Exception as e:
+                    print(f"Anthropic messages cost deduct failed: {e}")
+
+        # 提取 prompt 用于日志展示
+        msgs = body.get("messages") or []
+        prompt_text = "anthropic messages"
+        if msgs:
+            last = msgs[-1]
+            if isinstance(last, dict):
+                c = last.get("content")
+                if isinstance(c, str):
+                    prompt_text = c[:200]
+                elif isinstance(c, list):
+                    for blk in c:
+                        if isinstance(blk, dict) and blk.get("type") == "text":
+                            prompt_text = (blk.get("text") or "")[:200]
+                            break
+
+        storage.append_log({
+            "id": uuid.uuid4().hex,
+            "username": authed.username,
+            "key_id": authed.id,
+            "model_id": model_id,
+            "source": "api",
+            "endpoint": "/v1/messages",
+            "passthrough": passthrough,
+            "prompt": prompt_text,
+            "quota_cost": cost,
+            "usage": usage_data,
+            "status": status,
+            "error_msg": error_msg,
+            "created_at": time.time(),
+            "duration": round(time.time() - start_t, 3),
+        })
+
+    # ----------- 透传模式（Claude on Tuzi 等） -----------
+    if passthrough:
+        endpoint = anthro.derive_messages_endpoint(model)
+        # 复制一份，替换上游 model id
+        upstream_body = dict(body)
+        upstream_body["model"] = upstream_model
+
+        headers = {
+            "x-api-key": upstream_key,
+            "anthropic-version": request.headers.get("anthropic-version", "2023-06-01"),
+            "content-type": "application/json",
+        }
+        # Claude Code 可能带 anthropic-beta，透传过去
+        beta = request.headers.get("anthropic-beta")
+        if beta:
+            headers["anthropic-beta"] = beta
+
+        client = httpx.AsyncClient(timeout=600.0)
+
+        if not is_stream:
+            try:
+                resp = await client.post(endpoint, json=upstream_body, headers=headers)
+                await client.aclose()
+            except Exception as e:
+                finalize_usage(None, status="failed", error_msg=str(e))
+                raise HTTPException(502, f"Upstream error: {e}")
+            if resp.status_code != 200:
+                err = resp.text
+                finalize_usage(None, status="failed", error_msg=err[:500])
+                raise HTTPException(resp.status_code, err)
+            data = resp.json()
+            usage_oai = anthro._anthropic_usage_to_openai(data.get("usage") or {})
+            background_tasks.add_task(finalize_usage, usage_oai)
+            return JSONResponse(content=data)
+
+        async def passthrough_stream():
+            usage_acc: Optional[Dict[str, Any]] = None
+            try:
+                async with client.stream("POST", endpoint, json=upstream_body, headers=headers) as resp:
+                    if resp.status_code != 200:
+                        text = await resp.aread()
+                        finalize_usage(None, status="failed", error_msg=text.decode()[:500])
+                        yield f"event: error\ndata: {json.dumps({'error': text.decode()})}\n\n"
+                        return
+
+                    current_event: Optional[str] = None
+                    async for raw in resp.aiter_lines():
+                        if raw is None:
+                            continue
+                        # 原样转发给客户端
+                        yield raw + "\n"
+                        if raw.startswith("event:"):
+                            current_event = raw.split(":", 1)[1].strip()
+                        elif raw.startswith("data:") and current_event:
+                            try:
+                                payload = json.loads(raw[5:].strip())
+                                u = anthro.extract_usage_from_anthropic_stream_event(current_event, payload)
+                                if u:
+                                    usage_acc = anthro.merge_anthropic_usage(usage_acc, u)
+                            except Exception:
+                                pass
+                        elif raw == "":
+                            current_event = None
+            except Exception as e:
+                finalize_usage(None, status="failed", error_msg=str(e))
+                yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+                return
+            finally:
+                await client.aclose()
+                finalize_usage(usage_acc)
+
+        return StreamingResponse(passthrough_stream(), media_type="text/event-stream")
+
+    # ----------- 转换模式（GPT / Gemini 等走 OpenAI chat） -----------
+    chat_endpoint = config.get("endpoint") or "https://api.openai.com/v1/chat/completions"
+    openai_body = anthro.anthropic_to_openai_request(body, upstream_model=upstream_model)
+    if is_stream:
+        openai_body["stream"] = True
+        openai_body["stream_options"] = {"include_usage": True}
+
+    headers = {
+        "Authorization": f"Bearer {upstream_key}",
+        "Content-Type": "application/json",
+    }
+
+    client = httpx.AsyncClient(timeout=600.0)
+
+    if not is_stream:
+        try:
+            resp = await client.post(chat_endpoint, json=openai_body, headers=headers)
+            await client.aclose()
+        except Exception as e:
+            finalize_usage(None, status="failed", error_msg=str(e))
+            raise HTTPException(502, f"Upstream error: {e}")
+        if resp.status_code != 200:
+            err = resp.text
+            finalize_usage(None, status="failed", error_msg=err[:500])
+            raise HTTPException(resp.status_code, err)
+        oai_data = resp.json()
+        anthro_resp = anthro.openai_to_anthropic_response(oai_data, model_id=model_id)
+        background_tasks.add_task(finalize_usage, oai_data.get("usage"))
+        return JSONResponse(content=anthro_resp)
+
+    async def converted_stream():
+        usage_data: Optional[Dict[str, Any]] = None
+        try:
+            async with client.stream("POST", chat_endpoint, json=openai_body, headers=headers) as resp:
+                if resp.status_code != 200:
+                    text = await resp.aread()
+                    finalize_usage(None, status="failed", error_msg=text.decode()[:500])
+                    yield f"event: error\ndata: {json.dumps({'error': text.decode()})}\n\n"
+                    return
+
+                async def line_iter():
+                    async for raw in resp.aiter_lines():
+                        if raw:
+                            yield raw
+
+                async for ev in anthro.openai_stream_to_anthropic_stream(line_iter(), model_id=model_id):
+                    if ev.startswith("__USAGE__:"):
+                        try:
+                            usage_data = json.loads(ev[len("__USAGE__:"):].strip())
+                        except Exception:
+                            pass
+                        continue
+                    yield ev
+        except Exception as e:
+            finalize_usage(None, status="failed", error_msg=str(e))
+            yield f"event: error\ndata: {json.dumps({'error': str(e)})}\n\n"
+            return
+        finally:
+            await client.aclose()
+            finalize_usage(usage_data)
+
+    return StreamingResponse(converted_stream(), media_type="text/event-stream")

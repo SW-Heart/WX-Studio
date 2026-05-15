@@ -892,7 +892,7 @@ const BasicCreateStudio = ({ onBack, lang, setLang, isImmersive, onToggleImmersi
   const [quality, setQuality] = useState('auto');
   const [numImages, setNumImages] = useState(1);
   const [mjMode, setMjMode] = useState('fast');
-  const [mjVersion, setMjVersion] = useState('v8.1');
+  const [mjVersion, setMjVersion] = useState('v7');
 
   // 从后端拉取已上架到「无限画布」渠道的模型列表
   const { models: availableModels } = useAvailableModels(token, 'canvas');
@@ -2820,7 +2820,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   ];
   const isMjModel = isMjId(model);
   const [mjMode, setMjMode] = useState('fast'); // relax / fast / turbo
-  const [mjVersion, setMjVersion] = useState('v8.1');
+  const [mjVersion, setMjVersion] = useState('v7');
   const mjCostPerTask = MJ_COST_BY_MODE[mjMode] || 42;
 
   // gpt-image-2 仅支持 1K，切到该模型时强制回到 1K，同时在 UI 隐藏分辨率切换
@@ -3807,7 +3807,12 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                         {MJ_VERSIONS.map(v => (
                           <button
                             key={v.id}
-                            onClick={() => setMjVersion(v.id)}
+                            onClick={() => {
+                              setMjVersion(v.id);
+                              if (v.id === 'v8.1') {
+                                showToast('V8 模型暂不稳定，推荐使用 V7', 'info');
+                              }
+                            }}
                             className={`py-2.5 rounded-lg border transition-all flex flex-col items-center gap-0.5 ${mjVersion === v.id ? 'bg-white/10 border-white/20 text-white' : 'bg-transparent border-white/5 text-white/40 hover:text-white/70'}`}
                           >
                             <span className="text-[11px] font-bold">{v.label}</span>

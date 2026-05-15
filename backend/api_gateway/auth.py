@@ -33,11 +33,23 @@ class AuthedKey:
         return max(0, int(self.quota_limit) - self.quota_used - self.quota_reserved)
 
 
-async def require_api_key(authorization: Optional[str] = Header(default=None)) -> AuthedKey:
-    """FastAPI 依赖：从 Authorization 头验证 sk-xxx"""
+async def require_api_key(
+    authorization: Optional[str] = Header(default=None),
+    x_api_key: Optional[str] = Header(default=None, alias="x-api-key"),
+) -> AuthedKey:
+    """FastAPI 依赖：从 Authorization 或 x-api-key 头验证 sk-xxx
+
+    - OpenAI 风格客户端使用 `Authorization: Bearer sk-...`
+    - Anthropic 风格客户端（Claude Code 等）使用 `x-api-key: sk-...`
+    """
     raw = parse_auth_header(authorization)
+    if not raw and x_api_key:
+        # x-api-key 直接是裸 key（不带 Bearer 前缀）
+        candidate = x_api_key.strip()
+        if candidate.startswith("sk-"):
+            raw = candidate
     if not raw:
-        raise HTTPException(401, "missing or invalid API key; expected 'Bearer sk-...'")
+        raise HTTPException(401, "missing or invalid API key; expected 'Bearer sk-...' or 'x-api-key: sk-...'")
     key_hash = hash_key(raw)
     rec = storage.find_api_key_by_hash(key_hash)
     if not rec:
