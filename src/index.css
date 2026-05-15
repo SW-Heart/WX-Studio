@@ -40,6 +40,32 @@
 body {
   background-color: #2b1b18; 
   color: white;
+  overscroll-behavior: none;
+}
+
+/* 移动端安全区域适配 */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .mobile-safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* 移动端底部导航栏 */
+.mobile-bottom-nav {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* 移动端面板切换动画 */
+.mobile-panel-slide {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 移动端隐藏桌面端滚动条 */
+@media (max-width: 767px) {
+  ::-webkit-scrollbar {
+    width: 0px;
+    height: 0px;
+  }
 }
 
 /* 自定义滚动条样式 - 细滑块暗色主题 */

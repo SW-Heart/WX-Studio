@@ -51,7 +51,7 @@ const HomePage = ({ onNavigate, token, lang }) => {
           </p>
         </div>
 
-        <div className="relative z-10 grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
+        <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-10">
           {[
             {
               id: 'quick-create',
@@ -65,7 +65,8 @@ const HomePage = ({ onNavigate, token, lang }) => {
               icon: <LayoutIcon size={28} />,
               title: { zh: '无限画布', en: 'Infinite Canvas' },
               desc: { zh: '自由创作空间，文生图、图生图任意组合。', en: 'Free creative space with text & image generation.' },
-              gradient: 'from-[#10B981] to-[#059669]'
+              gradient: 'from-[#10B981] to-[#059669]',
+              desktopOnly: true
             },
             {
               id: 'models',
@@ -85,7 +86,7 @@ const HomePage = ({ onNavigate, token, lang }) => {
             <div
               key={item.id}
               onClick={() => onNavigate(item.id)}
-              className="group relative p-5 md:p-6 rounded-xl border transition-all duration-300 cursor-pointer bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02]"
+              className={`group relative p-5 md:p-6 rounded-xl border transition-all duration-300 cursor-pointer bg-white/[0.03] border-white/10 hover:border-white/20 hover:bg-white/[0.05] hover:scale-[1.02] ${item.desktopOnly ? 'hidden md:block' : ''}`}
             >
               <div className={`w-12 h-12 md:w-14 md:h-14 rounded-xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-3 shadow-lg text-white group-hover:scale-110 transition-transform duration-300`}>
                 {item.icon}

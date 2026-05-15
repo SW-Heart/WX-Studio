@@ -313,20 +313,12 @@ export const Sidebar = ({
             {/* 积分明细弹窗 */}
             <QuotaLogsModal isOpen={showQuotaLogs} onClose={() => setShowQuotaLogs(false)} lang={lang} />
 
-            {/* 移动端遮罩 */}
-            {isMobileOpen && (
-                <div
-                    className="fixed inset-0 bg-black/60 z-40 md:hidden"
-                    onClick={onMobileClose}
-                />
-            )}
-
-            {/* 侧边栏 - 固定宽度，极简深色风格 */}
+            {/* 侧边栏 - 仅桌面端显示 */}
             <aside
                 className={`
+          hidden md:flex
           fixed top-0 left-0 h-full bg-[#0a0a0a] border-r border-white/5 z-30
-          flex flex-col transition-all duration-300 ease-in-out w-16
-          ${isMobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+          flex-col transition-all duration-300 ease-in-out w-16
         `}
             >
                 {/* Logo 区域 */}
@@ -576,14 +568,6 @@ export const Sidebar = ({
                         </div>
                     )}
                 </div>
-
-                {/* 移动端关闭按钮 */}
-                <button
-                    onClick={onMobileClose}
-                    className="absolute top-4 right-4 p-1.5 rounded-lg bg-white/10 text-white md:hidden"
-                >
-                    <X size={18} />
-                </button>
             </aside>
         </>
     );
@@ -641,9 +625,16 @@ export const Layout = ({
     const [sidebarExpanded, setSidebarExpanded] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+    // 移动端底部导航项（精简为最常用的3个，画布在手机上无法操作故不展示）
+    const MOBILE_NAV = [
+        { id: 'home', icon: Home, label: { zh: '首页', en: 'Home' } },
+        { id: 'quick-create', icon: Wand2, label: { zh: '创作', en: 'Create' } },
+        { id: 'gallery', icon: FolderOpen, label: { zh: '图库', en: 'Gallery' } },
+    ];
+
     return (
         <div className="min-h-screen bg-[#050505] text-white">
-            {/* Sidebar */}
+            {/* Sidebar - 仅桌面端 */}
             {!isImmersive && (
                 <Sidebar
                     currentPage={currentPage}
@@ -651,8 +642,6 @@ export const Layout = ({
                     lang={lang}
                     isExpanded={sidebarExpanded}
                     onToggle={() => setSidebarExpanded(!sidebarExpanded)}
-                    isMobileOpen={mobileMenuOpen}
-                    onMobileClose={() => setMobileMenuOpen(false)}
                     username={username}
                     role={role}
                     quota={quota}
@@ -662,25 +651,116 @@ export const Layout = ({
                 />
             )}
 
-            {/* 移动端菜单按钮 */}
+            {/* 移动端顶部栏 */}
             {!isImmersive && (
-                <button
-                    onClick={() => setMobileMenuOpen(true)}
-                    className="fixed top-3 left-3 z-40 p-2 bg-[#0a0a0a]/80 backdrop-blur-xl border border-white/10 rounded-lg text-white/60 hover:text-white md:hidden"
-                >
-                    <Menu size={20} />
-                </button>
+                <div className="fixed top-0 left-0 right-0 z-40 h-12 bg-[#0a0a0a]/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 md:hidden">
+                    <div className="flex items-center gap-2">
+                        <img
+                            src="https://ai-shot.oss-cn-hangzhou.aliyuncs.com/logo/ailogo.png"
+                            alt="Logo"
+                            className="w-6 h-6 object-contain"
+                        />
+                        <span className="text-sm font-bold text-white/90">OG AI</span>
+                    </div>
+                    <div className="flex items-center gap-2 relative">
+                        {isLoggedIn && (
+                            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/5">
+                                <Zap size={12} className="text-[#FF8A3D]" fill="currentColor" />
+                                <span className="text-[11px] font-mono text-white/70">{quota}</span>
+                            </div>
+                        )}
+                        {isLoggedIn ? (
+                            <>
+                                <button
+                                    onClick={() => setMobileMenuOpen(prev => !prev)}
+                                    className="w-8 h-8 rounded-full bg-white/10 border border-white/20 flex items-center justify-center"
+                                >
+                                    <span className="text-[10px] font-medium text-white">{username?.slice(0, 2)}</span>
+                                </button>
+                                {mobileMenuOpen && (
+                                    <>
+                                        <div className="fixed inset-0 z-[99]" onClick={() => setMobileMenuOpen(false)} />
+                                        <div className="absolute top-full right-0 mt-1 z-[100] w-44 bg-[#141414] border border-white/10 rounded-xl shadow-2xl py-2">
+                                            <div className="px-4 py-2 border-b border-white/5">
+                                                <span className="text-[11px] text-white/40 font-mono">{username}</span>
+                                            </div>
+                                            <button
+                                                onClick={() => { setMobileMenuOpen(false); onNavigate('api-keys'); }}
+                                                className="w-full text-left px-4 py-2.5 text-xs text-white/80 hover:bg-white/5 hover:text-white flex items-center gap-2 mt-1 transition-colors"
+                                            >
+                                                <Key size={14} /> {lang === 'zh' ? 'API 管理' : 'API Keys'}
+                                            </button>
+                                            <button
+                                                onClick={() => { setMobileMenuOpen(false); onNavigate('models'); }}
+                                                className="w-full text-left px-4 py-2.5 text-xs text-white/80 hover:bg-white/5 hover:text-white flex items-center gap-2 transition-colors"
+                                            >
+                                                <Sparkles size={14} /> {lang === 'zh' ? '模型广场' : 'Models'}
+                                            </button>
+                                            {role === 'admin' && (
+                                                <button
+                                                    onClick={() => { setMobileMenuOpen(false); onNavigate('admin'); }}
+                                                    className="w-full text-left px-4 py-2.5 text-xs text-white/80 hover:bg-white/5 hover:text-white flex items-center gap-2 transition-colors"
+                                                >
+                                                    <Shield size={14} /> {lang === 'zh' ? '管理后台' : 'Admin'}
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => { setMobileMenuOpen(false); onLogout(); }}
+                                                className="w-full text-left px-4 py-2.5 text-xs text-red-400 hover:bg-white/5 flex items-center gap-2 transition-colors border-t border-white/5 mt-1 pt-2.5"
+                                            >
+                                                <LogOut size={14} /> {lang === 'zh' ? '退出登录' : 'Logout'}
+                                            </button>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        ) : (
+                            <button
+                                onClick={onLogin}
+                                className="px-3 py-1.5 rounded-lg bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-xs font-bold text-white"
+                            >
+                                {lang === 'zh' ? '登录' : 'Login'}
+                            </button>
+                        )}
+                    </div>
+                </div>
             )}
 
-            {/* 主内容区 - 固定高度 */}
+            {/* 主内容区 */}
             <main
                 className={`
           fixed bottom-0 right-0 transition-all duration-300
-          ${isImmersive ? 'top-0 left-0 z-[100]' : 'top-0 left-0 md:left-16'}
+          ${isImmersive
+            ? 'top-0 left-0 z-[100]'
+            : 'top-12 md:top-0 left-0 md:left-16 pb-16 md:pb-0'}
         `}
             >
                 {children}
             </main>
+
+            {/* 移动端底部导航栏 */}
+            {!isImmersive && (
+                <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0a0a0a]/95 backdrop-blur-xl border-t border-white/10 md:hidden mobile-bottom-nav">
+                    <div className="flex items-center justify-around h-14">
+                        {MOBILE_NAV.map((item) => {
+                            const Icon = item.icon;
+                            const isActive = currentPage === item.id;
+                            return (
+                                <button
+                                    key={item.id}
+                                    onClick={() => onNavigate(item.id)}
+                                    className={`flex flex-col items-center justify-center gap-0.5 w-16 h-full transition-colors ${
+                                        isActive ? 'text-[#FF8A3D]' : 'text-white/40'
+                                    }`}
+                                >
+                                    <Icon size={20} strokeWidth={isActive ? 2 : 1.5} />
+                                    <span className="text-[10px] font-medium">{item.label[lang]}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                </nav>
+            )}
         </div>
     );
 };

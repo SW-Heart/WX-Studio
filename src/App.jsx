@@ -2768,6 +2768,8 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
   const t = TRANSLATIONS[lang];
   const taskManager = useTaskManager();
   
+  // 移动端面板切换：config / preview / history
+  const [mobilePanel, setMobilePanel] = useState('config');
 
   const [quota, setQuota] = useState(() => parseInt(localStorage.getItem('quota') || '0'));
   
@@ -3191,6 +3193,8 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
         batchTaskMap.push({ localBatchId, taskIds: group });
       }
       setActiveHistoryId(allTaskIds[0]);
+      // 移动端自动切到预览面板
+      setMobilePanel('preview');
       if (total > 1) {
         setIsBatchRunning(true);
         showToast(`已提交 ${total} 次 · 共 ${total * MJ_IMAGES_PER_TASK} 张`);
@@ -3228,6 +3232,8 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
     }
     // 默认选中第一张（批次中的第 1/N），用户可点击缩略图切换
     setActiveHistoryId(taskIds[0]);
+    // 移动端自动切到预览面板
+    setMobilePanel('preview');
 
     // image 模式：一次 /api/create 请求带 n=total，服务端返回 N 张，由本地按 batchIndex 分发
     if (mode === 'image') {
@@ -3621,10 +3627,35 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
       {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       <LoginModal isOpen={showLogin} onClose={() => setShowLogin(false)} onLogin={() => window.location.reload()} t={t} />
 
+      {/* 移动端面板切换标签 */}
+      <div className="flex md:hidden items-center bg-[#0a0a0a] border-b border-white/5 px-2 shrink-0">
+        {[
+          { id: 'config', label: lang === 'zh' ? '配置' : 'Config', icon: <Settings size={14} /> },
+          { id: 'preview', label: lang === 'zh' ? '预览' : 'Preview', icon: <Monitor size={14} /> },
+          { id: 'history', label: lang === 'zh' ? '记录' : 'History', icon: <History size={14} /> },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setMobilePanel(tab.id)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-xs font-medium transition-all border-b-2 ${
+              mobilePanel === tab.id
+                ? 'text-[#FF8A3D] border-[#FF8A3D]'
+                : 'text-white/40 border-transparent'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+            {tab.id === 'history' && history.filter(h => h.status === 'pending' || h.status === 'running').length > 0 && (
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FF8A3D] animate-pulse" />
+            )}
+          </button>
+        ))}
+      </div>
+
       <main className="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden">
         {/* 配置面板 */}
-        <div className="w-full md:w-[320px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-y-auto scrollbar-hide z-10">
-          <div className="p-5 space-y-6 flex-1">
+        <div className={`w-full md:w-[320px] bg-[#0a0a0a] border-r border-white/5 flex flex-col overflow-y-auto scrollbar-hide z-10 ${mobilePanel !== 'config' ? 'hidden md:flex' : 'flex'}`}>
+          <div className="p-4 md:p-5 space-y-5 md:space-y-6 flex-1">
             {/* 动态参数面板 */}
             <div className="space-y-8">
               {(mode === 'image' || mode === 'product') && (
@@ -3686,7 +3717,11 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                       {showModelMenu && (
                         <>
                           <div className="fixed inset-0 z-40" onClick={() => setShowModelMenu(false)}></div>
-                          <div className="absolute top-full left-0 right-0 mt-1 bg-[#1a1a1a] border border-white/10 rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[60vh] overflow-y-auto">
+                          <div className="fixed inset-x-0 bottom-0 md:absolute md:inset-x-auto md:bottom-auto md:top-full md:left-0 md:right-0 mt-0 md:mt-1 bg-[#1a1a1a] border border-white/10 rounded-t-2xl md:rounded-xl overflow-hidden z-50 shadow-2xl animate-in fade-in zoom-in-95 duration-200 max-h-[70vh] md:max-h-[60vh] overflow-y-auto">
+                            {/* 移动端拖拽指示条 */}
+                            <div className="md:hidden flex justify-center py-2">
+                              <div className="w-10 h-1 rounded-full bg-white/20"></div>
+                            </div>
                             {modelList.length === 0 ? (
                               <div className="px-4 py-6 text-center text-[11px] text-white/40">暂无可用模型</div>
                             ) : modelList.map(m => {
@@ -3943,11 +3978,11 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
           </div>
 
           {/* 生成按钮 */}
-          <div className="p-6 bg-[#0a0a0a] border-t border-white/5 sticky bottom-0">
+          <div className="p-4 md:p-6 bg-[#0a0a0a] border-t border-white/5 sticky bottom-0">
             <button
               onClick={handleGenerate}
               disabled={isBatchRunning}
-              className="w-full h-12 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] shadow-lg shadow-orange-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full h-11 md:h-12 bg-gradient-to-r from-[#FF8A3D] to-[#E65100] text-white font-bold rounded-xl flex items-center justify-center gap-2 transition-all hover:opacity-90 active:scale-[0.98] shadow-lg shadow-orange-900/20 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isBatchRunning ? (
                 <>
@@ -3992,7 +4027,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
         </div>
 
         {/* 中间预览区域 */}
-        <div className="flex-1 bg-[#050505] p-4 flex flex-col relative min-w-0">
+        <div className={`flex-1 bg-[#050505] p-3 md:p-4 flex flex-col relative min-w-0 ${mobilePanel !== 'preview' ? 'hidden md:flex' : 'flex'}`}>
           <div className="flex-1 rounded-2xl bg-[#0a0a0a] border border-white/5 relative flex items-center justify-center overflow-hidden group">
              <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(#fff 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
 
@@ -4040,7 +4075,7 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
         </div>
 
         {/* 右侧历史面板 */}
-        <div className="hidden lg:flex w-[200px] bg-[#0a0a0a] border-l border-white/5 flex-col">
+        <div className={`w-full md:w-[200px] bg-[#0a0a0a] border-l border-white/5 flex-col ${mobilePanel === 'history' ? 'flex md:hidden' : 'hidden'} lg:flex`}>
           <div className="p-4 border-b border-white/5 flex items-center justify-between">
             <div className="flex items-center gap-2 text-[11px] font-bold text-white/40">
               <History size={14} />
@@ -4063,11 +4098,12 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
               </button>
             )}
           </div>
-          <div className="flex-1 overflow-y-auto p-3 space-y-3 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+            <div className="grid grid-cols-3 md:grid-cols-1 gap-2 md:gap-3 md:space-y-0">
             {history.map(h => (
               <div
                 key={h.id}
-                onClick={() => setActiveHistoryId(h.id)}
+                onClick={() => { setActiveHistoryId(h.id); setMobilePanel('preview'); }}
                 className={`aspect-square rounded-xl overflow-hidden cursor-pointer border transition-all relative group/thumb bg-[#111]
                   ${activeHistoryId === h.id ? 'border-[#FF8A3D] ring-1 ring-[#FF8A3D]/30' : 'border-white/5 hover:border-white/20'}`}
               >
@@ -4090,7 +4126,8 @@ const QuickCreateStudio = ({ onBack, lang, token }) => {
                 {h.status === 'done' && <div className="absolute bottom-0 inset-x-0 p-1.5 bg-gradient-to-t from-black/80 to-transparent"><p className="text-[9px] text-white/70 truncate">{h.prompt || (h.type === 'retouch' ? '修图' : '创作')}</p></div>}
               </div>
             ))}
-            {history.length === 0 && <div className="text-center text-white/15 text-[10px] mt-8">暂无记录</div>}
+            {history.length === 0 && <div className="text-center text-white/15 text-[10px] mt-8 col-span-3 md:col-span-1">暂无记录</div>}
+            </div>
           </div>
         </div>
       </main>

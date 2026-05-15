@@ -191,7 +191,7 @@ const GalleryPage = ({ token, lang }) => {
           </div>
 
           <div
-            className="w-full md:w-[380px] h-full bg-[#111] border-l border-white/5 flex flex-col animate-in slide-in-from-right duration-500"
+            className="w-full md:w-[380px] max-h-[45vh] md:max-h-full md:h-full bg-[#111] border-t md:border-t-0 md:border-l border-white/5 flex flex-col animate-in slide-in-from-bottom md:slide-in-from-right duration-500"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="h-16 flex items-center justify-between px-6 border-b border-white/5 shrink-0">
