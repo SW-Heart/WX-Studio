@@ -95,6 +95,35 @@ const endpointFor = (model) => {
   return model.supports?.video ? '/v1/videos' : '/v1/images/generations';
 };
 
+// 文本模型可用的端点列表（同时支持 OpenAI 和 Anthropic 协议）
+const textEndpointOptions = (model) => {
+  const isClaudeFamily = (model.id || '').toLowerCase().includes('claude') ||
+    ((model.config || {}).upstream_model || '').toLowerCase().includes('claude');
+  const openai = {
+    key: 'openai',
+    label: 'OpenAI 兼容',
+    method: 'POST',
+    path: '/v1/chat/completions',
+    authHeader: 'Authorization: Bearer sk-YOUR_KEY',
+    sample: { model: model.id, messages: [{ role: 'user', content: '你好' }] },
+  };
+  const anthropic = {
+    key: 'anthropic',
+    label: 'Anthropic 兼容（Claude Code）',
+    method: 'POST',
+    path: '/v1/messages',
+    authHeader: 'x-api-key: sk-YOUR_KEY',
+    extraHeaders: ['anthropic-version: 2023-06-01'],
+    sample: {
+      model: model.id,
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: '你好' }],
+    },
+  };
+  // Claude 系列推荐 Anthropic 端点（透传，特性最全）
+  return isClaudeFamily ? [anthropic, openai] : [openai, anthropic];
+};
+
 // ---------- 中文参数描述映射（仅覆盖通用字段，size 等模型特有的由后端返回） ----------
 const zhParamDesc = {
   model: '模型 ID（使用卡片上显示的值）',
@@ -108,21 +137,45 @@ const zhParamDesc = {
   stream: '是否开启流式返回 (Server-Sent Events)',
   temperature: '控制生成文本的随机性 (0.0 - 2.0)',
   max_tokens: '限制单次生成的最大 Token 数量',
+  system: '系统提示词（Anthropic 协议的顶层字段）',
+  stop_sequences: '自定义停止序列（达到任一序列即停止生成）',
 };
 
 // ---------- Details Modal (Portal) ----------
 
 const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
-  if (!model) return null;
   const [copied, setCopied] = useState(null);
+  const [epState, setEpState] = useState({ id: null, idx: 0 });
+  const currentModelId = model?.id || null;
+  const epActive = epState.id === currentModelId ? epState.idx : 0;
+  const setEpActive = (i) => setEpState({ id: currentModelId, idx: i });
+
+  if (!model) return null;
   const lines = describePricing(model.pricing, lang);
   const origin = apiBase || 'https://aigcog.com';
   const body = sampleBody(model);
   const ep = endpointFor(model);
-  const curl = `curl -X POST ${origin}${ep} \\
+  const isText = !!model.supports?.text;
+  const epOptions = isText ? textEndpointOptions(model) : null;
+  const activeEp = epOptions ? epOptions[Math.min(epActive, epOptions.length - 1)] : null;
+
+  const buildCurl = () => {
+    if (activeEp) {
+      const headers = [
+        `-H "${activeEp.authHeader}"`,
+        ...(activeEp.extraHeaders || []).map(h => `-H "${h}"`),
+        `-H "Content-Type: application/json"`,
+      ];
+      return `curl -X ${activeEp.method} ${origin}${activeEp.path} \\
+  ${headers.join(' \\\n  ')} \\
+  -d '${JSON.stringify(activeEp.sample, null, 2)}'`;
+    }
+    return `curl -X POST ${origin}${ep} \\
   -H "Authorization: Bearer sk-YOUR_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify(body, null, 2)}'`;
+  };
+  const curl = buildCurl();
 
   const copy = (kind, text) => {
     navigator.clipboard?.writeText(text);
@@ -162,10 +215,41 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
             <h4 className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2 flex items-center gap-1.5">
               <Send size={11} /> 调用端点
             </h4>
-            <div className="bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 font-mono text-xs text-white flex items-center gap-2">
-              <span className="text-green-400 font-bold">POST</span>
-              <span className="text-white/90 flex-1 truncate">{ep}</span>
-            </div>
+            {epOptions ? (
+              <>
+                <div className="flex gap-1 mb-2 border-b border-white/5">
+                  {epOptions.map((opt, i) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setEpActive(i)}
+                      className={`px-3 py-1.5 text-[11px] rounded-t transition-colors border-b-2 ${
+                        i === epActive
+                          ? 'text-white border-[#FF8A3D] bg-white/[0.02]'
+                          : 'text-white/40 border-transparent hover:text-white/70 hover:bg-white/[0.02]'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 font-mono text-xs text-white flex items-center gap-2">
+                  <span className="text-green-400 font-bold">{activeEp.method}</span>
+                  <span className="text-white/90 flex-1 truncate">{activeEp.path}</span>
+                </div>
+                {activeEp.key === 'anthropic' && (
+                  <p className="text-[10px] text-white/40 mt-2 leading-relaxed">
+                    💡 该端点兼容 Anthropic Messages API，可直接用于 Claude Code 等客户端：
+                    设置 <code className="text-white/70 font-mono">ANTHROPIC_BASE_URL={origin}</code> 与
+                    <code className="text-white/70 font-mono"> ANTHROPIC_AUTH_TOKEN=sk-...</code> 即可。
+                  </p>
+                )}
+              </>
+            ) : (
+              <div className="bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 font-mono text-xs text-white flex items-center gap-2">
+                <span className="text-green-400 font-bold">POST</span>
+                <span className="text-white/90 flex-1 truncate">{ep}</span>
+              </div>
+            )}
           </section>
 
           <section>
@@ -196,13 +280,23 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {(model.supports?.text ? [
-                    { name: 'model', type: 'string', required: true, description: '模型 ID（使用卡片上显示的值）' },
-                    { name: 'messages', type: 'array', required: true, description: '消息历史列表，包含 role 和 content' },
-                    { name: 'stream', type: 'boolean', required: false, description: '是否使用 SSE 流式返回' },
-                    { name: 'temperature', type: 'number', required: false, description: '采样温度 (0.0 - 2.0)' },
-                    { name: 'max_tokens', type: 'number', required: false, description: '最大输出 Token 限制' }
-                  ] : (model.params_schema || [])).map((p) => (
+                  {(model.supports?.text ? (
+                    activeEp?.key === 'anthropic' ? [
+                      { name: 'model', type: 'string', required: true, description: '模型 ID（使用卡片上显示的值）' },
+                      { name: 'messages', type: 'array', required: true, description: '消息历史列表，包含 role 和 content（content 支持字符串或 content blocks）' },
+                      { name: 'max_tokens', type: 'number', required: true, description: '最大输出 Token 限制（Anthropic 必填）' },
+                      { name: 'system', type: 'string|array', required: false, description: '系统提示词（顶层字段，非 messages 中）' },
+                      { name: 'stream', type: 'boolean', required: false, description: '是否使用 SSE 流式返回' },
+                      { name: 'temperature', type: 'number', required: false, description: '采样温度 (0.0 - 1.0)' },
+                      { name: 'stop_sequences', type: 'array', required: false, description: '自定义停止序列' },
+                    ] : [
+                      { name: 'model', type: 'string', required: true, description: '模型 ID（使用卡片上显示的值）' },
+                      { name: 'messages', type: 'array', required: true, description: '消息历史列表，包含 role 和 content' },
+                      { name: 'stream', type: 'boolean', required: false, description: '是否使用 SSE 流式返回' },
+                      { name: 'temperature', type: 'number', required: false, description: '采样温度 (0.0 - 2.0)' },
+                      { name: 'max_tokens', type: 'number', required: false, description: '最大输出 Token 限制' },
+                    ]
+                  ) : (model.params_schema || [])).map((p) => (
                     <tr key={p.name} className="border-t border-white/5">
                       <td className="px-3 py-2 align-top">
                         <code className="text-white font-mono">{p.name}</code>
@@ -236,7 +330,27 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
 
           <section>
             <h4 className="text-[10px] uppercase tracking-wider text-white/40 font-bold mb-2 flex items-center gap-1.5"><ArrowRight size={11} /> 返回格式</h4>
-            <pre className="bg-[#0a0a0a] border border-white/10 rounded-lg p-3 text-[11px] text-white/70 font-mono overflow-x-auto leading-relaxed whitespace-pre">{model.supports?.text ? `{
+            <pre className="bg-[#0a0a0a] border border-white/10 rounded-lg p-3 text-[11px] text-white/70 font-mono overflow-x-auto leading-relaxed whitespace-pre">{
+              isText
+                ? (activeEp?.key === 'anthropic'
+                  ? `{
+  "id": "msg_xxx",
+  "type": "message",
+  "role": "assistant",
+  "model": "${model.id}",
+  "content": [
+    { "type": "text", "text": "你好！" }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 10,
+    "output_tokens": 5,
+    "cache_creation_input_tokens": 0,
+    "cache_read_input_tokens": 0
+  }
+}`
+                  : `{
   "id": "chatcmpl-123",
   "model": "${model.id}",
   "choices": [
@@ -247,14 +361,16 @@ const ModelDetailsModal = ({ model, lang, apiBase, onClose }) => {
     }
   ],
   "usage": { "prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15 }
-}` : `{
+}`)
+                : `{
   "created": 1710000000,
   "model": "${model.id}",
   "data": [ { "url": "https://..." } ],
   "usage": { "quota_cost": ${model.pricing?.cost || 1}, "quota_remaining": 99 }
-}`}</pre>
+}`
+            }</pre>
             <p className="text-[10px] text-white/50 mt-2 leading-relaxed">
-              {model.supports?.text ? '⏱ 支持流式调用（通过传参 stream: true 获取 Server-Sent Events 流数据）。' : '⏱ 该接口为同步调用（服务端内部完成轮询），响应时间取决于模型复杂度，通常 30~180 秒。请设置足够的超时时间（建议 ≥ 300s）。'}
+              {isText ? '⏱ 支持流式调用（通过传参 stream: true 获取 Server-Sent Events 流数据）。' : '⏱ 该接口为同步调用（服务端内部完成轮询），响应时间取决于模型复杂度，通常 30~180 秒。请设置足够的超时时间（建议 ≥ 300s）。'}
             </p>
           </section>
         </div>

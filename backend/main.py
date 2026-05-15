@@ -85,8 +85,9 @@ ALLOWED_UPLOAD_MIME_TYPES = {
     "image/webp",
     "image/heic",
     "image/heif",
+    "image/svg+xml",
 }
-ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+ALLOWED_UPLOAD_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".svg"}
 
 if IS_PRODUCTION and (not SECRET_KEY or SECRET_KEY == "default_secret_key" or len(SECRET_KEY) < 32):
     raise RuntimeError("JWT_SECRET_KEY must be explicitly configured in production and be at least 32 characters")
@@ -327,7 +328,20 @@ async def get_captcha_config():
 def upload_bytes_to_oss(file_bytes, file_ext=".jpg"):
     if not bucket: raise Exception("OSS not configured")
     filename = f"uploads/{uuid.uuid4()}{file_ext}"
-    bucket.put_object(filename, file_bytes)
+    headers = None
+    ext_lower = (file_ext or "").lower()
+    _ext_ct_map = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".heic": "image/heic",
+        ".heif": "image/heif",
+        ".svg": "image/svg+xml",
+    }
+    if ext_lower in _ext_ct_map:
+        headers = {"Content-Type": _ext_ct_map[ext_lower]}
+    bucket.put_object(filename, file_bytes, headers=headers)
     if OSS_DOMAIN: return f"{OSS_DOMAIN}/{filename}"
     else: return f"https://{OSS_BUCKET_NAME}.{OSS_ENDPOINT}/{filename}"
 
@@ -425,6 +439,8 @@ def _validate_upload(file: UploadFile, file_bytes: bytes) -> str:
         return ".webp"
     if content_type in {"image/heic", "image/heif"}:
         return ".heic"
+    if content_type == "image/svg+xml":
+        return ".svg"
     return ".jpg"
 
 # --- 4. 路由 ---

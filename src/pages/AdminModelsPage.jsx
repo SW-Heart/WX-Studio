@@ -393,8 +393,8 @@ const LogoUpload = ({ value, onChange, token, onError }) => {
             </button>
           )}
         </div>
-        <p className="text-[10px] text-white/40">建议 512×512 以上正方形，PNG/JPG/WebP，≤ 2MB</p>
-        <input ref={inputRef} type="file" accept="image/*" className="hidden"
+        <p className="text-[10px] text-white/40">建议 512×512 以上正方形，PNG/JPG/WebP/SVG，≤ 2MB</p>
+        <input ref={inputRef} type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" className="hidden"
                onChange={e => handleFile(e.target.files?.[0])} />
       </div>
     </div>
