@@ -26,7 +26,6 @@
 - route_map：参数值 → 目标模型 id
 - default_target：参数缺失或不在 map 里时的兜底 id
 """
-from __future__ import annotations
 
 from typing import Any, Dict, Optional
 

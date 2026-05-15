@@ -16,7 +16,6 @@
 Run:
     cd backend && python3 migrate_nano_banana_alias.py
 """
-from __future__ import annotations
 
 import copy
 import json
