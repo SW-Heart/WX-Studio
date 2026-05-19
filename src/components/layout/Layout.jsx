@@ -281,6 +281,7 @@ const NAV_ITEMS = [
     { id: 'home', icon: Home, label: { zh: '首页', en: 'Home' } },
     { id: 'create', icon: Palette, label: { zh: '无限画布', en: 'Infinite Canvas' } },
     { id: 'quick-create', icon: Wand2, label: { zh: '快速创作', en: 'Quick Create' } },
+    { id: 'drama', icon: Film, label: { zh: '短剧创作', en: 'Short Drama' } },
     { id: 'gallery', icon: FolderOpen, label: { zh: '图库', en: 'Gallery' } },
 ];
 
@@ -629,6 +630,7 @@ export const Layout = ({
     const MOBILE_NAV = [
         { id: 'home', icon: Home, label: { zh: '首页', en: 'Home' } },
         { id: 'quick-create', icon: Wand2, label: { zh: '创作', en: 'Create' } },
+        { id: 'drama', icon: Film, label: { zh: '短剧', en: 'Drama' } },
         { id: 'gallery', icon: FolderOpen, label: { zh: '图库', en: 'Gallery' } },
     ];
 

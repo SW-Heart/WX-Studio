@@ -17,6 +17,7 @@ import HomePage from './pages/HomePage';
 import ApiKeysPage from './pages/ApiKeysPage';
 import AdminModelsPage from './pages/AdminModelsPage';
 import ModelsPlazaPage from './pages/ModelsPlazaPage';
+import ShortDramaPage from './pages/ShortDramaPage';
 import InfiniteCanvas, { getNewNodePositions, NODE_DEFAULT_W, NODE_DEFAULT_H } from './components/InfiniteCanvas';
 import ChatGptIcon from './assets/ChatGPT.svg';
 import MidjourneyIcon from './assets/midjourney.svg';
@@ -4437,6 +4438,8 @@ const App = () => {
         return token ? <ModelsPlazaPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
       case 'admin-models':
         return role === 'admin' ? <AdminModelsPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
+      case 'drama':
+        return token ? <ShortDramaPage token={token} lang={lang} /> : <HomePage onNavigate={handleNavigate} token={token} lang={lang} />;
       case 'quick-create':
       default:
         return <QuickCreateStudio onBack={() => handleNavigate('home')} lang={lang} token={token} />;

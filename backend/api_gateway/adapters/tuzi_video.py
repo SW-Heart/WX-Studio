@@ -8,7 +8,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import requests
 
@@ -50,6 +50,27 @@ class TuziVideoAdapter(BaseAdapter):
                  "label_zh": "multipart 提交",
                  "help_zh": "使用 multipart/form-data 提交；首帧图会被下载后作为文件上传",
                  "group": "advanced"},
+                {"key": "input_field_name", "type": "string", "required": False,
+                 "default": "image",
+                 "label_zh": "首帧字段名",
+                 "help_zh": "multipart 表单中首帧/参考图字段名。"
+                            "veo3.1-4k 系列填 input_reference，旧接口填 image。",
+                 "group": "advanced"},
+                {"key": "max_input_refs", "type": "number", "required": False,
+                 "default": 1,
+                 "label_zh": "参考图最大数量",
+                 "help_zh": "veo3.1-components 系列支持 3 张；veo3.1-4k 支持首/尾帧 2 张",
+                 "group": "advanced"},
+                {"key": "default_size", "type": "string", "required": False,
+                 "label_zh": "默认 size",
+                 "help_zh": "客户端未传 size 时的默认值。竖屏 720x1280，横屏 1280x720",
+                 "placeholder": "720x1280",
+                 "group": "advanced"},
+                {"key": "default_seconds", "type": "string", "required": False,
+                 "default": "8",
+                 "label_zh": "默认时长（秒）",
+                 "help_zh": "veo3.1 系列目前固定 8 秒",
+                 "group": "advanced"},
             ],
         }
 
@@ -71,6 +92,10 @@ class TuziVideoAdapter(BaseAdapter):
         endpoint = cfg.get("endpoint") or self.DEFAULT_ENDPOINT
         timeout = int(cfg.get("poll_timeout") or self.DEFAULT_POLL_TIMEOUT)
         use_multipart = bool(cfg.get("use_multipart", True))
+        input_field = cfg.get("input_field_name") or "image"
+        max_refs = int(cfg.get("max_input_refs") or 1)
+        default_size = cfg.get("default_size")
+        default_seconds = cfg.get("default_seconds")
 
         if not ctx.api_key:
             raise AdapterError("missing Tuzi api_key", status_code=500)
@@ -80,22 +105,44 @@ class TuziVideoAdapter(BaseAdapter):
             "Connection": "close",
         }
 
+        # 解析 size / seconds（seconds 走 ctx.extra）
+        size_value = ctx.size or default_size
+        seconds_value = None
+        if isinstance(ctx.extra, dict):
+            seconds_value = ctx.extra.get("seconds")
+        if seconds_value is None and default_seconds is not None:
+            seconds_value = default_seconds
+
         try:
             if use_multipart:
-                files = {
-                    "model": (None, upstream_model),
-                    "prompt": (None, ctx.prompt),
-                }
-                # 首帧图：下载后附加为文件
-                first_img = ctx.image[0] if ctx.image else None
-                if first_img:
+                # multipart/form-data
+                # files 用列表形式以支持多张同名字段（input_reference）
+                multipart_fields: List[Any] = [
+                    ("model", (None, upstream_model)),
+                    ("prompt", (None, ctx.prompt)),
+                ]
+                if size_value:
+                    multipart_fields.append(("size", (None, str(size_value))))
+                if seconds_value is not None:
+                    multipart_fields.append(("seconds", (None, str(seconds_value))))
+
+                # 参考图（首帧 / 尾帧 / components）：下载后作为文件上传
+                refs = (ctx.image or [])[:max_refs]
+                for i, ref_url in enumerate(refs):
                     try:
-                        img_resp = requests.get(first_img, timeout=30)
+                        img_resp = requests.get(ref_url, timeout=30)
                         if img_resp.status_code == 200:
-                            files["image"] = ("image.png", img_resp.content, "image/png")
+                            ext = ".png" if ".png" in ref_url.lower() else ".jpg"
+                            multipart_fields.append((
+                                input_field,
+                                (f"ref_{i}{ext}", img_resp.content,
+                                 "image/png" if ext == ".png" else "image/jpeg"),
+                            ))
                     except Exception:
+                        # 单张参考图下载失败不致命，继续；但如果都失败上游会自己拒
                         pass
-                resp = requests.post(endpoint, headers=headers_auth, files=files,
+
+                resp = requests.post(endpoint, headers=headers_auth, files=multipart_fields,
                                      timeout=30, proxies={"http": None, "https": None})
             else:
                 payload: Dict[str, Any] = {
@@ -103,9 +150,11 @@ class TuziVideoAdapter(BaseAdapter):
                     "model": upstream_model,
                 }
                 if ctx.image:
-                    payload["image"] = ctx.image[0] if len(ctx.image) == 1 else ctx.image
-                if ctx.size:
-                    payload["size"] = ctx.size
+                    payload[input_field] = ctx.image[0] if len(ctx.image) == 1 else ctx.image[:max_refs]
+                if size_value:
+                    payload["size"] = size_value
+                if seconds_value is not None:
+                    payload["seconds"] = str(seconds_value)
                 resp = requests.post(endpoint, headers={**headers_auth, "Content-Type": "application/json"},
                                      json=payload, timeout=30,
                                      proxies={"http": None, "https": None})

@@ -158,7 +158,7 @@ class TuziImageAdapter(BaseAdapter):
     def _single(self, endpoint: str, headers: Dict[str, str], payload: Dict[str, Any], timeout: int) -> str:
         try:
             resp = requests.post(endpoint, headers=headers, json=payload,
-                                 timeout=timeout, proxies={"http": None, "https": None})
+                                 timeout=(10, timeout), proxies={"http": None, "https": None})
         except Exception as e:
             raise AdapterError(f"Tuzi request failed: {e}") from e
         if resp.status_code != 200:

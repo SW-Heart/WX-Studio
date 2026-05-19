@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { ArrowRight, FolderOpen, History, Layout as LayoutIcon, Link, Loader2, Sparkles, Zap } from 'lucide-react';
+import { ArrowRight, FolderOpen, History, Layout as LayoutIcon, Link, Loader2, Sparkles, Zap, Film } from 'lucide-react';
 import { fetchUserHistory } from '../api/history';
 import { isCompletedHistoryItem, toSecureUrl } from '../utils/media';
 
@@ -81,6 +81,13 @@ const HomePage = ({ onNavigate, token, lang }) => {
               title: { zh: 'API 管理', en: 'API Keys' },
               desc: { zh: '管理API密钥，集成AI能力到你的应用。', en: 'Manage API keys and integrate AI into your apps.' },
               gradient: 'from-[#06B6D4] to-[#0891B2]'
+            },
+            {
+              id: 'drama',
+              icon: <Film size={28} />,
+              title: { zh: '短剧创作', en: 'Short Drama' },
+              desc: { zh: '一句话生成完整短剧视频，AI自动编剧、分镜、拍摄。', en: 'One sentence to a full short drama video.' },
+              gradient: 'from-[#F43F5E] to-[#BE123C]'
             }
           ].map((item) => (
             <div

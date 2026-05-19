@@ -265,6 +265,31 @@ def seed_defaults(*, tt_api_key: str, tuzi_api_key: str) -> List[str]:
             "params_schema": nb2_params_schema,
         })
 
+        # ---------- Veo 3.1 4K（短剧模块用，内部不可见）----------
+        # 用 input_reference 字段名（Tuzi 新规范），适配竖屏 720x1280。
+        # 暂定 200 积分/段，最终价格请管理员在后台调整。
+        maybe("veo3.1-4k-drama", {
+            "adapter_type": "tuzi-video",
+            "upstream_api_key": tuzi_api_key,
+            "display_name": "Veo 3.1 4K (Short Drama)",
+            "channel": "tuzi-internal",
+            "visible": False,        # 内部模型，对外不展示
+            "description": "Veo 3.1 4K 视频生成（短剧模块内部使用）",
+            "enabled": True,
+            "supports": {"video": True},
+            "pricing": {"mode": "per_call", "cost": 200},
+            "config": {
+                "upstream_model": "veo3.1-4k",
+                "endpoint": "https://api.tu-zi.com/v1/videos",
+                "use_multipart": True,
+                "input_field_name": "input_reference",
+                "max_input_refs": 2,
+                "default_size": "720x1280",
+                "default_seconds": "8",
+                "poll_timeout": 900,
+            },
+        })
+
     return created
 
 

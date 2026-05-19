@@ -7,6 +7,8 @@ export const PAGE_ROUTES = {
   'api-keys': '/api-keys',
   admin: '/admin',
   'admin-models': '/admin/models',
+  drama: '/drama',
+  'drama-job': '/drama/job',
 };
 
 const LEGACY_ROUTE_REDIRECTS = {

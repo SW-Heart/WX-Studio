@@ -2430,6 +2430,42 @@ except Exception as _gw_err:
     _tb.print_exc()
 
 # ==========================================
+# 🎬 Short Drama 模块（idea -> 短剧视频）
+# ==========================================
+try:
+    try:
+        from backend.short_drama import storage as _drama_storage
+        from backend.short_drama import worker as _drama_worker
+        from backend.short_drama.router import build_router as _drama_build_router
+    except ImportError:
+        from short_drama import storage as _drama_storage
+        from short_drama import worker as _drama_worker
+        from short_drama.router import build_router as _drama_build_router
+
+    _drama_storage.set_db_io(db_lock, load_db, save_db)
+    _drama_worker.configure(llm_api_key=TUZI_API_KEY or "")
+
+    _drama_router = _drama_build_router(
+        get_current_user=get_current_user,
+        get_admin_user=get_admin_user,
+    )
+    app.include_router(_drama_router)
+
+    @app.on_event("startup")
+    async def _start_drama_workers():
+        await _drama_worker.start_workers()
+
+    @app.on_event("shutdown")
+    async def _stop_drama_workers():
+        await _drama_worker.stop_workers()
+
+    print("✅ Short Drama 模块已挂载（/api/drama/*）")
+except Exception as _drama_err:
+    print(f"❌ Short Drama 挂载失败: {_drama_err}")
+    import traceback as _tb
+    _tb.print_exc()
+
+# ==========================================
 # 🧹 后台定时清理任务
 # ==========================================
 
