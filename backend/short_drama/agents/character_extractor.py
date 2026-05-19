@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Character Extractor (Adapted from HKUDS/ViMax, MIT License)
 
 输入剧本，产出角色列表（含 static / dynamic 视觉特征）。

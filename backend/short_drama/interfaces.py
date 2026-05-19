@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Short Drama 数据结构（pydantic v1）
 
 从 ViMax/interfaces 简化而来，移除多机位/transition 相关字段。
@@ -8,12 +9,7 @@
 - Field 的 examples 在 v1 里要放进 schema_extra，这里直接省略 examples 简化
 """
 
-from typing import List, Optional
-
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 

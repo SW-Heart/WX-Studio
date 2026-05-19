@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Portrait Generator (Adapted from HKUDS/ViMax, MIT License)
 
 简化版：每个角色只生成一张正面立绘（短剧成本敏感，砍掉 side/back）。

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Storyboard Artist (Adapted from HKUDS/ViMax, MIT License)
 
 两步：
@@ -10,12 +11,7 @@
 """
 
 import asyncio
-from typing import List
-
-try:
-    from typing import Literal
-except ImportError:
-    from typing_extensions import Literal
+from typing import List, Literal
 
 from pydantic import BaseModel, Field
 

@@ -1,3 +1,4 @@
+from __future__ import annotations
 """ffmpeg 拼接器
 
 把多个短视频片段拼成最终成片，最终上传 OSS。

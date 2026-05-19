@@ -1,3 +1,4 @@
+from __future__ import annotations
 """Screenwriter agent (Adapted from HKUDS/ViMax, MIT License)
 
 负责把 user idea + requirement 扩展成一段紧凑、富视觉的短剧剧本。
