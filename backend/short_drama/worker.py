@@ -1,4 +1,3 @@
-from __future__ import annotations
 """异步任务 worker
 
 - asyncio.Queue + N 个 worker coroutine

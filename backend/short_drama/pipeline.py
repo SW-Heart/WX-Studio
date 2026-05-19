@@ -1,4 +1,3 @@
-from __future__ import annotations
 """Short Drama Pipeline (Adapted from HKUDS/ViMax, MIT License)
 
 支持两种模式：

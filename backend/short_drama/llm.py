@@ -1,4 +1,3 @@
-from __future__ import annotations
 """LLM 客户端：直连 Tuzi /v1/chat/completions
 
 不引入 langchain。提供两个能力：

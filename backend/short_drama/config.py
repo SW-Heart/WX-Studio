@@ -1,4 +1,3 @@
-from __future__ import annotations
 """Short Drama 模块配置
 
 集中管理：模型 ID、并发数、各阶段安全上限、超时等。

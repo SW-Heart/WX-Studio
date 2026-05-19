@@ -1,4 +1,3 @@
-from __future__ import annotations
 """短剧任务持久化（复用 wx_data.json 主库）
 
 为什么不另开 SQLite/Postgres：当前后端就是 wx_data.json + 单机锁的简单架构，

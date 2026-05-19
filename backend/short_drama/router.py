@@ -1,4 +1,3 @@
-from __future__ import annotations
 """HTTP 路由：/api/drama/*
 
 支持：

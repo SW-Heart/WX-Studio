@@ -1,4 +1,3 @@
-from __future__ import annotations
 """Storyboard Artist (Adapted from HKUDS/ViMax, MIT License)
 
 两步：
@@ -11,7 +10,7 @@ from __future__ import annotations
 """
 
 import asyncio
-from typing import List, Literal
+from typing import List
 
 from pydantic import BaseModel, Field
 
@@ -142,7 +141,7 @@ class _DecomposeResponse(BaseModel):
     lf_desc: str
     lf_vis_char_idxs: List[int] = Field(default_factory=list)
     motion_desc: str
-    variation_type: Literal["large", "medium", "small"] = "small"
+    variation_type: str = "small"  # "large" | "medium" | "small"
     variation_reason: str = ""
 
 

@@ -1,15 +1,12 @@
-from __future__ import annotations
-"""Short Drama 数据结构（pydantic v1）
+"""Short Drama 数据结构
 
 从 ViMax/interfaces 简化而来，移除多机位/transition 相关字段。
-
-适配点：
-- 项目用的是 pydantic 1.9.2，不能用 v2 的 model_validate / model_dump
-- 改用 .parse_obj / .dict()
-- Field 的 examples 在 v1 里要放进 schema_extra，这里直接省略 examples 简化
+兼容 pydantic 1.9.2 + Python 3.8（不使用 Literal 避免 issubclass bug）。
 """
 
-from typing import List, Literal, Optional
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 from pydantic import BaseModel, Field
 
@@ -61,7 +58,7 @@ class ShotDescription(BaseModel):
     is_last: bool = False
     cam_idx: int = 0
     visual_desc: str
-    variation_type: Literal["large", "medium", "small"] = "small"
+    variation_type: str = "small"  # "large" | "medium" | "small"
     variation_reason: str = ""
     ff_desc: str = Field(description="First frame description (static)")
     ff_vis_char_idxs: List[int] = Field(default_factory=list)

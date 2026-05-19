@@ -1,4 +1,3 @@
-from __future__ import annotations
 """图像 / 视频生成的薄封装（带 3 次重试）
 
 把 ViMax agent 期望的 `generate_single_image / generate_single_video` 协议，

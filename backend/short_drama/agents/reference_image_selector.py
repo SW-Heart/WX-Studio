@@ -1,4 +1,3 @@
-from __future__ import annotations
 """Reference Image Selector (Adapted from HKUDS/ViMax, MIT License)
 
 输入：候选 (image_url, text_description) 对 + 目标帧文本描述
