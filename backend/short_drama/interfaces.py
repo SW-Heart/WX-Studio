@@ -8,7 +8,12 @@
 - Field 的 examples 在 v1 里要放进 schema_extra，这里直接省略 examples 简化
 """
 
-from typing import List, Literal, Optional
+from typing import List, Optional
+
+try:
+    from typing import Literal
+except ImportError:
+    from typing_extensions import Literal
 
 from pydantic import BaseModel, Field
 
