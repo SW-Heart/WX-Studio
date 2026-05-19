@@ -38,6 +38,13 @@ class RenderResult:
     upstream_extra: dict
 
 
+async def _run_in_thread(func, *args, **kwargs):
+    """兼容 Python 3.8 的 asyncio.to_thread 替代"""
+    loop = asyncio.get_event_loop()
+    import functools
+    return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+
+
 # -------- 图像（带重试）--------
 
 async def generate_image(
@@ -57,7 +64,7 @@ async def generate_image(
 
     for attempt in range(retries):
         try:
-            result = await asyncio.to_thread(
+            result = await _run_in_thread(
                 run_model_raw,
                 model_id=model_id or CFG.image_model_id,
                 prompt=prompt,
@@ -102,7 +109,7 @@ async def generate_video(
 
     for attempt in range(retries):
         try:
-            result = await asyncio.to_thread(
+            result = await _run_in_thread(
                 run_model_raw,
                 model_id=model_id or CFG.video_model_id,
                 prompt=prompt,

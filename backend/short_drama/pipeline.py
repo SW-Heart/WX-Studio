@@ -14,6 +14,7 @@
 """
 
 import asyncio
+import functools
 import logging
 import os
 from typing import Any, Dict, List, Optional, Tuple
@@ -38,6 +39,12 @@ from .llm import LLMClient
 from .render import RenderError, download_to, generate_image, generate_video
 
 logger = logging.getLogger(__name__)
+
+
+async def _run_in_thread(func, *args, **kwargs):
+    """兼容 Python 3.8 的 asyncio.to_thread 替代"""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
 
 
 class CanceledError(Exception):
@@ -494,7 +501,7 @@ class ShortDramaPipeline:
         _deps_mod = self._get_deps()
         with open(local_path, "rb") as f:
             data = f.read()
-        return await asyncio.to_thread(_deps_mod.upload_bytes_to_oss, data, ".mp4")
+        return await _run_in_thread(_deps_mod.upload_bytes_to_oss, data, ".mp4")
 
 
 def _job_work_dir(job_id: str) -> str:
