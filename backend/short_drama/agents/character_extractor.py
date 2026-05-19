@@ -3,7 +3,6 @@
 输入剧本，产出角色列表（含 static / dynamic 视觉特征）。
 直接复用 ViMax 的 system prompt（短剧场景同样适用），结构改为 pydantic v1。
 """
-from __future__ import annotations
 
 from typing import List
 

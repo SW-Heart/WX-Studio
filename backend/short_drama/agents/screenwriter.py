@@ -5,7 +5,6 @@
 - 不再产出 multi-scene list；一条短剧 = 一个连续场景剧本
 - 加了"短剧节奏"指引：30-90 秒钩子开头 + 3 幕反转
 """
-from __future__ import annotations
 
 from ..llm import LLMClient
 

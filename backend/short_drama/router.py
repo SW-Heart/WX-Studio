@@ -10,7 +10,6 @@
 - GET  /meta          配置元信息
 - GET  /admin/jobs    管理员全量列表
 """
-from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 

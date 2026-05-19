@@ -6,7 +6,6 @@
 输入：本地 mp4 路径列表（按时间顺序）
 输出：本地 mp4 路径
 """
-from __future__ import annotations
 
 import asyncio
 import logging

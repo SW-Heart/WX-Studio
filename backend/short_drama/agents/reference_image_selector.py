@@ -9,7 +9,6 @@
 - 候选最多 8 张（避免上下文爆炸）。
 - 输入的 image 都是 OSS URL，不再做本地 b64 转换。
 """
-from __future__ import annotations
 
 from typing import List, Tuple
 

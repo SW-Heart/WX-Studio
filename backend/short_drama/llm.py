@@ -11,7 +11,6 @@
 
 模型：claude-sonnet-4-6（Tuzi 提供的别名，参考 Tuzi 文档示例 claude-opus-4-1-thinking）
 """
-from __future__ import annotations
 
 import asyncio
 import json

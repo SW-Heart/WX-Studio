@@ -12,7 +12,6 @@
 
 图/视频均支持 3 次重试（在 render.py 层实现）。
 """
-from __future__ import annotations
 
 import asyncio
 import logging

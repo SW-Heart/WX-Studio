@@ -4,7 +4,6 @@
 - 导演模式：维护 confirm_events dict，router 调 confirm() 时 set event
 - 失败/取消时退还预扣积分
 """
-from __future__ import annotations
 
 import asyncio
 import logging

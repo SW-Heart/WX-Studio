@@ -3,7 +3,6 @@
 简化版：每个角色只生成一张正面立绘（短剧成本敏感，砍掉 side/back）。
 直接走主网关的图像 model（gpt-image-2），返回 OSS URL。
 """
-from __future__ import annotations
 
 from ..config import CFG
 from ..interfaces import CharacterInScene, CharacterPortrait

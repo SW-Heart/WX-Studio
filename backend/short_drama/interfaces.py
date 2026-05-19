@@ -7,7 +7,6 @@
 - 改用 .parse_obj / .dict()
 - Field 的 examples 在 v1 里要放进 schema_extra，这里直接省略 examples 简化
 """
-from __future__ import annotations
 
 from typing import List, Literal, Optional
 

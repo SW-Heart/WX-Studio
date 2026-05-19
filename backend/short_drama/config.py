@@ -3,7 +3,6 @@
 集中管理：模型 ID、并发数、各阶段安全上限、超时等。
 所有可调参数都从环境变量读取，提供合理默认值。
 """
-from __future__ import annotations
 
 import os
 from dataclasses import dataclass

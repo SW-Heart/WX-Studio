@@ -8,7 +8,6 @@
 - 强制竖屏 9:16 思维（在 prompt 里说明）
 - 不再追求多机位树（让模型自由生成 cam_idx，下游不构造 camera tree）
 """
-from __future__ import annotations
 
 import asyncio
 from typing import List, Literal

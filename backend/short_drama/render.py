@@ -8,7 +8,6 @@
 - 不持有任何上游 key（key 在 model registry 里）
 - 图/视频均支持 max_retries_render 次重试（默认 3 次）
 """
-from __future__ import annotations
 
 import asyncio
 import logging
