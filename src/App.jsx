@@ -4331,6 +4331,11 @@ const App = () => {
         const res = await fetch(`${API_BASE_URL}/api/user/me`, {
           headers: { 'Authorization': `Bearer ${token}` }
         });
+        if (res.status === 401) {
+          // Token 失效，强制登出清除本地缓存
+          handleLogout();
+          return;
+        }
         if (res.ok) {
           const data = await res.json();
           if (data.quota !== quota) {
