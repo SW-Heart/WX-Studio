@@ -103,6 +103,10 @@ const STEP_LABEL = {
   'composing final video': { zh: '正在剪辑成片...', en: 'Composing final video...' },
   'done': { zh: '已完成', en: 'Done' },
   'failed': { zh: '失败', en: 'Failed' },
+  'awaiting:script_ready': { zh: '请确认并可修改剧本', en: 'Please review & edit script' },
+  'awaiting:characters_ready': { zh: '请确认并可修改角色图Prompt', en: 'Please review & edit character prompts' },
+  'awaiting:portraits_ready': { zh: '请确认角色立绘', en: 'Please review character portraits' },
+  'awaiting:storyboard_ready': { zh: '请确认并可修改分镜描述', en: 'Please review & edit storyboard' },
 };
 
 const formatTime = (ts) => {
@@ -613,6 +617,23 @@ const DramaJobDetail = ({ token, lang, jobId, onBack }) => {
   const [confirming, setConfirming] = useState(false);
   const timerRef = useRef(null);
 
+  const [editScript, setEditScript] = useState('');
+  const [editCharacters, setEditCharacters] = useState([]);
+  const [editStoryboard, setEditStoryboard] = useState([]);
+  const [savingSection, setSavingSection] = useState(null);
+
+  const isScriptDirty = job ? editScript !== (job.artifacts?.script || '') : false;
+
+  const isCharactersDirty = useMemo(() => {
+    if (!job || !job.artifacts?.characters) return false;
+    return JSON.stringify(editCharacters) !== JSON.stringify(job.artifacts.characters);
+  }, [editCharacters, job]);
+
+  const isStoryboardDirty = useMemo(() => {
+    if (!job || !job.artifacts?.storyboard) return false;
+    return JSON.stringify(editStoryboard) !== JSON.stringify(job.artifacts.storyboard);
+  }, [editStoryboard, job]);
+
   const fetchOnce = useCallback(async () => {
     try {
       const j = await drama.get(token, jobId);
@@ -636,6 +657,64 @@ const DramaJobDetail = ({ token, lang, jobId, onBack }) => {
     }, 4000);
     return () => clearInterval(timerRef.current);
   }, [fetchOnce]);
+
+  // 同步剧本
+  useEffect(() => {
+    if (job?.artifacts?.script && !savingSection) {
+      const serverScript = job.artifacts.script;
+      if (editScript === '' || editScript !== serverScript) {
+        const currentIsDirty = editScript !== '' && editScript !== (job.artifacts?.script || '');
+        if (!currentIsDirty) {
+          setEditScript(serverScript);
+        }
+      }
+    }
+  }, [job?.artifacts?.script, savingSection, editScript]);
+
+  // 同步角色
+  useEffect(() => {
+    if (job?.artifacts?.characters && !savingSection) {
+      const serverChars = job.artifacts.characters;
+      const currentIsDirty = editCharacters.length > 0 && JSON.stringify(editCharacters) !== JSON.stringify(serverChars);
+      if (!currentIsDirty) {
+        setEditCharacters(JSON.parse(JSON.stringify(serverChars)));
+      }
+    }
+  }, [job?.artifacts?.characters, savingSection, editCharacters]);
+
+  // 同步分镜
+  useEffect(() => {
+    if (job?.artifacts?.storyboard && !savingSection) {
+      const serverStoryboard = job.artifacts.storyboard;
+      const currentIsDirty = editStoryboard.length > 0 && JSON.stringify(editStoryboard) !== JSON.stringify(serverStoryboard);
+      if (!currentIsDirty) {
+        setEditStoryboard(JSON.parse(JSON.stringify(serverStoryboard)));
+      }
+    }
+  }, [job?.artifacts?.storyboard, savingSection, editStoryboard]);
+
+  const handlePatch = async (section, data) => {
+    setSavingSection(section);
+    try {
+      const r = await fetch(`${API_BASE_URL}/api/drama/jobs/${jobId}/patch`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ [section]: data }),
+      });
+      if (!r.ok) {
+        const text = await r.text();
+        throw new Error(text || `Failed to patch ${section}`);
+      }
+      await fetchOnce();
+    } catch (e) {
+      alert(String(e.message || e));
+    } finally {
+      setSavingSection(null);
+    }
+  };
 
   const handleCancel = async () => {
     if (!window.confirm(lang === 'zh' ? '确认取消此任务？' : 'Cancel this job?')) return;
@@ -826,9 +905,34 @@ const DramaJobDetail = ({ token, lang, jobId, onBack }) => {
       {/* 剧本 */}
       {artifacts.script && (
         <Section title={lang === 'zh' ? '📝 剧本' : '📝 Script'}>
-          <pre className="whitespace-pre-wrap font-sans text-sm text-white/80 leading-relaxed bg-white/[0.02] border border-white/5 rounded-lg p-4 max-h-80 overflow-y-auto">
-            {artifacts.script}
-          </pre>
+          {job.status === 'awaiting_confirm' && job.current_step?.includes('script') ? (
+            <div className="space-y-3">
+              <textarea
+                value={editScript}
+                onChange={(e) => setEditScript(e.target.value)}
+                className="w-full h-80 px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:outline-none focus:border-[#FF8A3D] text-sm resize-y font-sans leading-relaxed"
+                placeholder={lang === 'zh' ? '在此处编辑您的剧本...' : 'Edit your script here...'}
+              />
+              {isScriptDirty && (
+                <div className="flex justify-end">
+                  <button
+                    onClick={() => handlePatch('script', editScript)}
+                    disabled={savingSection === 'script'}
+                    className="px-3 py-1.5 rounded-lg bg-[#FF8A3D] hover:bg-[#E65100] text-white text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition"
+                  >
+                    {savingSection === 'script' ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : null}
+                    {lang === 'zh' ? '保存剧本修改' : 'Save Script Changes'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <pre className="whitespace-pre-wrap font-sans text-sm text-white/80 leading-relaxed bg-white/[0.02] border border-white/5 rounded-lg p-4 max-h-80 overflow-y-auto">
+              {artifacts.script}
+            </pre>
+          )}
           {/* 导演模式：重新生成 / 提供意见 */}
           {job.status === 'awaiting_confirm' && job.current_step?.includes('script') && (
             <DirectorActions
@@ -843,31 +947,85 @@ const DramaJobDetail = ({ token, lang, jobId, onBack }) => {
       )}
 
       {/* 角色 + 立绘 */}
-      {characters.length > 0 && (
-        <Section title={lang === 'zh' ? `👥 角色 (${characters.length})` : `👥 Cast (${characters.length})`}>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-            {characters.map((c, i) => {
-              const p = portraits[c.identifier_in_scene];
-              return (
-                <div key={i} className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
-                  <div className="aspect-square bg-black/40">
-                    {p?.front_url ? (
-                      <img src={toSecureUrl(p.front_url)} className="w-full h-full object-cover" alt="" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Loader2 size={20} className="text-white/30 animate-spin" />
-                      </div>
-                    )}
+      {((job.status === 'awaiting_confirm' && job.current_step?.includes('characters_ready')) || characters.length > 0) && (
+        <Section title={lang === 'zh' ? `👥 角色 (${(job.status === 'awaiting_confirm' && job.current_step?.includes('characters_ready') ? editCharacters.length : characters.length)})` : `👥 Cast (${(job.status === 'awaiting_confirm' && job.current_step?.includes('characters_ready') ? editCharacters.length : characters.length)})`}>
+          {job.status === 'awaiting_confirm' && job.current_step?.includes('characters_ready') ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {editCharacters.map((c, i) => (
+                  <div key={i} className="bg-white/[0.02] border border-white/5 rounded-xl p-4 flex flex-col gap-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-[#FF8A3D]">{c.identifier_in_scene}</span>
+                      <span className="text-[10px] text-white/30">ID: {c.idx}</span>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-white/40 mb-1">
+                        {lang === 'zh' ? '角色图生成 Prompt (外貌特征)' : 'Character Portrait Prompt'}
+                      </label>
+                      <textarea
+                        value={c.static_features}
+                        onChange={(e) => {
+                          const updated = [...editCharacters];
+                          updated[i] = { ...updated[i], static_features: e.target.value };
+                          setEditCharacters(updated);
+                        }}
+                        rows={3}
+                        className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-[#FF8A3D] text-xs resize-none leading-relaxed"
+                        placeholder={lang === 'zh' ? '输入角色外貌特征描述，例如：金发蓝眼，穿着黑色夹克...' : 'Describe character visual features...'}
+                      />
+                    </div>
                   </div>
-                  <div className="p-2">
-                    <p className="text-xs text-white/80 font-medium truncate">{c.identifier_in_scene}</p>
-                    <p className="text-[10px] text-white/40 line-clamp-2 mt-0.5">{c.static_features}</p>
-                  </div>
+                ))}
+              </div>
+              {isCharactersDirty && (
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={() => handlePatch('characters', editCharacters)}
+                    disabled={savingSection === 'characters'}
+                    className="px-3 py-1.5 rounded-lg bg-[#FF8A3D] hover:bg-[#E65100] text-white text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition"
+                  >
+                    {savingSection === 'characters' ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : null}
+                    {lang === 'zh' ? '保存角色修改' : 'Save Character Changes'}
+                  </button>
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {characters.map((c, i) => {
+                const p = portraits[c.identifier_in_scene];
+                return (
+                  <div key={i} className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
+                    <div className="aspect-square bg-black/40">
+                      {p?.front_url ? (
+                        <img src={toSecureUrl(p.front_url)} className="w-full h-full object-cover" alt="" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Loader2 size={20} className="text-white/30 animate-spin" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-2">
+                      <p className="text-xs text-white/80 font-medium truncate">{c.identifier_in_scene}</p>
+                      <p className="text-[10px] text-white/40 line-clamp-2 mt-0.5">{c.static_features}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {/* 导演模式：重新生成 / 提供意见 */}
+          {job.status === 'awaiting_confirm' && job.current_step?.includes('characters_ready') && (
+            <DirectorActions
+              token={token}
+              jobId={jobId}
+              lang={lang}
+              section="characters"
+              onRegenerated={fetchOnce}
+            />
+          )}
           {job.status === 'awaiting_confirm' && job.current_step?.includes('portraits') && (
             <DirectorActions
               token={token}
@@ -882,24 +1040,93 @@ const DramaJobDetail = ({ token, lang, jobId, onBack }) => {
 
       {/* 分镜设计（storyboard - step 4 产物，尚未 decompose） */}
       {!shots.length && (artifacts.storyboard || []).length > 0 && (
-        <Section title={lang === 'zh' ? `🎬 分镜设计 (${artifacts.storyboard.length} 个镜头)` : `🎬 Storyboard (${artifacts.storyboard.length} shots)`}>
-          <div className="space-y-3">
-            {artifacts.storyboard.map((s, i) => (
-              <div key={i} className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium text-white/80">
-                    {lang === 'zh' ? `镜头 ${i + 1}` : `Shot ${i + 1}`}
-                  </span>
-                  <span className="text-[10px] text-white/30">cam {s.cam_idx}</span>
-                  {s.is_last && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">END</span>}
-                </div>
-                <p className="text-xs text-white/60 leading-relaxed">{s.visual_desc}</p>
-                {s.audio_desc && (
-                  <p className="text-xs text-white/40 italic mt-1.5">{s.audio_desc}</p>
-                )}
+        <Section title={lang === 'zh' ? `🎬 分镜设计 (${(job.status === 'awaiting_confirm' && job.current_step?.includes('storyboard') ? editStoryboard.length : artifacts.storyboard.length)} 个镜头)` : `🎬 Storyboard (${(job.status === 'awaiting_confirm' && job.current_step?.includes('storyboard') ? editStoryboard.length : artifacts.storyboard.length)} shots)`}>
+          {job.status === 'awaiting_confirm' && job.current_step?.includes('storyboard') ? (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                {editStoryboard.map((s, i) => (
+                  <div key={i} className="bg-white/[0.02] border border-white/5 rounded-xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-white/85">
+                        {lang === 'zh' ? `镜头 ${i + 1}` : `Shot ${i + 1}`}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-white/30">Camera {s.cam_idx}</span>
+                        {s.is_last && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 font-medium">END</span>}
+                      </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] text-white/40 mb-1">
+                          {lang === 'zh' ? '画面视觉描述 (Prompt)' : 'Visual Prompt'}
+                        </label>
+                        <textarea
+                          value={s.visual_desc}
+                          onChange={(e) => {
+                            const updated = [...editStoryboard];
+                            updated[i] = { ...updated[i], visual_desc: e.target.value };
+                            setEditStoryboard(updated);
+                          }}
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-[#FF8A3D] text-xs resize-none leading-relaxed"
+                          placeholder={lang === 'zh' ? '描述镜头画面，例如：<Alice> 坐在窗前看雨...' : 'Describe what happens...'}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-white/40 mb-1">
+                          {lang === 'zh' ? '配音/配乐描述' : 'Audio Description'}
+                        </label>
+                        <textarea
+                          value={s.audio_desc || ''}
+                          onChange={(e) => {
+                            const updated = [...editStoryboard];
+                            updated[i] = { ...updated[i], audio_desc: e.target.value };
+                            setEditStoryboard(updated);
+                          }}
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-lg bg-white/5 border border-white/10 text-white focus:outline-none focus:border-[#FF8A3D] text-xs resize-none leading-relaxed"
+                          placeholder={lang === 'zh' ? '描述声音，例如：[旁白] 那是她一生中最漫长的一天。' : 'Describe audio...'}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+              {isStoryboardDirty && (
+                <div className="flex justify-end mt-2">
+                  <button
+                    onClick={() => handlePatch('storyboard', editStoryboard)}
+                    disabled={savingSection === 'storyboard'}
+                    className="px-3 py-1.5 rounded-lg bg-[#FF8A3D] hover:bg-[#E65100] text-white text-xs font-medium inline-flex items-center gap-1.5 disabled:opacity-50 transition"
+                  >
+                    {savingSection === 'storyboard' ? (
+                      <Loader2 size={12} className="animate-spin" />
+                    ) : null}
+                    {lang === 'zh' ? '保存分镜修改' : 'Save Storyboard Changes'}
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {artifacts.storyboard.map((s, i) => (
+                <div key={i} className="bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-xs font-medium text-white/80">
+                      {lang === 'zh' ? `镜头 ${i + 1}` : `Shot ${i + 1}`}
+                    </span>
+                    <span className="text-[10px] text-white/30">cam {s.cam_idx}</span>
+                    {s.is_last && <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-300">END</span>}
+                  </div>
+                  <p className="text-xs text-white/60 leading-relaxed">{s.visual_desc}</p>
+                  {s.audio_desc && (
+                    <p className="text-xs text-white/40 italic mt-1.5">{s.audio_desc}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
           {job.status === 'awaiting_confirm' && job.current_step?.includes('storyboard') && (
             <DirectorActions
               token={token}

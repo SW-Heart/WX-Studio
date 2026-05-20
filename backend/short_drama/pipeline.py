@@ -119,6 +119,15 @@ class ShortDramaPipeline:
             })
             self._check_canceled(job_id)
 
+            if is_directed:
+                action = await self._wait_confirm(job_id, confirm_events, "characters_ready")
+                if action == "regenerate":
+                    user_requirement = self._get_effective_requirement(job_id, user_requirement)
+                    continue
+                loaded_chars = self._reload_characters(job_id)
+                if loaded_chars:
+                    characters = loaded_chars
+
             # 生成立绘
             self._step(job_id, JobStatus.CASTING, "generating portraits", 20)
             portraits = await self._generate_portraits(
@@ -164,6 +173,9 @@ class ShortDramaPipeline:
 
         # ---- 5. 拆解 first/last/motion ----
         self._step(job_id, JobStatus.DECOMPOSING, "decomposing shots", 45)
+        loaded_storyboard = self._reload_storyboard(job_id)
+        if loaded_storyboard:
+            brief_shots = loaded_storyboard
         # 每个镜头一次 LLM 调用
         for _ in brief_shots:
             self._charge_llm(username, job_id)
